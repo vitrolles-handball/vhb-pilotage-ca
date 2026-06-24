@@ -398,6 +398,7 @@ const CSS = `
 .tagok{background:rgba(95,168,106,.18);color:${OK};border-radius:30px;font-size:11px;padding:6px 12px;}
 .fade{animation:fu .4s ease both;}@keyframes fu{from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:none;}}
 @media(prefers-reduced-motion:reduce){.card,.fade,.btn-gold,.loginb{transition:none;animation:none;}}
+@media (max-width:760px){header{padding-top:calc(12px + env(safe-area-inset-top)) !important;padding-left:calc(14px + env(safe-area-inset-left)) !important;padding-right:calc(14px + env(safe-area-inset-right)) !important;}header>div:last-child{flex-wrap:wrap !important;row-gap:6px;justify-content:flex-end;}.seg{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;}.seg::-webkit-scrollbar{display:none;}.segb{flex:0 0 auto;white-space:nowrap;}}
 `;
 const hdr = { display: "flex", alignItems: "center", gap: 11, padding: "12px 16px", borderBottom: "1px solid rgba(230,207,45,.18)", position: "sticky", top: 0, zIndex: 20, background: "rgba(20,18,16,.9)", backdropFilter: "blur(10px)", flexWrap: "wrap" };
 const wrap = { maxWidth: 1080, margin: "0 auto", padding: "30px 18px" };
