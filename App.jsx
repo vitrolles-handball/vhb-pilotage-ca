@@ -53,8 +53,12 @@ html{overflow-x:clip;}body{margin:0;font-family:'Manrope',system-ui,sans-serif;o
 .appheader-top{display:flex;align-items:center;gap:12px;}
 .appnav{display:inline-flex;gap:2px;background:rgba(255,255,255,.08);border-radius:30px;padding:4px;max-width:100%;overflow-x:auto;align-self:flex-start;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
 .appnav::-webkit-scrollbar{display:none;}
+.bottomnav{display:none;position:fixed;left:0;right:0;bottom:0;z-index:40;background:#fff;border-top:1px solid #E6E8EC;padding:6px 6px calc(6px + env(safe-area-inset-bottom));justify-content:space-around;box-shadow:0 -2px 14px rgba(20,22,30,.06);}
+.bottomnav button{flex:1;background:none;border:none;display:flex;flex-direction:column;align-items:center;gap:2px;color:#8A9098;font-family:inherit;font-size:10.5px;font-weight:600;cursor:pointer;padding:4px 0;}
+.bottomnav button.on{color:#D62828;}
+.bottomnav button i{font-size:21px;}
 @media(max-width:380px){.hide-xs{display:none;}}
-@media(max-width:760px){.inp,.sel,.ta{font-size:16px;}.appheader{padding:calc(8px + env(safe-area-inset-top)) 12px 10px;}.navb{padding:7px 12px;font-size:12.5px;}.caprep{padding:14px 15px !important;}.caprep .btn{font-size:12.5px;padding:9px 13px;}}
+@media(max-width:760px){.inp,.sel,.ta{font-size:16px;}.appheader{padding:calc(8px + env(safe-area-inset-top)) 12px 10px;}.navb{padding:7px 12px;font-size:12.5px;}.caprep{padding:14px 15px !important;}.caprep .btn{font-size:12.5px;padding:9px 13px;}.appnav{display:none;}.bottomnav{display:flex;}}
 @media (max-width:760px){
   .navrow{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
   .navrow::-webkit-scrollbar{display:none;}
@@ -283,7 +287,7 @@ function HelpCard({ t, me, data, reload, openTask, poleTag }) {
     </div>
   );
 }
-function Dashboard({ me, data, setView, openNewTask, openNewSujet, openTask, reload }) {
+function Dashboard({ me, data, setView, openNewTask, openNewSujet, openTask, reload, openMeeting }) {
   const { tasks, users, poles, meetings } = data;
   const uById = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users]);
   const pById = useMemo(() => Object.fromEntries(poles.map((p) => [p.id, p])), [poles]);
@@ -307,34 +311,17 @@ function Dashboard({ me, data, setView, openNewTask, openNewSujet, openTask, rel
   return (
     <div className="fade">
       {nextCA && (
-        <div className="card rise caprep" style={{ background: "#16171B", border: "none", marginBottom: 18, padding: "16px 20px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
-            <span className="chip" style={{ background: YELLOW, color: BLACK }}><i className="ti ti-calendar-event" />Prochain CA</span>
-            <span style={{ color: "#F0F1F2", fontSize: 14.5, fontWeight: 600 }}>{f(nextCA, "Titre") || "Réunion du CA"} — {f(nextCA, "Date")}{f(nextCA, "Heure") ? " à " + f(nextCA, "Heure") : ""}{f(nextCA, "Lieu") ? " · " + f(nextCA, "Lieu") : ""}</span>
-            <button className="btn btn-yellow" style={{ marginLeft: "auto" }} onClick={() => openNewSujet({ meetingId: nextCA.id, pole: myPoleId || "" })}><i className="ti ti-plus" />Proposer un sujet pour ce CA</button>
+        <div className="card lift" onClick={() => openMeeting(nextCA.id)} style={{ background: "#16171B", border: "none", marginBottom: 16, padding: "12px 14px", display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }}>
+          <div style={{ width: 42, height: 42, borderRadius: 12, background: YELLOW, display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}><i className="ti ti-calendar-event" style={{ fontSize: 21, color: BLACK }} aria-hidden="true" /></div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 10.5, color: YELLOW, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em" }}>Prochain CA</div>
+            <div style={{ fontSize: 14, color: "#F0F1F2", fontWeight: 600 }}>{f(nextCA, "Date")}{f(nextCA, "Heure") ? " · " + f(nextCA, "Heure") : ""}{f(nextCA, "Lieu") ? " · " + f(nextCA, "Lieu") : ""}</div>
+            <div style={{ fontSize: 12, color: "#9aa0a6" }}>{caSujets.length} sujet{caSujets.length > 1 ? "s" : ""} à l'ordre du jour · touche pour préparer</div>
           </div>
-          <div style={{ color: "#AEB2B8", fontSize: 12.5, marginBottom: 9 }}>Chaque pôle prépare ses sujets — {caSujets.length} sujet{caSujets.length > 1 ? "s" : ""} à l'ordre du jour.</div>
-          <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
-            {poles.map((p) => {
-              const id = f(p, "Identifiant");
-              const n = caSujets.filter((s) => (f(s, "Pôle") || [])[0] === p.id).length;
-              const mine = p.id === myPoleId;
-              return <span key={p.id} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 600, color: n > 0 ? "#fff" : "#8B9097", background: n > 0 ? (POLE_COLORS[id] || "#333") : "rgba(255,255,255,.06)", borderRadius: 30, padding: "5px 11px", border: mine ? "1px solid " + YELLOW : "1px solid transparent" }}><i className={"ti " + (POLE_ICONS[id] || "ti-folder")} style={{ fontSize: 13 }} aria-hidden="true" />{f(p, "Pôles")} · {n}</span>;
-            })}
-          </div>
-          {isResp && myPoleId && caSujets.filter((s) => (f(s, "Pôle") || [])[0] === myPoleId).length === 0 && (
-            <div style={{ marginTop: 10, fontSize: 12.5, color: YELLOW, fontWeight: 600 }}><i className="ti ti-alert-circle" /> Ton pôle n'a pas encore de sujet pour ce CA — à toi de jouer !</div>
-          )}
+          <button onClick={(e) => { e.stopPropagation(); openNewSujet({ meetingId: nextCA.id, pole: myPoleId || "" }); }} title="Proposer un sujet pour ce CA" style={{ background: YELLOW, border: "none", width: 34, height: 34, borderRadius: 10, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}><i className="ti ti-plus" style={{ fontSize: 18, color: BLACK }} aria-hidden="true" /></button>
+          <i className="ti ti-chevron-right" style={{ color: "#9aa0a6", fontSize: 18, flex: "0 0 auto" }} aria-hidden="true" />
         </div>
       )}
-      <div className="card rise" style={{ marginBottom: 18, padding: "16px 20px", display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-        <Avatar u={me} size={48} />
-        <div style={{ flex: 1, minWidth: 170 }}>
-          <div className="display" style={{ fontSize: 25, color: TEXT, marginBottom: 2 }}>Bonjour {f(me, "Prénom") || ""}</div>
-          <div style={{ fontSize: 14, color: MUT }}>Voici l'essentiel du club aujourd'hui — on avance ensemble.</div>
-        </div>
-        <span className="chip" style={{ background: f(me, "Rôle") === "Admin" ? "#16171B" : "#EEF1F4", color: f(me, "Rôle") === "Admin" ? YELLOW : "#5A6066", padding: "6px 12px", fontSize: 12.5, fontWeight: 600 }}><i className={"ti " + (f(me, "Rôle") === "Admin" ? "ti-shield-check" : "ti-user")} aria-hidden="true" />{f(me, "Rôle") === "Admin" ? "Administrateur" : "Équipier"}</span>
-      </div>
 
       <div className="dash-grid">
         <div>
@@ -1260,6 +1247,14 @@ function MonCompte({ me, data, onClose, reload, onLogout, onUsers }) {
     </Modal>
   );
 }
+function BottomNav({ view, setView }) {
+  const tabs = [["dash", "Accueil", "ti-home"], ["taches", "Tâches", "ti-checklist"], ["ca", "Réunions", "ti-calendar"], ["annuaire", "Annuaire", "ti-users"]];
+  return (
+    <nav className="bottomnav">
+      {tabs.map(([v, l, ic]) => <button key={v} className={view === v ? "on" : ""} onClick={() => setView(v)}><i className={"ti " + ic} aria-hidden="true" /><span>{l}</span></button>)}
+    </nav>
+  );
+}
 export default function App() {
   const [status, setStatus] = useState("loading");
   const [me, setMe] = useState(null);
@@ -1317,7 +1312,7 @@ export default function App() {
       <Header me={me} view={view} setView={(v) => { setTaskOpen(null); setView(v); }} isAdmin={isAdmin} onLogout={logout} unread={unread} onBell={() => setModal({ type: "notifs" })} onProfile={() => setModal({ type: "profile" })} />
       <div className="wrap">
         {taskOpen && <TaskDetailPage taskId={taskOpen} me={me} data={data} isAdmin={isAdmin} onClose={() => setTaskOpen(null)} reload={reload} />}
-        {!taskOpen && view === "dash" && <Dashboard me={me} data={data} setView={setView} openNewTask={() => setModal({ type: "task", pole: (f(me, "Pôle") || [])[0] || "" })} openNewSujet={(opts) => setModal({ type: "sujet", ...(opts || {}) })} openTask={(id) => setTaskOpen(id)} reload={reload} />}
+        {!taskOpen && view === "dash" && <Dashboard me={me} data={data} setView={setView} openNewTask={() => setModal({ type: "task", pole: (f(me, "Pôle") || [])[0] || "" })} openNewSujet={(opts) => setModal({ type: "sujet", ...(opts || {}) })} openTask={(id) => setTaskOpen(id)} reload={reload} openMeeting={(id) => setModal({ type: "meetingDetail", id })} />}
         {!taskOpen && view === "taches" && <TasksView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewTask={(pole) => setModal({ type: "task", pole })} openTask={(id) => setTaskOpen(id)} />}
         {!taskOpen && view === "ca" && <CAView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewSujet={(opts) => setModal({ type: "sujet", ...(opts || {}) })} openNewMeeting={() => setModal({ type: "meeting" })} openMeeting={(id) => setModal({ type: "meetingDetail", id })} />}
         {!taskOpen && view === "annuaire" && <Annuaire data={data} />}
@@ -1329,6 +1324,7 @@ export default function App() {
       {modal && modal.type === "meeting" && <NewMeeting onClose={() => setModal(null)} reload={reload} />}
       {modal && modal.type === "meetingDetail" && <MeetingDetail meetingId={modal.id} me={me} data={data} isAdmin={isAdmin} onClose={() => setModal(null)} reload={reload} />}
       {modal && modal.type === "profile" && <MonCompte me={me} data={data} onClose={() => setModal(null)} reload={reload} onLogout={logout} onUsers={() => { setModal(null); setView("admin"); }} />}
+      <BottomNav view={view} setView={(v) => { setTaskOpen(null); setView(v); }} />
     </div>
   );
 }
