@@ -465,7 +465,7 @@ function TaskCard({ t, me, uById, pById, users, isAdmin, reload, commentaires, o
   const seg = (v) => (v === "Fait" ? OK : v === "En cours" ? "#B8860B" : "#6E747D");
   return (
     <div className="card lift" style={{ marginBottom: 10, padding: "15px 17px", position: "relative", overflow: "hidden" }}>
-      <i className={"ti " + (POLE_ICONS[poleId] || "ti-folder")} style={{ position: "absolute", right: 12, top: 13, fontSize: 40, color: POLE_COLORS[poleId] || BLACK, opacity: 0.10, pointerEvents: "none" }} aria-hidden="true" />
+      <i className={"ti " + (POLE_ICONS[poleId] || "ti-folder")} style={{ position: "absolute", right: 14, top: 13, fontSize: 58, color: POLE_COLORS[poleId] || BLACK, opacity: 0.15, pointerEvents: "none" }} aria-hidden="true" />
       <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap", marginBottom: 8, position: "relative" }}>
         {pole && <span className="tag" style={{ background: POLE_COLORS[poleId] || BLACK }}>{f(pole, "Pôles")}</span>}
         {isSocle && <span className="chip" style={{ background: "#EDE7F6", color: "#5E35B1" }}>Socle</span>}
@@ -817,13 +817,13 @@ function SujetCard({ s, me, uById, pById, reload, done }) {
   const upd = async (fields) => { setBusy(true); try { await db({ action: "update", table: "Sujets CA", recordId: s.id, fields }); await reload(); } catch (e) { alert("Erreur : " + e.message); } setBusy(false); };
   const segColor = (v) => (v === "Traité" ? OK : v === "En cours" ? "#1B5E9B" : "#B5660A");
   return (
-    <div className="card" style={{ marginBottom: 11, padding: "16px 18px", opacity: done ? 0.72 : 1 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 9 }}>
+    <div className="card" style={{ marginBottom: 11, padding: "16px 18px", opacity: done ? 0.72 : 1, position: "relative", overflow: "hidden" }}>
+      {f(s, "Thème") && <i className={"ti " + (THEME_ICONS[f(s, "Thème")] || "ti-dots")} style={{ position: "absolute", right: 16, top: 14, fontSize: 64, color: THEME_COLORS[f(s, "Thème")] || MUT, opacity: 0.16, pointerEvents: "none" }} aria-hidden="true" />}
+      <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 9, position: "relative" }}>
         {f(s, "Thème") && <span className="chip" style={{ background: "#EEF1F4", color: "#5A6066" }}>{f(s, "Thème")}</span>}
         {pole && <span className="tag" style={{ background: POLE_COLORS[f(pole, "Identifiant")] || BLACK, display: "inline-flex", alignItems: "center", gap: 5 }}><i className={"ti " + (POLE_ICONS[f(pole, "Identifiant")] || "ti-folder")} style={{ fontSize: 12 }} aria-hidden="true" />{f(pole, "Pôles")}</span>}
-        {f(s, "Thème") && <i className={"ti " + (THEME_ICONS[f(s, "Thème")] || "ti-dots")} style={{ marginLeft: "auto", fontSize: 28, color: THEME_COLORS[f(s, "Thème")] || MUT, opacity: 0.22 }} aria-hidden="true" />}
       </div>
-      <div style={{ fontSize: 15.5, fontWeight: 700, color: TEXT, lineHeight: 1.35, letterSpacing: "-.01em" }}>{f(s, "Titre")}</div>
+      <div style={{ fontSize: 15.5, fontWeight: 700, color: TEXT, lineHeight: 1.35, letterSpacing: "-.01em", position: "relative", paddingRight: 40 }}>{f(s, "Titre")}</div>
       {f(s, "Description") && <div style={{ fontSize: 13.5, color: MUT, marginTop: 6, lineHeight: 1.55 }}>{f(s, "Description")}</div>}
       {docs.length > 0 && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
         {docs.map((a, idx) => {
