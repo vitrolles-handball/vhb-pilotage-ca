@@ -717,7 +717,7 @@ function AdminUsers({ me, data, reload }) {
 }
 
 
-function chipF(on) { return { cursor: "pointer", border: "1px solid " + (on ? RED : BORDER), background: on ? "#FBE9E9" : "#fff", color: on ? RED : TEXT, padding: "5px 11px" }; }
+function chipF(on) { return { cursor: "pointer", border: "1px solid " + (on ? RED : "#E6E8EC"), background: on ? "#FBE9E9" : "#fff", color: on ? RED : MUT, fontWeight: on ? 600 : 500, padding: "6px 13px" }; }
 
 function CAView({ me, data, isAdmin, reload, openNewSujet, openNewMeeting, openMeeting }) {
   const { sujets, meetings, users, poles } = data;
@@ -781,32 +781,39 @@ function SujetCard({ s, me, uById, pById, reload, done }) {
   const statut = f(s, "Statut") || "À traiter";
   const pole = pById[(f(s, "Pôle") || [])[0]];
   const prop = uById[(f(s, "Proposé par") || [])[0]];
+  const docs = f(s, "Documents") || [];
   const upd = async (fields) => { setBusy(true); try { await db({ action: "update", table: "Sujets CA", recordId: s.id, fields }); await reload(); } catch (e) { alert("Erreur : " + e.message); } setBusy(false); };
-  const stC = statut === "Traité" ? OK : statut === "En cours" ? "#1B5E9B" : "#B5660A";
+  const segColor = (v) => (v === "Traité" ? OK : v === "En cours" ? "#1B5E9B" : "#B5660A");
   return (
-    <div className="card" style={{ marginBottom: 9, padding: "13px 15px", opacity: done ? 0.72 : 1 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
-        {f(s, "Thème") && <span className="chip" style={{ background: "#EEF0F3", color: "#444" }}>{f(s, "Thème")}</span>}
+    <div className="card" style={{ marginBottom: 11, padding: "16px 18px", opacity: done ? 0.72 : 1 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 9 }}>
+        {f(s, "Thème") && <span className="chip" style={{ background: "#EEF1F4", color: "#5A6066" }}>{f(s, "Thème")}</span>}
         {pole && <span className="tag" style={{ background: POLE_COLORS[f(pole, "Identifiant")] || BLACK }}>{f(pole, "Pôles")}</span>}
-        <span style={{ fontSize: 14.5, color: TEXT, fontWeight: 500, flex: 1, minWidth: 140 }}>{f(s, "Titre")}</span>
-        <span className="chip" style={{ background: stC + "1f", color: stC }}>{statut}</span>
       </div>
-      {f(s, "Description") && <div style={{ fontSize: 13, color: MUT, marginTop: 7, lineHeight: 1.5 }}>{f(s, "Description")}</div>}
-      {(f(s, "Documents") || []).length > 0 && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 9 }}>
-        {(f(s, "Documents") || []).map((a, idx) => {
+      <div style={{ fontSize: 15.5, fontWeight: 700, color: TEXT, lineHeight: 1.35, letterSpacing: "-.01em" }}>{f(s, "Titre")}</div>
+      {f(s, "Description") && <div style={{ fontSize: 13.5, color: MUT, marginTop: 6, lineHeight: 1.55 }}>{f(s, "Description")}</div>}
+      {docs.length > 0 && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+        {docs.map((a, idx) => {
           const thumb = a.thumbnails && a.thumbnails.small && a.thumbnails.small.url;
-          return <a key={idx} href={a.url} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "#1B5E9B", textDecoration: "none", border: "1px solid " + BORDER, borderRadius: 9, padding: "4px 9px" }}>
-            {thumb ? <img src={thumb} alt="" style={{ width: 22, height: 22, borderRadius: 5, objectFit: "cover" }} /> : <i className="ti ti-paperclip" />}{a.filename || "fichier"}
-          </a>;
+          return <a key={idx} href={a.url} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "#1B5E9B", textDecoration: "none", border: "1px solid " + BORDER, borderRadius: 9, padding: "4px 9px" }}>{thumb ? <img src={thumb} alt="" style={{ width: 22, height: 22, borderRadius: 5, objectFit: "cover" }} /> : <i className="ti ti-paperclip" />}{a.filename || "fichier"}</a>;
         })}
       </div>}
-      <div style={{ fontSize: 11.5, color: MUT, marginTop: 7 }}>Proposé par {prop ? fullName(prop) : "—"}</div>
-      <div style={{ display: "flex", gap: 7, marginTop: 11, flexWrap: "wrap", alignItems: "center" }}>
-        {["À traiter", "En cours", "Traité"].map((v) => <button key={v} className="btn btn-ghost" style={{ fontSize: 12, padding: "6px 11px", borderColor: statut === v ? stC : BORDER, color: statut === v ? stC : MUT }} disabled={busy} onClick={() => upd({ "Statut": v })}>{v}</button>)}
-        <button className="btn btn-ghost" style={{ fontSize: 12, padding: "6px 11px", marginLeft: "auto" }} onClick={() => setOpen((o) => !o)}>{open ? "Fermer" : "Décision / notes"}</button>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 13, paddingTop: 12, borderTop: "1px solid #F0F1F3", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12, color: MUT }}>
+          {prop && <Avatar u={prop} size={20} />}<span>{prop ? fullName(prop) : "—"}</span>
+        </div>
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ display: "inline-flex", background: "#F1F3F5", borderRadius: 30, padding: 3 }}>
+            {["À traiter", "En cours", "Traité"].map((v) => {
+              const on = statut === v; const c = segColor(v);
+              return <button key={v} disabled={busy} onClick={() => upd({ "Statut": v })} style={{ border: "none", background: on ? "#fff" : "transparent", color: on ? c : MUT, fontWeight: on ? 700 : 500, fontSize: 12, padding: "5px 11px", borderRadius: 30, cursor: "pointer", boxShadow: on ? "0 1px 2px rgba(20,22,30,.10)" : "none", fontFamily: "inherit" }}>{v}</button>;
+            })}
+          </div>
+          <button className="btn btn-ghost" style={{ fontSize: 12, padding: "6px 11px" }} onClick={() => setOpen((o) => !o)}>{open ? "Fermer" : "Décision / notes"}</button>
+        </div>
       </div>
       {open && (
-        <div style={{ marginTop: 10 }}>
+        <div style={{ marginTop: 11 }}>
           <textarea className="ta" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Décision prise, notes…" />
           <button className="btn btn-red" style={{ marginTop: 8, fontSize: 12.5, padding: "7px 13px" }} disabled={busy} onClick={() => upd({ "Décision / notes": note })}>Enregistrer</button>
         </div>
@@ -814,7 +821,6 @@ function SujetCard({ s, me, uById, pById, reload, done }) {
     </div>
   );
 }
-
 function MeetingRow({ m, sujets, onClick, past }) {
   const linked = sujets.filter((s) => (f(s, "Réunion") || []).includes(m.id));
   return (
