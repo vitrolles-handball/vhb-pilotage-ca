@@ -579,10 +579,10 @@ function NewTask({ me, data, isAdmin, onClose, reload, initialPole }) {
       )}
       <div style={{ marginTop: 11 }}><label className="lbl">Affecter à</label>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
-          {users.filter((u) => f(u, "Profil complété")).map((u) => {
+          {users.filter((u) => f(u, "Actif") !== false).map((u) => {
             const on = assignes.includes(u.id);
             return <button key={u.id} onClick={() => toggle(u.id)} className="chip" style={{ cursor: "pointer", border: "1px solid " + (on ? RED : BORDER), background: on ? "#FBEDEC" : "#fff", color: on ? RED : TEXT, padding: "5px 10px" }}>
-              <Avatar u={u} size={18} />{f(u, "Prénom")}
+              <Avatar u={u} size={18} />{f(u, "Prénom") || f(u, "Email")}
             </button>;
           })}
         </div>
@@ -975,9 +975,9 @@ function TaskDetailPage({ taskId, me, data, isAdmin, onClose, reload }) {
         </div>
         <div className="lbl">Affecté à</div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 16 }}>
-          {users.filter((u) => f(u, "Profil complété")).map((u) => {
+          {users.filter((u) => f(u, "Actif") !== false).map((u) => {
             const on = assignes.includes(u.id);
-            return <button key={u.id} disabled={busy} onClick={() => upd({ "Assignés": on ? assignes.filter((id) => id !== u.id) : Array.from(new Set([...assignes, u.id])) })} className="chip" style={{ cursor: "pointer", border: "1px solid " + (on ? RED : BORDER), background: on ? "#FBE9E9" : "#fff", color: on ? RED : TEXT, padding: "5px 10px" }}><Avatar u={u} size={18} />{f(u, "Prénom")}</button>;
+            return <button key={u.id} disabled={busy} onClick={() => upd({ "Assignés": on ? assignes.filter((id) => id !== u.id) : Array.from(new Set([...assignes, u.id])) })} className="chip" style={{ cursor: "pointer", border: "1px solid " + (on ? RED : BORDER), background: on ? "#FBE9E9" : "#fff", color: on ? RED : TEXT, padding: "5px 10px" }}><Avatar u={u} size={18} />{f(u, "Prénom") || f(u, "Email")}</button>;
           })}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
