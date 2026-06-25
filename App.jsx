@@ -17,7 +17,7 @@ const THEME_COLORS = { "Finances": "#1B7A4B", "Sportif": "#C0392B", "Événement
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
 *{box-sizing:border-box;}
-body{margin:0;font-family:'Manrope',system-ui,sans-serif;}
+html{overflow-x:clip;}body{margin:0;font-family:'Manrope',system-ui,sans-serif;overflow-x:clip;overflow-wrap:break-word;word-break:break-word;}
 .cond{font-weight:700;letter-spacing:-.01em;}
 .display{font-weight:800;letter-spacing:-.02em;}
 .card{background:#fff;border:1px solid #ECEEF1;border-radius:20px;padding:16px 18px;box-shadow:0 1px 2px rgba(20,22,30,.04);}
@@ -49,8 +49,13 @@ body{margin:0;font-family:'Manrope',system-ui,sans-serif;}
 .detail-grid{display:grid;grid-template-columns:1fr;gap:18px;align-items:start;}
 @media(min-width:1000px){.detail-grid{grid-template-columns:1.65fr 1fr;gap:22px;}}
 @media(max-width:760px){.wrap{padding:14px 12px 76px;}}
+.appheader{padding:12px 20px;display:flex;flex-direction:column;gap:10px;}
+.appheader-top{display:flex;align-items:center;gap:12px;}
+.appnav{display:inline-flex;gap:2px;background:rgba(255,255,255,.08);border-radius:30px;padding:4px;max-width:100%;overflow-x:auto;align-self:flex-start;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+.appnav::-webkit-scrollbar{display:none;}
+@media(max-width:380px){.hide-xs{display:none;}}
+@media(max-width:760px){.inp,.sel,.ta{font-size:16px;}.appheader{padding:calc(8px + env(safe-area-inset-top)) 12px 10px;}.navb{padding:7px 12px;font-size:12.5px;}.caprep{padding:14px 15px !important;}.caprep .btn{font-size:12.5px;padding:9px 13px;}}
 @media (max-width:760px){
-  header{padding-top:calc(14px + env(safe-area-inset-top)) !important;}
   .navrow{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
   .navrow::-webkit-scrollbar{display:none;}
 }
@@ -233,24 +238,25 @@ function ProfileForm({ me, poles, onSaved }) {
 
 function Header({ me, view, setView, isAdmin, onLogout, unread, onBell, onProfile }) {
   const tabs = [["dash", "Accueil"], ["taches", "Tâches"], ["ca", "Réunions"], ["annuaire", "Annuaire"]];
-  if (isAdmin) tabs.push(["admin", "Utilisateurs"]);
   return (
-    <header style={{ backgroundColor: "#E8590C", backgroundImage: "linear-gradient(rgba(28,10,0,.22), rgba(28,10,0,.36)), url(/accent.jpg)", backgroundSize: "cover", backgroundPosition: "center", padding: "14px 18px", display: "flex", alignItems: "center", gap: 13, position: "sticky", top: 0, zIndex: 30, flexWrap: "wrap", boxShadow: "0 2px 18px rgba(0,0,0,.22)" }}>
-      <img src={LOGO} width={40} height={40} alt="VHB" style={{ cursor: "pointer", flex: "0 0 auto", filter: "drop-shadow(0 4px 10px rgba(214,40,40,.35))" }} onClick={() => setView("dash")} />
-      <div style={{ lineHeight: 1.12 }}>
-        <div style={{ fontSize: 15.5, color: "#fff", fontWeight: 800, letterSpacing: "-.01em" }}>VHB Pilotage</div>
-        <div style={{ fontSize: 10.5, color: "#FFFFFF", fontWeight: 600 }}>Tous Hand'semble</div>
-      </div>
-      <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
-        <nav className="navrow" style={{ display: "flex", gap: 2, background: "rgba(255,255,255,.08)", borderRadius: 30, padding: 4 }}>
-          {tabs.map(([v, l]) => <button key={v} className={"navb" + (view === v ? " on" : "")} onClick={() => setView(v)}>{l}</button>)}
-        </nav>
-        <button onClick={onBell} title="Notifications" style={{ position: "relative", background: "rgba(255,255,255,.08)", border: "none", color: "#E9EAEC", width: 36, height: 36, borderRadius: 11, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><i className="ti ti-bell" style={{ fontSize: 18 }} />{unread > 0 && <span style={{ position: "absolute", top: -5, right: -5, background: RED, color: "#fff", fontSize: 10, fontWeight: 700, borderRadius: 10, minWidth: 17, height: 17, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>{unread}</span>}</button>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }} onClick={onProfile} title="Mon espace">
-          <Avatar u={me} size={32} />
-          <span style={{ fontSize: 12.5, color: "#E9EAEC", fontWeight: 500 }}>{f(me, "Prénom") || "Moi"}</span>
+    <header className="appheader" style={{ backgroundColor: "#E8590C", backgroundImage: "linear-gradient(rgba(28,10,0,.22), rgba(28,10,0,.36)), url(/accent.jpg)", backgroundSize: "cover", backgroundPosition: "center", position: "sticky", top: 0, zIndex: 30, boxShadow: "0 2px 18px rgba(0,0,0,.22)" }}>
+      <div className="appheader-top">
+        <img src={LOGO} width={40} height={40} alt="VHB" style={{ cursor: "pointer", flex: "0 0 auto", filter: "drop-shadow(0 4px 10px rgba(214,40,40,.35))" }} onClick={() => setView("dash")} />
+        <div style={{ lineHeight: 1.12, minWidth: 0 }}>
+          <div style={{ fontSize: 15.5, color: "#fff", fontWeight: 800, letterSpacing: "-.01em" }}>VHB Pilotage</div>
+          <div style={{ fontSize: 10.5, color: "#FFFFFF", fontWeight: 600 }}>Tous Hand'semble</div>
+        </div>
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8, flex: "0 0 auto" }}>
+          <button onClick={onBell} title="Notifications" style={{ position: "relative", background: "rgba(255,255,255,.08)", border: "none", color: "#E9EAEC", width: 36, height: 36, borderRadius: 11, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}><i className="ti ti-bell" style={{ fontSize: 18 }} />{unread > 0 && <span style={{ position: "absolute", top: -5, right: -5, background: RED, color: "#fff", fontSize: 10, fontWeight: 700, borderRadius: 10, minWidth: 17, height: 17, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>{unread}</span>}</button>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", flex: "0 0 auto" }} onClick={onProfile} title="Mon espace">
+            <Avatar u={me} size={32} />
+            <span className="hide-xs" style={{ fontSize: 12.5, color: "#E9EAEC", fontWeight: 500 }}>{f(me, "Prénom") || "Moi"}</span>
+          </div>
         </div>
       </div>
+      <nav className="appnav">
+        {tabs.map(([v, l]) => <button key={v} className={"navb" + (view === v ? " on" : "")} onClick={() => setView(v)}>{l}</button>)}
+      </nav>
     </header>
   );
 }
@@ -301,7 +307,7 @@ function Dashboard({ me, data, setView, openNewTask, openNewSujet, openTask, rel
   return (
     <div className="fade">
       {nextCA && (
-        <div className="card rise" style={{ background: "#16171B", border: "none", marginBottom: 18, padding: "16px 20px" }}>
+        <div className="card rise caprep" style={{ background: "#16171B", border: "none", marginBottom: 18, padding: "16px 20px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
             <span className="chip" style={{ background: YELLOW, color: BLACK }}><i className="ti ti-calendar-event" />Prochain CA</span>
             <span style={{ color: "#F0F1F2", fontSize: 14.5, fontWeight: 600 }}>{f(nextCA, "Titre") || "Réunion du CA"} — {f(nextCA, "Date")}{f(nextCA, "Heure") ? " à " + f(nextCA, "Heure") : ""}{f(nextCA, "Lieu") ? " · " + f(nextCA, "Lieu") : ""}</span>
@@ -1201,7 +1207,7 @@ function TaskDetailPage({ taskId, me, data, isAdmin, onClose, reload }) {
   );
 }
 
-function MonCompte({ me, data, onClose, reload, onLogout }) {
+function MonCompte({ me, data, onClose, reload, onLogout, onUsers }) {
   const { poles } = data;
   const [prenom, setPrenom] = useState(f(me, "Prénom") || "");
   const [nom, setNom] = useState(f(me, "Nom") || "");
@@ -1242,6 +1248,10 @@ function MonCompte({ me, data, onClose, reload, onLogout }) {
           {photo && <button className="btn btn-ghost" style={{ fontSize: 12.5, color: RED, borderColor: "#F0C7C3" }} onClick={() => setPhoto("")}>Retirer</button>}
         </div>
       </div>
+      {f(me, "Rôle") === "Admin" && <div style={{ marginTop: 16, borderTop: "1px solid " + BORDER, paddingTop: 16 }}>
+        <div className="lbl" style={{ marginTop: 0 }}>Administration</div>
+        <button className="btn btn-dark" style={{ width: "100%", justifyContent: "center" }} onClick={onUsers}><i className="ti ti-users-group" />Gérer les utilisateurs</button>
+      </div>}
       <div style={{ display: "flex", gap: 9, marginTop: 20, flexWrap: "wrap", alignItems: "center" }}>
         <button className="btn btn-ghost" onClick={onClose}>Fermer</button>
         <button className="btn btn-red" disabled={busy} onClick={save}>{busy ? "…" : "Enregistrer"}</button>
@@ -1318,7 +1328,7 @@ export default function App() {
       {modal && modal.type === "notifs" && <NotifsModal me={me} data={data} setView={setView} onClose={() => setModal(null)} reload={reload} openTask={(id) => { setModal(null); setTaskOpen(id); }} />}
       {modal && modal.type === "meeting" && <NewMeeting onClose={() => setModal(null)} reload={reload} />}
       {modal && modal.type === "meetingDetail" && <MeetingDetail meetingId={modal.id} me={me} data={data} isAdmin={isAdmin} onClose={() => setModal(null)} reload={reload} />}
-      {modal && modal.type === "profile" && <MonCompte me={me} data={data} onClose={() => setModal(null)} reload={reload} onLogout={logout} />}
+      {modal && modal.type === "profile" && <MonCompte me={me} data={data} onClose={() => setModal(null)} reload={reload} onLogout={logout} onUsers={() => { setModal(null); setView("admin"); }} />}
     </div>
   );
 }
