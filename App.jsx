@@ -286,16 +286,33 @@ function Dashboard({ me, data, setView, openNewTask, openNewSujet, openTask, rel
   const done = tasks.filter((t) => f(t, "Statut") === "Fait").length;
   const pct = Math.round((done / total) * 100);
   const nextCA = meetings.filter((m) => f(m, "Statut") === "À venir").sort((a, b) => String(f(a, "Date")).localeCompare(String(f(b, "Date"))))[0];
+  const caSujets = nextCA ? (data.sujets || []).filter((s) => (f(s, "Réunion") || []).includes(nextCA.id)) : [];
+  const myPoleId = (f(me, "Pôle") || [])[0];
+  const isResp = f(me, "Fonction") === "Responsable";
   const poleTag = (t) => { const p = pById[(f(t, "Pôle") || [])[0]]; if (!p) return null; const id = f(p, "Identifiant"); return <span className="tag" style={{ background: POLE_COLORS[id] || BLACK, display: "inline-flex", alignItems: "center", gap: 5 }}><i className={"ti " + (POLE_ICONS[id] || "ti-folder")} style={{ fontSize: 13 }} aria-hidden="true" />{f(p, "Pôles")}</span>; };
   const R = 32, CIRC = 2 * Math.PI * R;
 
   return (
     <div className="fade">
       {nextCA && (
-        <div className="card rise" style={{ background: "#16171B", border: "none", marginBottom: 18, display: "flex", alignItems: "center", gap: 13, flexWrap: "wrap", padding: "15px 18px" }}>
-          <span className="chip" style={{ background: YELLOW, color: BLACK }}><i className="ti ti-calendar-event" />Prochain CA</span>
-          <span style={{ color: "#F0F1F2", fontSize: 14.5 }}>{f(nextCA, "Titre") || "Réunion du CA"} — {f(nextCA, "Date")}{f(nextCA, "Heure") ? " à " + f(nextCA, "Heure") : ""}</span>
-          <button className="btn btn-yellow" style={{ marginLeft: "auto" }} onClick={openNewSujet}>Noter un sujet</button>
+        <div className="card rise" style={{ background: "#16171B", border: "none", marginBottom: 18, padding: "16px 20px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+            <span className="chip" style={{ background: YELLOW, color: BLACK }}><i className="ti ti-calendar-event" />Prochain CA</span>
+            <span style={{ color: "#F0F1F2", fontSize: 14.5, fontWeight: 600 }}>{f(nextCA, "Titre") || "Réunion du CA"} — {f(nextCA, "Date")}{f(nextCA, "Heure") ? " à " + f(nextCA, "Heure") : ""}{f(nextCA, "Lieu") ? " · " + f(nextCA, "Lieu") : ""}</span>
+            <button className="btn btn-yellow" style={{ marginLeft: "auto" }} onClick={() => openNewSujet({ meetingId: nextCA.id, pole: myPoleId || "" })}><i className="ti ti-plus" />Proposer un sujet pour ce CA</button>
+          </div>
+          <div style={{ color: "#AEB2B8", fontSize: 12.5, marginBottom: 9 }}>Chaque pôle prépare ses sujets — {caSujets.length} sujet{caSujets.length > 1 ? "s" : ""} à l'ordre du jour.</div>
+          <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+            {poles.map((p) => {
+              const id = f(p, "Identifiant");
+              const n = caSujets.filter((s) => (f(s, "Pôle") || [])[0] === p.id).length;
+              const mine = p.id === myPoleId;
+              return <span key={p.id} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 600, color: n > 0 ? "#fff" : "#8B9097", background: n > 0 ? (POLE_COLORS[id] || "#333") : "rgba(255,255,255,.06)", borderRadius: 30, padding: "5px 11px", border: mine ? "1px solid " + YELLOW : "1px solid transparent" }}><i className={"ti " + (POLE_ICONS[id] || "ti-folder")} style={{ fontSize: 13 }} aria-hidden="true" />{f(p, "Pôles")} · {n}</span>;
+            })}
+          </div>
+          {isResp && myPoleId && caSujets.filter((s) => (f(s, "Pôle") || [])[0] === myPoleId).length === 0 && (
+            <div style={{ marginTop: 10, fontSize: 12.5, color: YELLOW, fontWeight: 600 }}><i className="ti ti-alert-circle" /> Ton pôle n'a pas encore de sujet pour ce CA — à toi de jouer !</div>
+          )}
         </div>
       )}
       <div className="card rise" style={{ marginBottom: 18, padding: "16px 20px", display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
@@ -323,7 +340,7 @@ function Dashboard({ me, data, setView, openNewTask, openNewSujet, openTask, rel
               <div style={{ fontSize: 16, fontWeight: 700, color: TEXT }}>{pct >= 60 ? "Le club avance bien" : pct > 0 ? "On est en route" : "C'est parti !"}</div>
               <div style={{ fontSize: 13.5, color: MUT, marginTop: 3 }}>{pct}% des tâches sont à jour. Chaque tâche cochée fait avancer le club.</div>
             </div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><button className="btn btn-red" onClick={openNewTask}><i className="ti ti-plus" />Nouvelle tâche</button><button className="btn btn-dark" onClick={openNewSujet}><i className="ti ti-clipboard-plus" />Proposer un sujet CA</button></div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><button className="btn btn-red" onClick={openNewTask}><i className="ti ti-plus" />Nouvelle tâche</button><button className="btn btn-dark" onClick={() => openNewSujet()}><i className="ti ti-clipboard-plus" />Proposer un sujet CA</button></div>
           </div>
           <Section title="Mes tâches">
             {mine.length === 0 ? <Empty t="Rien ne t'est assigné — prends une tâche pour donner un coup de main !" /> :
@@ -662,12 +679,12 @@ function NewTask({ me, data, isAdmin, onClose, reload, initialPole }) {
     </Modal>
   );
 }
-function NewSujet({ me, data, onClose, reload }) {
+function NewSujet({ me, data, onClose, reload, meetingId, initialPole }) {
   const { poles } = data;
   const [titre, setTitre] = useState("");
   const [theme, setTheme] = useState("Divers");
   const [desc, setDesc] = useState("");
-  const [pole, setPole] = useState("");
+  const [pole, setPole] = useState(initialPole || "");
   const [files, setFiles] = useState([]);
   const [busy, setBusy] = useState(false);
   const themes = ["Finances", "Sportif", "Événements", "Bénévoles", "Communication", "Administratif", "Partenariats", "Divers"];
@@ -675,6 +692,7 @@ function NewSujet({ me, data, onClose, reload }) {
     if (!titre.trim()) return; setBusy(true);
     const fields = { "Titre": titre.trim(), "Thème": theme, "Description": desc.trim(), "Statut": "À traiter", "Proposé par": [me.id] };
     if (pole) fields["Pôle"] = [pole];
+    if (meetingId) { fields["Réunion"] = [meetingId]; fields["Statut"] = "En cours"; }
     try {
       const j = await db({ action: "create", table: "Sujets CA", fields });
       const recId = ((j.records || [])[0] || {}).id;
@@ -688,7 +706,7 @@ function NewSujet({ me, data, onClose, reload }) {
   return (
     <Modal onClose={onClose}>
       <div style={{ fontSize: 18, fontWeight: 500, marginBottom: 4 }}>Noter un sujet pour le CA</div>
-      <div style={{ fontSize: 13, color: MUT, marginBottom: 14 }}>Il sera ajouté à la banque de sujets à aborder.</div>
+      <div style={{ fontSize: 13, color: MUT, marginBottom: 14 }}>{meetingId ? "Il sera ajouté directement à l'ordre du jour de ce CA." : "Il sera ajouté à la banque de sujets à aborder."}</div>
       <label className="lbl">Sujet</label><input className="inp" value={titre} onChange={(e) => setTitre(e.target.value)} autoFocus />
       <div style={{ display: "flex", gap: 11, marginTop: 11 }}>
         <div style={{ flex: 1 }}><label className="lbl">Thème</label><select className="sel" value={theme} onChange={(e) => setTheme(e.target.value)}>{themes.map((x) => <option key={x}>{x}</option>)}</select></div>
@@ -811,7 +829,7 @@ function CAView({ me, data, isAdmin, reload, openNewSujet, openNewMeeting, openM
       {tab === "sujets" && (
         <div>
           <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
-            <button className="btn btn-red" onClick={openNewSujet}><i className="ti ti-plus" />Proposer un sujet</button>
+            <button className="btn btn-red" onClick={() => openNewSujet()}><i className="ti ti-plus" />Proposer un sujet</button>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginLeft: "auto" }}>
               <button className="chip" style={chipF(!theme)} onClick={() => setTheme("")}>Tous</button>
               {themes.map((t) => <button key={t} className="chip" style={chipF(theme === t)} onClick={() => setTheme(theme === t ? "" : t)}>{t}</button>)}
@@ -1279,14 +1297,14 @@ export default function App() {
       <Header me={me} view={view} setView={(v) => { setTaskOpen(null); setView(v); }} isAdmin={isAdmin} onLogout={logout} unread={unread} onBell={() => setModal({ type: "notifs" })} onProfile={() => setModal({ type: "profile" })} />
       <div className="wrap">
         {taskOpen && <TaskDetailPage taskId={taskOpen} me={me} data={data} isAdmin={isAdmin} onClose={() => setTaskOpen(null)} reload={reload} />}
-        {!taskOpen && view === "dash" && <Dashboard me={me} data={data} setView={setView} openNewTask={() => setModal({ type: "task", pole: (f(me, "Pôle") || [])[0] || "" })} openNewSujet={() => setModal({ type: "sujet" })} openTask={(id) => setTaskOpen(id)} reload={reload} />}
+        {!taskOpen && view === "dash" && <Dashboard me={me} data={data} setView={setView} openNewTask={() => setModal({ type: "task", pole: (f(me, "Pôle") || [])[0] || "" })} openNewSujet={(opts) => setModal({ type: "sujet", ...(opts || {}) })} openTask={(id) => setTaskOpen(id)} reload={reload} />}
         {!taskOpen && view === "taches" && <TasksView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewTask={(pole) => setModal({ type: "task", pole })} openTask={(id) => setTaskOpen(id)} />}
-        {!taskOpen && view === "ca" && <CAView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewSujet={() => setModal({ type: "sujet" })} openNewMeeting={() => setModal({ type: "meeting" })} openMeeting={(id) => setModal({ type: "meetingDetail", id })} />}
+        {!taskOpen && view === "ca" && <CAView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewSujet={(opts) => setModal({ type: "sujet", ...(opts || {}) })} openNewMeeting={() => setModal({ type: "meeting" })} openMeeting={(id) => setModal({ type: "meetingDetail", id })} />}
         {!taskOpen && view === "annuaire" && <Annuaire data={data} />}
         {!taskOpen && view === "admin" && isAdmin && <AdminUsers me={me} data={data} reload={reload} />}
       </div>
       {modal && modal.type === "task" && <NewTask me={me} data={data} isAdmin={isAdmin} initialPole={modal.pole} onClose={() => setModal(null)} reload={reload} />}
-      {modal && modal.type === "sujet" && <NewSujet me={me} data={data} onClose={() => setModal(null)} reload={reload} />}
+      {modal && modal.type === "sujet" && <NewSujet me={me} data={data} meetingId={modal.meetingId} initialPole={modal.pole} onClose={() => setModal(null)} reload={reload} />}
       {modal && modal.type === "notifs" && <NotifsModal me={me} data={data} setView={setView} onClose={() => setModal(null)} reload={reload} openTask={(id) => { setModal(null); setTaskOpen(id); }} />}
       {modal && modal.type === "meeting" && <NewMeeting onClose={() => setModal(null)} reload={reload} />}
       {modal && modal.type === "meetingDetail" && <MeetingDetail meetingId={modal.id} me={me} data={data} isAdmin={isAdmin} onClose={() => setModal(null)} reload={reload} />}
