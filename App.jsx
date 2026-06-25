@@ -10,6 +10,8 @@ const POLE_COLORS = {
   gestion: "#C0392B", secretariat: "#C0562A", developpement: "#C9A227",
   communication: "#9C2B2F", sportif: "#A83328", benevoles: "#B8472B",
 };
+const THEME_ICONS = { "Finances": "ti-coin", "Sportif": "ti-ball-basketball", "Événements": "ti-confetti", "Bénévoles": "ti-heart-handshake", "Communication": "ti-speakerphone", "Administratif": "ti-file-text", "Partenariats": "ti-businessplan", "Divers": "ti-dots" };
+const THEME_COLORS = { "Finances": "#1B7A4B", "Sportif": "#C0392B", "Événements": "#B5660A", "Bénévoles": "#8E44AD", "Communication": "#1B5E9B", "Administratif": "#5A6066", "Partenariats": "#0E7C86", "Divers": "#6E747D" };
 
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
@@ -770,7 +772,19 @@ function CAView({ me, data, isAdmin, reload, openNewSujet, openNewMeeting, openM
             </div>
           </div>
           {actifs.length === 0 ? <Empty t="Aucun sujet en attente — propose-en un !" /> :
-            actifs.map((x) => <SujetCard key={x.id} s={x} me={me} uById={uById} pById={pById} reload={reload} />)}
+            [...poles.map((p) => p.id), "_"].map((pid) => {
+              const items = actifs.filter((x) => ((f(x, "Pôle") || [])[0] || "_") === pid).sort((a, b) => themes.indexOf(f(a, "Thème")) - themes.indexOf(f(b, "Thème")));
+              if (!items.length) return null;
+              const p = pById[pid]; const pId = p ? f(p, "Identifiant") : null;
+              return <div key={pid} style={{ marginBottom: 20 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 11 }}>
+                  <span style={{ width: 12, height: 12, borderRadius: "50%", background: POLE_COLORS[pId] || MUT }} />
+                  <span style={{ fontSize: 15, fontWeight: 700, color: TEXT }}>{p ? f(p, "Pôles") : "Sans pôle"}</span>
+                  <span style={{ fontSize: 12, color: MUT }}>· {items.length}</span>
+                </div>
+                {items.map((x) => <SujetCard key={x.id} s={x} me={me} uById={uById} pById={pById} reload={reload} />)}
+              </div>;
+            })}
           {traites.length > 0 && (
             <div style={{ marginTop: 22 }}>
               <div className="cond" style={{ fontSize: 12.5, color: MUT, fontWeight: 700, marginBottom: 9 }}>Sujets traités ({traites.length})</div>
@@ -809,6 +823,7 @@ function SujetCard({ s, me, uById, pById, reload, done }) {
       <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 9 }}>
         {f(s, "Thème") && <span className="chip" style={{ background: "#EEF1F4", color: "#5A6066" }}>{f(s, "Thème")}</span>}
         {pole && <span className="tag" style={{ background: POLE_COLORS[f(pole, "Identifiant")] || BLACK }}>{f(pole, "Pôles")}</span>}
+        {f(s, "Thème") && <i className={"ti " + (THEME_ICONS[f(s, "Thème")] || "ti-dots")} style={{ marginLeft: "auto", fontSize: 28, color: THEME_COLORS[f(s, "Thème")] || MUT, opacity: 0.22 }} aria-hidden="true" />}
       </div>
       <div style={{ fontSize: 15.5, fontWeight: 700, color: TEXT, lineHeight: 1.35, letterSpacing: "-.01em" }}>{f(s, "Titre")}</div>
       {f(s, "Description") && <div style={{ fontSize: 13.5, color: MUT, marginTop: 6, lineHeight: 1.55 }}>{f(s, "Description")}</div>}
