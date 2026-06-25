@@ -250,6 +250,8 @@ function Dashboard({ me, data, setView, openNewTask, openNewSujet, openTask }) {
   const enCours = tasks.filter((t) => f(t, "Statut") === "En cours");
   const aides = tasks.filter((t) => f(t, "Besoin d'aide"));
   const proches = tasks.filter((t) => { const d = dueInfo(f(t, "Échéance")); return d && d.urg >= 2 && f(t, "Statut") !== "Fait"; });
+  const rouge = proches.filter((t) => { const d = dueInfo(f(t, "Échéance")); return d && d.urg >= 3; }).length;
+  const orange = proches.filter((t) => { const d = dueInfo(f(t, "Échéance")); return d && d.urg === 2; }).length;
   const total = tasks.length || 1;
   const done = tasks.filter((t) => f(t, "Statut") === "Fait").length;
   const pct = Math.round((done / total) * 100);
@@ -266,15 +268,19 @@ function Dashboard({ me, data, setView, openNewTask, openNewSujet, openTask }) {
           <button className="btn btn-yellow" style={{ marginLeft: "auto" }} onClick={openNewSujet}>Noter un sujet</button>
         </div>
       )}
-      <div className="card rise" style={{ marginBottom: 18, padding: "16px 20px" }}>
-        <div className="display" style={{ fontSize: 25, color: TEXT, marginBottom: 2 }}>Bonjour {f(me, "Prénom") || ""}</div>
-        <div style={{ fontSize: 14, color: MUT }}>Voici l'essentiel du club aujourd'hui — on avance ensemble.</div>
+      <div className="card rise" style={{ marginBottom: 18, padding: "16px 20px", display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+        <Avatar u={me} size={48} />
+        <div style={{ flex: 1, minWidth: 170 }}>
+          <div className="display" style={{ fontSize: 25, color: TEXT, marginBottom: 2 }}>Bonjour {f(me, "Prénom") || ""}</div>
+          <div style={{ fontSize: 14, color: MUT }}>Voici l'essentiel du club aujourd'hui — on avance ensemble.</div>
+        </div>
+        <span className="chip" style={{ background: f(me, "Rôle") === "Admin" ? "#16171B" : "#EEF1F4", color: f(me, "Rôle") === "Admin" ? YELLOW : "#5A6066", padding: "6px 12px", fontSize: 12.5, fontWeight: 600 }}><i className={"ti " + (f(me, "Rôle") === "Admin" ? "ti-shield-check" : "ti-user")} aria-hidden="true" />{f(me, "Rôle") === "Admin" ? "Administrateur" : "Équipier"}</span>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 13, marginBottom: 14 }}>
-        <StatCard icon="ti-checklist" color={RED} n={mine.length} label="mes tâches en cours" delay=".06s" onClick={() => setView("taches")} />
-        <StatCard icon="ti-flame" color="#C99700" n={proches.length} label="échéances proches" delay=".12s" onClick={() => setView("taches")} />
-        <StatCard icon="ti-users-group" color="#1B5E9B" n={enCours.length} label="tâches du club en cours" delay=".18s" onClick={() => setView("taches")} />
+        <StatCard icon="ti-checklist" color={RED} n={mine.length} label="mes tâches en cours" sub="à suivre" delay=".06s" onClick={() => setView("taches")} />
+        <StatCard icon="ti-flame" color="#C99700" n={proches.length} label="échéances proches" sub={rouge + " urgent · " + orange + " bientôt"} delay=".12s" onClick={() => setView("taches")} />
+        <StatCard icon="ti-users-group" color="#1B5E9B" n={enCours.length} label="tâches du club en cours" sub="en mouvement" delay=".18s" onClick={() => setView("taches")} />
       </div>
 
       <div className="card rise" style={{ padding: "18px 20px", marginBottom: 22, display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap", animationDelay: ".22s" }}>
@@ -323,11 +329,14 @@ function Dashboard({ me, data, setView, openNewTask, openNewSujet, openTask }) {
     </div>
   );
 }
-function StatCard({ icon, color, n, label, delay, onClick }) {
-  return <div className="card lift rise" onClick={onClick} style={{ padding: "16px 18px", cursor: "pointer", borderTop: "3px solid " + color, animationDelay: delay }}>
-    <i className={"ti " + icon} style={{ fontSize: 20, color }} />
-    <div className="display" style={{ fontSize: 30, color: TEXT, marginTop: 6 }}>{n}</div>
-    <div style={{ fontSize: 12.5, color: MUT }}>{label}</div>
+function StatCard({ icon, color, n, label, sub, delay, onClick }) {
+  return <div className="card lift rise" onClick={onClick} style={{ padding: "15px 17px", cursor: "pointer", borderLeft: "4px solid " + color, position: "relative", overflow: "hidden", animationDelay: delay }}>
+    <i className={"ti " + icon} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", fontSize: 58, color: color, opacity: 0.13, pointerEvents: "none" }} aria-hidden="true" />
+    <div style={{ position: "relative" }}>
+      <div style={{ fontSize: 11, color: MUT, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".05em" }}>{label}</div>
+      <div className="display" style={{ fontSize: 30, color: color, marginTop: 4 }}>{n}</div>
+      {sub && <div style={{ fontSize: 12, color: MUT, marginTop: 1 }}>{sub}</div>}
+    </div>
   </div>;
 }
 
