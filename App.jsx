@@ -166,7 +166,7 @@ function Login({ onLogin }) {
 function ProfileForm({ me, poles, onSaved }) {
   const [prenom, setPrenom] = useState(f(me, "Prénom") || "");
   const [nom, setNom] = useState(f(me, "Nom") || "");
-  const [pole, setPole] = useState(initialPole || (f(me, "Pôle") || [])[0] || "");
+  const [pole, setPole] = useState((f(me, "Pôle") || [])[0] || "");
   const [fonction, setFonction] = useState(f(me, "Fonction") || "Membre");
   const [tel, setTel] = useState(f(me, "Téléphone") || "");
   const [photo, setPhoto] = useState(f(me, "Photo") || "");
@@ -225,7 +225,7 @@ function ProfileForm({ me, poles, onSaved }) {
   );
 }
 
-function Header({ me, view, setView, isAdmin, onLogout, unread, onBell }) {
+function Header({ me, view, setView, isAdmin, onLogout, unread, onBell, onProfile }) {
   const tabs = [["dash", "Accueil"], ["taches", "Tâches"], ["ca", "Réunions"], ["annuaire", "Annuaire"]];
   if (isAdmin) tabs.push(["admin", "Utilisateurs"]);
   return (
@@ -240,7 +240,7 @@ function Header({ me, view, setView, isAdmin, onLogout, unread, onBell }) {
           {tabs.map(([v, l]) => <button key={v} className={"navb" + (view === v ? " on" : "")} onClick={() => setView(v)}>{l}</button>)}
         </nav>
         <button onClick={onBell} title="Notifications" style={{ position: "relative", background: "rgba(255,255,255,.08)", border: "none", color: "#E9EAEC", width: 36, height: 36, borderRadius: 11, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><i className="ti ti-bell" style={{ fontSize: 18 }} />{unread > 0 && <span style={{ position: "absolute", top: -5, right: -5, background: RED, color: "#fff", fontSize: 10, fontWeight: 700, borderRadius: 10, minWidth: 17, height: 17, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>{unread}</span>}</button>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }} onClick={onLogout} title="Se déconnecter">
+        <div style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }} onClick={onProfile} title="Mon espace">
           <Avatar u={me} size={32} />
           <span style={{ fontSize: 12.5, color: "#E9EAEC", fontWeight: 500 }}>{f(me, "Prénom") || "Moi"}</span>
         </div>
@@ -301,7 +301,7 @@ function Dashboard({ me, data, setView, openNewTask, openNewSujet, openTask }) {
               <div style={{ fontSize: 16, fontWeight: 700, color: TEXT }}>{pct >= 60 ? "Le club avance bien" : pct > 0 ? "On est en route" : "C'est parti !"}</div>
               <div style={{ fontSize: 13.5, color: MUT, marginTop: 3 }}>{pct}% des tâches sont à jour. Chaque tâche cochée fait avancer le club.</div>
             </div>
-            <button className="btn btn-red" onClick={openNewTask}><i className="ti ti-plus" />Nouvelle tâche</button>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><button className="btn btn-red" onClick={openNewTask}><i className="ti ti-plus" />Nouvelle tâche</button><button className="btn btn-dark" onClick={openNewSujet}><i className="ti ti-clipboard-plus" />Proposer un sujet CA</button></div>
           </div>
           <Section title="Mes tâches">
             {mine.length === 0 ? <Empty t="Rien ne t'est assigné — prends une tâche pour donner un coup de main !" /> :
@@ -381,8 +381,12 @@ function TasksView({ me, data, isAdmin, reload, openNewTask, openTask }) {
   const uById = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users]);
   const pById = useMemo(() => Object.fromEntries(poles.map((p) => [p.id, p])), [poles]);
   const myPole = (f(me, "Pôle") || [])[0];
+  const [mode, setMode] = useState("mes");
   const [sel, setSel] = useState(myPole || (poles[0] && poles[0].id) || "");
   const [showSocle, setShowSocle] = useState(true);
+  const subTab = (id, label) => <button className="navb" style={{ color: mode === id ? "#16171B" : "#9aa0a6", background: mode === id ? "#fff" : "none" }} onClick={() => setMode(id)}>{label}</button>;
+
+  const mesTaches = tasks.filter((t) => { const pid = (f(t, "Pôle") || [])[0]; return (f(t, "Assignés") || []).includes(me.id) || (f(t, "Créé par") || []).includes(me.id) || (myPole && pid === myPole); }).sort((a, b) => ((dueInfo(f(b, "Échéance")) || {}).urg || 0) - ((dueInfo(f(a, "Échéance")) || {}).urg || 0));
 
   const poleTasks = tasks.filter((t) => (f(t, "Pôle") || [])[0] === sel);
   const socle = poleTasks.filter((t) => f(t, "Type") === "Socle");
@@ -397,62 +401,78 @@ function TasksView({ me, data, isAdmin, reload, openNewTask, openTask }) {
     const u = ts.filter((t) => { const d = dueInfo(f(t, "Échéance")); return d && d.urg >= 3; }).length;
     return { total: ts.length, urgent: u };
   };
+  const TC = (t) => <TaskCard key={t.id} t={t} me={me} uById={uById} pById={pById} users={users} isAdmin={isAdmin} reload={reload} commentaires={data.commentaires || []} openTask={openTask} />;
 
   return (
     <div className="fade">
-      <div style={{ fontSize: 20, fontWeight: 700, color: TEXT, marginBottom: 12 }}>Tâches par pôle</div>
-      <div className="navrow" style={{ display: "flex", gap: 8, marginBottom: 18, overflowX: "auto", paddingBottom: 4 }}>
-        {poles.map((p) => {
-          const id = f(p, "Identifiant"); const on = p.id === sel; const c = POLE_COLORS[id] || BLACK;
-          const cnt = countFor(p.id); const isMine = p.id === myPole;
-          return (
-            <button key={p.id} onClick={() => setSel(p.id)} style={{ flex: "0 0 auto", cursor: "pointer", border: "1.5px solid " + (on ? c : BORDER), background: on ? c : "#fff", color: on ? "#fff" : TEXT, borderRadius: 14, padding: "9px 14px", textAlign: "left", minWidth: 124, display: "flex", alignItems: "center", gap: 10 }}>
-              <i className={"ti " + (POLE_ICONS[id] || "ti-folder")} style={{ fontSize: 21, color: on ? "#fff" : c, opacity: on ? 0.95 : 0.55 }} aria-hidden="true" />
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 5 }}>{isMine && <span title="Mon pôle">★</span>}{f(p, "Pôles")}</div>
-                <div style={{ fontSize: 11, opacity: .85, marginTop: 1 }}>{cnt.total} tâche{cnt.total > 1 ? "s" : ""}{cnt.urgent ? " · " + cnt.urgent + " urgent" + (cnt.urgent > 1 ? "es" : "e") : ""}</div>
-              </div>
-            </button>
-          );
-        })}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
+        <div className="display" style={{ fontSize: 22, color: TEXT, marginRight: "auto" }}>Tâches</div>
+        <nav style={{ display: "flex", gap: 4, background: "#EEF0F3", borderRadius: 30, padding: 4 }}>{subTab("mes", "Mes tâches")}{subTab("poles", "Tâches par pôle")}</nav>
       </div>
 
-      {selPole && (
+      {mode === "mes" && (
         <div>
-          <div className="card" style={{ marginBottom: 14, display: "flex", alignItems: "center", gap: 13, flexWrap: "wrap", position: "relative", overflow: "hidden" }}>
-            <i className={"ti " + (POLE_ICONS[selId] || "ti-folder")} style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", fontSize: 70, color: POLE_COLORS[selId] || BLACK, opacity: 0.10, pointerEvents: "none" }} aria-hidden="true" />
-            <div style={{ width: 46, height: 46, borderRadius: 13, background: POLE_COLORS[selId] || BLACK, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto", position: "relative" }}><i className={"ti " + (POLE_ICONS[selId] || "ti-folder")} style={{ fontSize: 23 }} aria-hidden="true" /></div>
-            <div style={{ marginRight: "auto", position: "relative" }}>
-              <div style={{ fontSize: 17, fontWeight: 700, color: TEXT }}>{f(selPole, "Pôles")}</div>
-              <div style={{ fontSize: 12.5, color: MUT }}>{responsable ? "Responsable : " + fullName(responsable) : "Responsable à nommer"}</div>
-            </div>
-            <div style={{ textAlign: "right", position: "relative" }}>
-              <div style={{ fontSize: 13, color: TEXT, fontWeight: 600 }}>{doneCount}/{poleTasks.length} à jour</div>
-              {urgent > 0 && <div style={{ fontSize: 12, color: RED }}>{urgent} urgente{urgent > 1 ? "s" : ""}</div>}
-            </div>
+          <button className="btn btn-red" style={{ marginBottom: 14 }} onClick={() => openNewTask(myPole || "")}><i className="ti ti-plus" />Nouvelle tâche</button>
+          {mesTaches.length === 0 ? <Empty t="Aucune tâche pour toi pour l'instant — passe par « Tâches par pôle » pour en prendre une." /> :
+            <div className="cardgrid">{mesTaches.map(TC)}</div>}
+        </div>
+      )}
+
+      {mode === "poles" && (
+        <div>
+          <div className="navrow" style={{ display: "flex", gap: 8, marginBottom: 18, overflowX: "auto", paddingBottom: 4 }}>
+            {poles.map((p) => {
+              const id = f(p, "Identifiant"); const on = p.id === sel; const c = POLE_COLORS[id] || BLACK;
+              const cnt = countFor(p.id); const isMine = p.id === myPole;
+              return (
+                <button key={p.id} onClick={() => setSel(p.id)} style={{ flex: "0 0 auto", cursor: "pointer", border: "1.5px solid " + (on ? c : BORDER), background: on ? c : "#fff", color: on ? "#fff" : TEXT, borderRadius: 14, padding: "9px 14px", textAlign: "left", minWidth: 124, display: "flex", alignItems: "center", gap: 10 }}>
+                  <i className={"ti " + (POLE_ICONS[id] || "ti-folder")} style={{ fontSize: 21, color: on ? "#fff" : c, opacity: on ? 0.95 : 0.55 }} aria-hidden="true" />
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 5 }}>{isMine && <span title="Mon pôle">★</span>}{f(p, "Pôles")}</div>
+                    <div style={{ fontSize: 11, opacity: .85, marginTop: 1 }}>{cnt.total} tâche{cnt.total > 1 ? "s" : ""}{cnt.urgent ? " · " + cnt.urgent + " urgent" + (cnt.urgent > 1 ? "es" : "e") : ""}</div>
+                  </div>
+                </button>
+              );
+            })}
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 9, cursor: "pointer" }} onClick={() => setShowSocle((v) => !v)}>
-            <span className="cond" style={{ fontSize: 13, fontWeight: 600, color: TEXT }}>Socle officiel</span>
-            <span className="chip" style={{ background: "#EDE7F6", color: "#5E35B1" }}>{socle.length}</span>
-            <span style={{ marginLeft: "auto", color: MUT, fontSize: 12 }}>{showSocle ? "masquer" : "afficher"}</span>
-          </div>
-          {showSocle && (socle.length === 0 ? <Empty t="Aucune tâche socle." /> :
-            <div className="cardgrid">{socle.map((t) => <TaskCard key={t.id} t={t} me={me} uById={uById} pById={pById} users={users} isAdmin={isAdmin} reload={reload} commentaires={data.commentaires || []} openTask={openTask} />)}</div>)}
+          {selPole && (
+            <div>
+              <div className="card" style={{ marginBottom: 14, display: "flex", alignItems: "center", gap: 13, flexWrap: "wrap", position: "relative", overflow: "hidden" }}>
+                <i className={"ti " + (POLE_ICONS[selId] || "ti-folder")} style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", fontSize: 70, color: POLE_COLORS[selId] || BLACK, opacity: 0.10, pointerEvents: "none" }} aria-hidden="true" />
+                <div style={{ width: 46, height: 46, borderRadius: 13, background: POLE_COLORS[selId] || BLACK, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto", position: "relative" }}><i className={"ti " + (POLE_ICONS[selId] || "ti-folder")} style={{ fontSize: 23 }} aria-hidden="true" /></div>
+                <div style={{ marginRight: "auto", position: "relative" }}>
+                  <div style={{ fontSize: 17, fontWeight: 700, color: TEXT }}>{f(selPole, "Pôles")}</div>
+                  <div style={{ fontSize: 12.5, color: MUT }}>{responsable ? "Responsable : " + fullName(responsable) : "Responsable à nommer"}</div>
+                </div>
+                <div style={{ textAlign: "right", position: "relative" }}>
+                  <div style={{ fontSize: 13, color: TEXT, fontWeight: 600 }}>{doneCount}/{poleTasks.length} à jour</div>
+                  {urgent > 0 && <div style={{ fontSize: 12, color: RED }}>{urgent} urgente{urgent > 1 ? "s" : ""}</div>}
+                </div>
+              </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "22px 0 9px" }}>
-            <span className="cond" style={{ fontSize: 13, fontWeight: 600, color: TEXT }}>Tâches ponctuelles</span>
-            <span className="chip" style={{ background: "#E6F0FB", color: "#1B5E9B" }}>{ponct.length}</span>
-            <button className="btn btn-red" style={{ marginLeft: "auto", fontSize: 12.5, padding: "7px 13px" }} onClick={() => openNewTask(sel)}>+ Ajouter</button>
-          </div>
-          {ponct.length === 0 ? <Empty t="Aucune tâche ponctuelle pour l'instant — ajoutes-en une !" /> :
-            <div className="cardgrid">{ponct.map((t) => <TaskCard key={t.id} t={t} me={me} uById={uById} pById={pById} users={users} isAdmin={isAdmin} reload={reload} commentaires={data.commentaires || []} openTask={openTask} />)}</div>}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 9, cursor: "pointer" }} onClick={() => setShowSocle((v) => !v)}>
+                <span className="cond" style={{ fontSize: 13, fontWeight: 600, color: TEXT }}>Socle officiel</span>
+                <span className="chip" style={{ background: "#EDE7F6", color: "#5E35B1" }}>{socle.length}</span>
+                <span style={{ marginLeft: "auto", color: MUT, fontSize: 12 }}>{showSocle ? "masquer" : "afficher"}</span>
+              </div>
+              {showSocle && (socle.length === 0 ? <Empty t="Aucune tâche socle." /> :
+                <div className="cardgrid">{socle.map(TC)}</div>)}
+
+              <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "22px 0 9px" }}>
+                <span className="cond" style={{ fontSize: 13, fontWeight: 600, color: TEXT }}>Tâches ponctuelles</span>
+                <span className="chip" style={{ background: "#E6F0FB", color: "#1B5E9B" }}>{ponct.length}</span>
+                <button className="btn btn-red" style={{ marginLeft: "auto", fontSize: 12.5, padding: "7px 13px" }} onClick={() => openNewTask(sel)}>+ Ajouter</button>
+              </div>
+              {ponct.length === 0 ? <Empty t="Aucune tâche ponctuelle pour l'instant — ajoutes-en une !" /> :
+                <div className="cardgrid">{ponct.map(TC)}</div>}
+            </div>
+          )}
         </div>
       )}
     </div>
   );
 }
-
 function TaskCard({ t, me, uById, pById, users, isAdmin, reload, commentaires, openTask }) {
   const [busy, setBusy] = useState(false);
   const due = dueInfo(f(t, "Échéance"));
@@ -571,18 +591,20 @@ function NewTask({ me, data, isAdmin, onClose, reload, initialPole }) {
   const { poles, users } = data;
   const [titre, setTitre] = useState("");
   const [desc, setDesc] = useState("");
+  const poleMembers = (pid) => users.filter((u) => (f(u, "Pôle") || [])[0] === pid && f(u, "Actif") !== false).map((u) => u.id);
   const [pole, setPole] = useState(initialPole || (f(me, "Pôle") || [])[0] || "");
   const [type, setType] = useState("Ponctuelle");
   const [ech, setEch] = useState("");
-  const [assignes, setAssignes] = useState([me.id]);
+  const [assignes, setAssignes] = useState(() => Array.from(new Set([me.id, ...poleMembers(initialPole || (f(me, "Pôle") || [])[0] || "")])));
+  const [alsoCA, setAlsoCA] = useState(false);
   const [busy, setBusy] = useState(false);
-  const toggle = (id) => setAssignes((a) => a.includes(id) ? a.filter((x) => x !== id) : [...a, id]);
+  const changePole = (pid) => { setPole(pid); setAssignes(Array.from(new Set([me.id, ...poleMembers(pid)]))); };
   const save = async () => {
     if (!titre.trim()) return; setBusy(true);
     const fields = { "Titre": titre.trim(), "Description": desc.trim(), "Type": type, "Statut": "À faire", "Créé par": [me.id], "Assignés": assignes };
     if (pole) fields["Pôle"] = [pole];
     if (ech) fields["Échéance"] = ech;
-    try { await db({ action: "create", table: "Tâches", fields }); await reload(); onClose(); } catch (e) { alert("Erreur : " + e.message); setBusy(false); }
+    try { await db({ action: "create", table: "Tâches", fields }); if (alsoCA) { const sf = { "Titre": titre.trim(), "Description": desc.trim(), "Statut": "À traiter", "Proposé par": [me.id] }; if (pole) sf["Pôle"] = [pole]; await db({ action: "create", table: "Sujets CA", fields: sf }); } await reload(); onClose(); } catch (e) { alert("Erreur : " + e.message); setBusy(false); }
   };
   return (
     <Modal onClose={onClose}>
@@ -592,7 +614,7 @@ function NewTask({ me, data, isAdmin, onClose, reload, initialPole }) {
       <div style={{ marginTop: 11 }}><label className="lbl">Description (facultatif)</label><textarea className="ta" value={desc} onChange={(e) => setDesc(e.target.value)} /></div>
       <div style={{ display: "flex", gap: 11, marginTop: 11 }}>
         <div style={{ flex: 1 }}><label className="lbl">Pôle</label>
-          <select className="sel" value={pole} onChange={(e) => setPole(e.target.value)}>
+          <select className="sel" value={pole} onChange={(e) => changePole(e.target.value)}>
             <option value="">—</option>{poles.map((p) => <option key={p.id} value={p.id}>{f(p, "Pôles")}</option>)}
           </select>
         </div>
@@ -608,7 +630,9 @@ function NewTask({ me, data, isAdmin, onClose, reload, initialPole }) {
       )}
       <div style={{ marginTop: 11 }}><label className="lbl">Affecter à</label>
         <AssigneePicker assignes={assignes} users={users} onChange={setAssignes} />
+        <div style={{ fontSize: 11.5, color: MUT, marginTop: 6 }}>Les membres du pôle sont pré-affectés — ajuste librement.</div>
       </div>
+      <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 13, color: TEXT, cursor: "pointer" }}><input type="checkbox" checked={alsoCA} onChange={(e) => setAlsoCA(e.target.checked)} />Proposer aussi ce sujet au prochain CA</label>
       <div style={{ display: "flex", gap: 9, marginTop: 18 }}>
         <button className="btn btn-ghost" style={{ flex: 1, justifyContent: "center" }} onClick={onClose}>Annuler</button>
         <button className="btn btn-red" style={{ flex: 2, justifyContent: "center" }} disabled={busy} onClick={save}>{busy ? "…" : "Créer la tâche"}</button>
@@ -1027,6 +1051,7 @@ function TaskDetailPage({ taskId, me, data, isAdmin, onClose, reload }) {
     catch (e) { alert("Erreur : " + e.message); }
     setUploading(false);
   };
+  const toCA = async () => { if (!confirm("Ajouter cette tâche comme sujet à aborder au prochain CA ?")) return; setBusy(true); try { const sf = { "Titre": f(t, "Titre"), "Description": f(t, "Description") || "", "Statut": "À traiter", "Proposé par": [me.id] }; const pid = (f(t, "Pôle") || [])[0]; if (pid) sf["Pôle"] = [pid]; await db({ action: "create", table: "Sujets CA", fields: sf }); await reload(); alert("Sujet ajouté au CA ✓"); } catch (e) { alert("Erreur : " + e.message); } setBusy(false); };
   const stColor = statut === "Fait" ? OK : statut === "En cours" ? "#B8860B" : MUT;
   const segC = (v) => (v === "Fait" ? OK : v === "En cours" ? "#B8860B" : MUT);
   return (
@@ -1096,6 +1121,7 @@ function TaskDetailPage({ taskId, me, data, isAdmin, onClose, reload }) {
             <AssigneePicker assignes={assignes} users={users} busy={busy} onChange={(next) => upd({ "Assignés": next })} />
             <div className="lbl" style={{ marginTop: 18 }}>Échéance</div>
             <input className="inp" type="date" value={f(t, "Échéance") || ""} onChange={(e) => upd({ "Échéance": e.target.value || null })} />
+            <button className="btn btn-ghost" style={{ width: "100%", justifyContent: "center", marginTop: 14 }} disabled={busy} onClick={toCA}><i className="ti ti-clipboard-plus" />Proposer au CA</button>
             {canDelete && <div style={{ marginTop: 20, borderTop: "1px solid " + BORDER, paddingTop: 16 }}><button className="btn btn-ghost" style={{ color: RED, borderColor: "#F0C7C3", width: "100%", justifyContent: "center" }} disabled={busy} onClick={async () => { if (!confirm("Supprimer cette tâche ?")) return; setBusy(true); try { await db({ action: "delete", table: "Tâches", recordId: t.id }); await reload(); onClose(); } catch (e) { alert("Erreur : " + e.message); setBusy(false); } }}>Supprimer la tâche</button></div>}
           </div>
         </div>
@@ -1104,6 +1130,55 @@ function TaskDetailPage({ taskId, me, data, isAdmin, onClose, reload }) {
   );
 }
 
+function MonCompte({ me, data, onClose, reload, onLogout }) {
+  const { poles } = data;
+  const [prenom, setPrenom] = useState(f(me, "Prénom") || "");
+  const [nom, setNom] = useState(f(me, "Nom") || "");
+  const [pole, setPole] = useState((f(me, "Pôle") || [])[0] || "");
+  const [fonction, setFonction] = useState(f(me, "Fonction") || "Membre");
+  const [tel, setTel] = useState(f(me, "Téléphone") || "");
+  const [photo, setPhoto] = useState(f(me, "Photo") || "");
+  const [busy, setBusy] = useState(false);
+  const save = async () => {
+    if (!prenom.trim() || !nom.trim()) { alert("Prénom et nom requis."); return; }
+    setBusy(true);
+    const fields = { "Prénom": prenom.trim(), "Nom": nom.trim(), "Fonction": fonction, "Téléphone": tel.trim(), "Pôle": pole ? [pole] : [], "Photo": photo || "" };
+    try { await db({ action: "update", table: "Utilisateurs", recordId: me.id, fields }); await reload(); onClose(); } catch (e) { alert("Erreur : " + e.message); setBusy(false); }
+  };
+  return (
+    <Modal onClose={onClose}>
+      <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 18 }}>
+        {photo ? <img src={photo} alt="" style={{ width: 60, height: 60, borderRadius: "50%", objectFit: "cover" }} /> : <div style={{ width: 60, height: 60, borderRadius: "50%", background: BLACK, color: YELLOW, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 20 }}>{(prenom[0] || "") + (nom[0] || "")}</div>}
+        <div>
+          <div style={{ fontSize: 19, fontWeight: 800, color: TEXT }}>Mon espace</div>
+          <div style={{ fontSize: 13, color: MUT }}>{f(me, "Email")}</div>
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 12 }}>
+        <div style={{ flex: 1 }}><label className="lbl">Prénom</label><input className="inp" value={prenom} onChange={(e) => setPrenom(e.target.value)} /></div>
+        <div style={{ flex: 1 }}><label className="lbl">Nom</label><input className="inp" value={nom} onChange={(e) => setNom(e.target.value)} /></div>
+      </div>
+      <div style={{ marginTop: 12 }}><label className="lbl">Mon pôle</label>
+        <select className="sel" value={pole} onChange={(e) => setPole(e.target.value)}><option value="">— Choisir —</option>{poles.map((p) => <option key={p.id} value={p.id}>{f(p, "Pôles")}</option>)}</select>
+      </div>
+      <div style={{ marginTop: 12 }}><label className="lbl">Ma fonction</label>
+        <select className="sel" value={fonction} onChange={(e) => setFonction(e.target.value)}><option value="Membre">Membre</option><option value="Responsable">Responsable</option></select>
+      </div>
+      <div style={{ marginTop: 12 }}><label className="lbl">Téléphone</label><input className="inp" value={tel} onChange={(e) => setTel(e.target.value)} /></div>
+      <div style={{ marginTop: 12 }}><label className="lbl">Ma photo</label>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <label className="btn btn-ghost" style={{ cursor: "pointer" }}>Changer la photo<input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => e.target.files[0] && resizeImage(e.target.files[0], setPhoto)} /></label>
+          {photo && <button className="btn btn-ghost" style={{ fontSize: 12.5, color: RED, borderColor: "#F0C7C3" }} onClick={() => setPhoto("")}>Retirer</button>}
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 9, marginTop: 20, flexWrap: "wrap", alignItems: "center" }}>
+        <button className="btn btn-ghost" onClick={onClose}>Fermer</button>
+        <button className="btn btn-red" disabled={busy} onClick={save}>{busy ? "…" : "Enregistrer"}</button>
+        <button className="btn btn-ghost" style={{ marginLeft: "auto", color: RED, borderColor: "#F0C7C3" }} onClick={onLogout}><i className="ti ti-logout" />Se déconnecter</button>
+      </div>
+    </Modal>
+  );
+}
 export default function App() {
   const [status, setStatus] = useState("loading");
   const [me, setMe] = useState(null);
@@ -1158,7 +1233,7 @@ export default function App() {
   return (
     <div style={{ minHeight: "100vh", backgroundColor: "#F4F5F8", backgroundImage: "radial-gradient(720px circle at 100% -6%, rgba(214,40,40,.06), transparent 58%), radial-gradient(620px circle at -6% 112%, rgba(245,197,24,.07), transparent 58%)", backgroundAttachment: "fixed", color: TEXT, fontFamily: "'Manrope',system-ui,sans-serif" }}>
       <style>{CSS}</style>
-      <Header me={me} view={view} setView={(v) => { setTaskOpen(null); setView(v); }} isAdmin={isAdmin} onLogout={logout} unread={unread} onBell={() => setModal({ type: "notifs" })} />
+      <Header me={me} view={view} setView={(v) => { setTaskOpen(null); setView(v); }} isAdmin={isAdmin} onLogout={logout} unread={unread} onBell={() => setModal({ type: "notifs" })} onProfile={() => setModal({ type: "profile" })} />
       <div className="wrap">
         {taskOpen && <TaskDetailPage taskId={taskOpen} me={me} data={data} isAdmin={isAdmin} onClose={() => setTaskOpen(null)} reload={reload} />}
         {!taskOpen && view === "dash" && <Dashboard me={me} data={data} setView={setView} openNewTask={() => setModal({ type: "task", pole: (f(me, "Pôle") || [])[0] || "" })} openNewSujet={() => setModal({ type: "sujet" })} openTask={(id) => setTaskOpen(id)} />}
@@ -1172,6 +1247,7 @@ export default function App() {
       {modal && modal.type === "notifs" && <NotifsModal me={me} data={data} setView={setView} onClose={() => setModal(null)} reload={reload} openTask={(id) => { setModal(null); setTaskOpen(id); }} />}
       {modal && modal.type === "meeting" && <NewMeeting onClose={() => setModal(null)} reload={reload} />}
       {modal && modal.type === "meetingDetail" && <MeetingDetail meetingId={modal.id} me={me} data={data} isAdmin={isAdmin} onClose={() => setModal(null)} reload={reload} />}
+      {modal && modal.type === "profile" && <MonCompte me={me} data={data} onClose={() => setModal(null)} reload={reload} onLogout={logout} />}
     </div>
   );
 }
