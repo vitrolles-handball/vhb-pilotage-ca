@@ -209,7 +209,7 @@ function ProfileForm({ me, poles, onSaved }) {
   );
 }
 
-function Header({ me, view, setView, isAdmin, onLogout }) {
+function Header({ me, view, setView, isAdmin, onLogout, unread, onBell }) {
   const tabs = [["dash", "Accueil"], ["taches", "Tâches"], ["ca", "Réunions"], ["annuaire", "Annuaire"]];
   if (isAdmin) tabs.push(["admin", "Utilisateurs"]);
   return (
@@ -223,6 +223,7 @@ function Header({ me, view, setView, isAdmin, onLogout }) {
         <nav className="navrow" style={{ display: "flex", gap: 2, background: "rgba(255,255,255,.08)", borderRadius: 30, padding: 4 }}>
           {tabs.map(([v, l]) => <button key={v} className={"navb" + (view === v ? " on" : "")} onClick={() => setView(v)}>{l}</button>)}
         </nav>
+        <button onClick={onBell} title="Notifications" style={{ position: "relative", background: "rgba(255,255,255,.08)", border: "none", color: "#E9EAEC", width: 36, height: 36, borderRadius: 11, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><i className="ti ti-bell" style={{ fontSize: 18 }} />{unread > 0 && <span style={{ position: "absolute", top: -5, right: -5, background: RED, color: "#fff", fontSize: 10, fontWeight: 700, borderRadius: 10, minWidth: 17, height: 17, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>{unread}</span>}</button>
         <div style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }} onClick={onLogout} title="Se déconnecter">
           <Avatar u={me} size={32} />
           <span style={{ fontSize: 12.5, color: "#E9EAEC", fontWeight: 500 }}>{f(me, "Prénom") || "Moi"}</span>
@@ -406,7 +407,7 @@ function TasksView({ me, data, isAdmin, reload, openNewTask }) {
             <span style={{ marginLeft: "auto", color: MUT, fontSize: 12 }}>{showSocle ? "masquer" : "afficher"}</span>
           </div>
           {showSocle && (socle.length === 0 ? <Empty t="Aucune tâche socle." /> :
-            socle.map((t) => <TaskCard key={t.id} t={t} me={me} uById={uById} pById={pById} users={users} isAdmin={isAdmin} reload={reload} />))}
+            socle.map((t) => <TaskCard key={t.id} t={t} me={me} uById={uById} pById={pById} users={users} isAdmin={isAdmin} reload={reload} commentaires={data.commentaires || []} />))}
 
           <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "22px 0 9px" }}>
             <span className="cond" style={{ fontSize: 13, fontWeight: 600, color: TEXT }}>Tâches ponctuelles</span>
@@ -414,14 +415,14 @@ function TasksView({ me, data, isAdmin, reload, openNewTask }) {
             <button className="btn btn-red" style={{ marginLeft: "auto", fontSize: 12.5, padding: "7px 13px" }} onClick={() => openNewTask(sel)}>+ Ajouter</button>
           </div>
           {ponct.length === 0 ? <Empty t="Aucune tâche ponctuelle pour l'instant — ajoutes-en une !" /> :
-            ponct.map((t) => <TaskCard key={t.id} t={t} me={me} uById={uById} pById={pById} users={users} isAdmin={isAdmin} reload={reload} />)}
+            ponct.map((t) => <TaskCard key={t.id} t={t} me={me} uById={uById} pById={pById} users={users} isAdmin={isAdmin} reload={reload} commentaires={data.commentaires || []} />)}
         </div>
       )}
     </div>
   );
 }
 
-function TaskCard({ t, me, uById, pById, users, isAdmin, reload }) {
+function TaskCard({ t, me, uById, pById, users, isAdmin, reload, commentaires }) {
   const [busy, setBusy] = useState(false);
   const due = dueInfo(f(t, "Échéance"));
   const pole = pById[(f(t, "Pôle") || [])[0]];
@@ -430,6 +431,8 @@ function TaskCard({ t, me, uById, pById, users, isAdmin, reload }) {
   const isMine = assignes.includes(me.id);
   const isSocle = f(t, "Type") === "Socle";
   const canDelete = isSocle ? isAdmin : (isAdmin || (f(t, "Créé par") || []).includes(me.id));
+  const [showC, setShowC] = useState(false);
+  const coms = (commentaires || []).filter((c) => (f(c, "Tâche") || []).includes(t.id)).sort((a, b) => String(f(a, "Date")).localeCompare(String(f(b, "Date"))));
   const statut = f(t, "Statut") || "À faire";
 
   const update = async (fields) => { setBusy(true); try { await db({ action: "update", table: "Tâches", recordId: t.id, fields }); await reload(); } catch (e) { alert("Erreur : " + e.message); } setBusy(false); };
@@ -454,15 +457,74 @@ function TaskCard({ t, me, uById, pById, users, isAdmin, reload }) {
         {isMine ? <button className="btn btn-ghost" style={{ fontSize: 12, padding: "6px 12px" }} disabled={busy} onClick={leave}>Me retirer</button>
           : <button className="btn btn-dark" style={{ fontSize: 12, padding: "6px 12px" }} disabled={busy} onClick={take}>Je prends</button>}
         <button className="btn btn-ghost" style={{ fontSize: 12, padding: "6px 12px" }} disabled={busy} onClick={() => update({ "Besoin d'aide": !f(t, "Besoin d'aide") })}>{f(t, "Besoin d'aide") ? "Aide ✓" : "Besoin d'aide"}</button>
+        <button className="btn btn-ghost" style={{ fontSize: 12, padding: "6px 12px" }} onClick={() => setShowC((v) => !v)}><i className="ti ti-message-circle" />{coms.length || "Commenter"}</button>
         <div style={{ display: "flex", marginLeft: "auto", alignItems: "center", gap: 6 }}>
           {assignes.map((id) => uById[id]).filter(Boolean).slice(0, 4).map((u, i) => <div key={u.id} title={fullName(u)} style={{ marginLeft: i ? -8 : 0 }}><Avatar u={u} size={26} /></div>)}
           {canDelete && <button className="btn btn-ghost" style={{ color: RED, fontSize: 12, padding: "6px 10px", borderColor: "#F0C7C3" }} disabled={busy} onClick={del}>Suppr.</button>}
         </div>
       </div>
+      {showC && (
+        <div style={{ marginTop: 12, borderTop: "1px solid " + BORDER, paddingTop: 12 }}>
+          {coms.length === 0 ? <div style={{ fontSize: 12.5, color: MUT, marginBottom: 8 }}>Aucun commentaire pour le moment.</div> :
+            coms.map((c) => {
+              const au = uById[(f(c, "Auteur") || [])[0]];
+              return <div key={c.id} style={{ display: "flex", gap: 9, marginBottom: 10 }}>
+                <Avatar u={au} size={28} />
+                <div style={{ background: "#F4F6F8", borderRadius: 12, padding: "8px 11px", flex: 1 }}>
+                  <div style={{ fontSize: 12, color: MUT, marginBottom: 2 }}>{au ? fullName(au) : "?"}</div>
+                  <div style={{ fontSize: 13.5, color: TEXT, whiteSpace: "pre-wrap" }}>{renderMentions(f(c, "Texte"))}</div>
+                </div>
+              </div>;
+            })}
+          <CommentBox task={t} me={me} users={users} reload={reload} />
+        </div>
+      )}
     </div>
   );
 }
 
+function renderMentions(text) {
+  const parts = String(text || "").split(/(@[\wÀ-ÿ]+)/g);
+  return parts.map((p, i) => (p[0] === "@" ? <span key={i} style={{ color: RED, fontWeight: 600 }}>{p}</span> : p));
+}
+function CommentBox({ task, me, users, reload }) {
+  const [text, setText] = useState("");
+  const [mentions, setMentions] = useState([]);
+  const [q, setQ] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const onChange = (e) => {
+    const v = e.target.value; setText(v);
+    const m = v.slice(0, e.target.selectionStart).match(/@([\wÀ-ÿ]*)$/);
+    setQ(m ? m[1].toLowerCase() : null);
+  };
+  const pick = (u) => {
+    setText((tx) => tx.replace(/@([\wÀ-ÿ]*)$/, "@" + String(f(u, "Prénom") || "").replace(/\s/g, "") + " "));
+    setMentions((a) => Array.from(new Set([...a, u.id])));
+    setQ(null);
+  };
+  const send = async () => {
+    if (!text.trim()) return; setBusy(true);
+    try {
+      await db({ action: "create", table: "Commentaires", fields: { "Texte": text.trim(), "Tâche": [task.id], "Auteur": [me.id], "Mentions": mentions, "Date": new Date().toISOString(), "Lu par": me.id } });
+      setText(""); setMentions([]); await reload();
+    } catch (e) { alert("Erreur : " + e.message); }
+    setBusy(false);
+  };
+  const matches = q != null ? users.filter((u) => f(u, "Profil complété") && String(f(u, "Prénom") || "").toLowerCase().startsWith(q)).slice(0, 6) : [];
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+        <textarea className="ta" style={{ minHeight: 42 }} value={text} onChange={onChange} placeholder="Écrire un commentaire… (tape @ pour mentionner)" />
+        <button className="btn btn-red" style={{ fontSize: 12.5, padding: "10px 14px" }} disabled={busy} onClick={send}>Envoyer</button>
+      </div>
+      {matches.length > 0 && (
+        <div style={{ background: "#fff", border: "1px solid " + BORDER, borderRadius: 10, marginTop: 5, overflow: "hidden" }}>
+          {matches.map((u) => <div key={u.id} onClick={() => pick(u)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", cursor: "pointer", fontSize: 13 }}><Avatar u={u} size={22} />{fullName(u)}</div>)}
+        </div>
+      )}
+    </div>
+  );
+}
 function Modal({ children, onClose }) {
   return <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(16,17,20,.55)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "6vh 16px 40px", zIndex: 100, overflowY: "auto" }}>
     <div onClick={(e) => e.stopPropagation()} className="rise card" style={{ maxWidth: 480, width: "100%", padding: "22px 22px" }}>{children}</div>
@@ -834,22 +896,46 @@ function MeetingDetail({ meetingId, me, data, isAdmin, onClose, reload }) {
   );
 }
 
+function NotifsModal({ me, data, setView, onClose, reload }) {
+  const { commentaires, tasks, users } = data;
+  const uById = Object.fromEntries(users.map((u) => [u.id, u]));
+  const tById = Object.fromEntries(tasks.map((t) => [t.id, t]));
+  const unread = commentaires.filter((c) => (f(c, "Mentions") || []).includes(me.id) && !String(f(c, "Lu par") || "").includes(me.id)).sort((a, b) => String(f(b, "Date")).localeCompare(String(f(a, "Date"))));
+  const goTo = async (c) => { const lu = String(f(c, "Lu par") || ""); try { await db({ action: "update", table: "Commentaires", recordId: c.id, fields: { "Lu par": lu ? lu + "," + me.id : me.id } }); } catch (e) {} setView("taches"); onClose(); reload(); };
+  return (
+    <Modal onClose={onClose}>
+      <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 12 }}>Mes notifications</div>
+      {unread.length === 0 ? <Empty t="Aucune nouvelle mention." /> :
+        unread.map((c) => {
+          const au = uById[(f(c, "Auteur") || [])[0]];
+          const tk = tById[(f(c, "Tâche") || [])[0]];
+          return <div key={c.id} className="card" style={{ marginBottom: 8, padding: "11px 13px" }}>
+            <div style={{ fontSize: 12, color: MUT, marginBottom: 3 }}>{au ? fullName(au) : "?"} t'a mentionné{tk ? " · " + f(tk, "Titre") : ""}</div>
+            <div style={{ fontSize: 13.5, color: TEXT, marginBottom: 8, whiteSpace: "pre-wrap" }}>{renderMentions(f(c, "Texte"))}</div>
+            <button className="btn btn-ghost" style={{ fontSize: 12, padding: "6px 11px" }} onClick={() => goTo(c)}>Voir la tâche</button>
+          </div>;
+        })}
+    </Modal>
+  );
+}
+
 export default function App() {
   const [status, setStatus] = useState("loading");
   const [me, setMe] = useState(null);
   const [view, setView] = useState("dash");
-  const [data, setData] = useState({ poles: [], users: [], tasks: [], meetings: [], sujets: [] });
+  const [data, setData] = useState({ poles: [], users: [], tasks: [], meetings: [], sujets: [], commentaires: [] });
   const [modal, setModal] = useState(null);
 
   const loadData = useCallback(async () => {
-    const [poles, users, tasks, meetings, sujets] = await Promise.all([
+    const [poles, users, tasks, meetings, sujets, commentaires] = await Promise.all([
       db({ action: "list", table: "Pôles" }),
       db({ action: "list", table: "Utilisateurs" }),
       db({ action: "list", table: "Tâches" }),
       db({ action: "list", table: "Réunions" }),
       db({ action: "list", table: "Sujets CA" }),
+      db({ action: "list", table: "Commentaires" }),
     ]);
-    setData({ poles: poles.records || [], users: users.records || [], tasks: tasks.records || [], meetings: meetings.records || [], sujets: sujets.records || [] });
+    setData({ poles: poles.records || [], users: users.records || [], tasks: tasks.records || [], meetings: meetings.records || [], sujets: sujets.records || [], commentaires: commentaires.records || [] });
   }, []);
 
   useEffect(() => {
@@ -882,10 +968,11 @@ export default function App() {
   if (status === "profile") return <ProfileForm me={me} poles={data.poles} onSaved={onProfileSaved} />;
 
   const isAdmin = f(me, "Rôle") === "Admin";
+  const unread = (data.commentaires || []).filter((c) => (f(c, "Mentions") || []).includes(me.id) && !String(f(c, "Lu par") || "").includes(me.id)).length;
   return (
     <div style={{ minHeight: "100vh", background: HALO, color: TEXT, fontFamily: "'Manrope',system-ui,sans-serif" }}>
       <style>{CSS}</style>
-      <Header me={me} view={view} setView={setView} isAdmin={isAdmin} onLogout={logout} />
+      <Header me={me} view={view} setView={setView} isAdmin={isAdmin} onLogout={logout} unread={unread} onBell={() => setModal({ type: "notifs" })} />
       <div style={{ maxWidth: 920, margin: "0 auto", padding: "22px 16px 60px" }}>
         {view === "dash" && <Dashboard me={me} data={data} setView={setView} openNewTask={() => setModal({ type: "task", pole: (f(me, "Pôle") || [])[0] || "" })} openNewSujet={() => setModal({ type: "sujet" })} />}
         {view === "taches" && <TasksView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewTask={(pole) => setModal({ type: "task", pole })} />}
@@ -895,6 +982,7 @@ export default function App() {
       </div>
       {modal && modal.type === "task" && <NewTask me={me} data={data} isAdmin={isAdmin} initialPole={modal.pole} onClose={() => setModal(null)} reload={reload} />}
       {modal && modal.type === "sujet" && <NewSujet me={me} data={data} onClose={() => setModal(null)} reload={reload} />}
+      {modal && modal.type === "notifs" && <NotifsModal me={me} data={data} setView={setView} onClose={() => setModal(null)} reload={reload} />}
       {modal && modal.type === "meeting" && <NewMeeting onClose={() => setModal(null)} reload={reload} />}
       {modal && modal.type === "meetingDetail" && <MeetingDetail meetingId={modal.id} me={me} data={data} isAdmin={isAdmin} onClose={() => setModal(null)} reload={reload} />}
     </div>
