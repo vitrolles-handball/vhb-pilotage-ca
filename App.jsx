@@ -126,11 +126,11 @@ function Login({ onLogin }) {
     } catch (e) { setErr("Erreur de connexion : " + e.message); setBusy(false); }
   };
   return (
-    <div style={{ minHeight: "100vh", backgroundColor: "#E8590C", backgroundImage: "url(/accent.jpg)", backgroundSize: "cover", backgroundPosition: "center", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+    <div style={{ minHeight: "100vh", backgroundColor: "#16110f", backgroundImage: "linear-gradient(rgba(16,11,12,.42), rgba(16,11,12,.60)), url(/bandeau.jpg)", backgroundSize: "cover", backgroundPosition: "center", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
       <style>{CSS}</style>
       <div className="fade" style={{ textAlign: "center", maxWidth: 380, width: "100%" }}>
         <img src={LOGO} width={96} height={96} alt="VHB" style={{ marginBottom: 14 }} />
-        <div className="display" style={{ fontSize: 26, color: TEXT }}>VHB Pilotage</div>
+        <div className="display" style={{ fontSize: 26, color: "#FBF6EF" }}>VHB Pilotage</div>
         <div className="cond" style={{ fontSize: 13, color: RED, marginBottom: 26 }}>Tous Hand'semble</div>
         <div className="card" style={{ textAlign: "left" }}>
           <label className="lbl">Ton adresse email</label>
@@ -141,7 +141,7 @@ function Login({ onLogin }) {
             {busy ? "Connexion…" : "Entrer"}
           </button>
         </div>
-        <div style={{ fontSize: 11, color: MUT, marginTop: 16 }}>1975 — 2025 · 50 ans · Vitrolles Handball Jeunes</div>
+        <div style={{ fontSize: 11, color: "#E7DDD0", marginTop: 16 }}>1975 — 2025 · 50 ans · Vitrolles Handball Jeunes</div>
       </div>
     </div>
   );
@@ -170,7 +170,7 @@ function ProfileForm({ me, poles, onSaved }) {
     } catch (e) { alert("Erreur : " + e.message); setBusy(false); }
   };
   return (
-    <div style={{ minHeight: "100vh", backgroundColor: "#E8590C", backgroundImage: "url(/accent.jpg)", backgroundSize: "cover", backgroundPosition: "center", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+    <div style={{ minHeight: "100vh", backgroundColor: "#16110f", backgroundImage: "linear-gradient(rgba(16,11,12,.42), rgba(16,11,12,.60)), url(/bandeau.jpg)", backgroundSize: "cover", backgroundPosition: "center", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
       <style>{CSS}</style>
       <div className="fade card" style={{ maxWidth: 440, width: "100%" }}>
         <div className="display" style={{ fontSize: 20, color: TEXT, marginBottom: 4 }}>Bienvenue !</div>
@@ -213,11 +213,11 @@ function Header({ me, view, setView, isAdmin, onLogout, unread, onBell }) {
   const tabs = [["dash", "Accueil"], ["taches", "Tâches"], ["ca", "Réunions"], ["annuaire", "Annuaire"]];
   if (isAdmin) tabs.push(["admin", "Utilisateurs"]);
   return (
-    <header style={{ backgroundColor: "#16171B", backgroundImage: "linear-gradient(rgba(16,14,15,.55), rgba(16,14,15,.72)), url(/bandeau.jpg)", backgroundSize: "cover", backgroundPosition: "center", padding: "14px 18px", display: "flex", alignItems: "center", gap: 13, position: "sticky", top: 0, zIndex: 30, flexWrap: "wrap", boxShadow: "0 2px 18px rgba(0,0,0,.22)" }}>
+    <header style={{ backgroundColor: "#E8590C", backgroundImage: "linear-gradient(rgba(28,10,0,.22), rgba(28,10,0,.36)), url(/accent.jpg)", backgroundSize: "cover", backgroundPosition: "center", padding: "14px 18px", display: "flex", alignItems: "center", gap: 13, position: "sticky", top: 0, zIndex: 30, flexWrap: "wrap", boxShadow: "0 2px 18px rgba(0,0,0,.22)" }}>
       <img src={LOGO} width={40} height={40} alt="VHB" style={{ cursor: "pointer", flex: "0 0 auto", filter: "drop-shadow(0 4px 10px rgba(214,40,40,.35))" }} onClick={() => setView("dash")} />
       <div style={{ lineHeight: 1.12 }}>
         <div style={{ fontSize: 15.5, color: "#fff", fontWeight: 800, letterSpacing: "-.01em" }}>VHB Pilotage</div>
-        <div style={{ fontSize: 10.5, color: YELLOW, fontWeight: 600 }}>Tous Hand'semble</div>
+        <div style={{ fontSize: 10.5, color: "#FFFFFF", fontWeight: 600 }}>Tous Hand'semble</div>
       </div>
       <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
         <nav className="navrow" style={{ display: "flex", gap: 2, background: "rgba(255,255,255,.08)", borderRadius: 30, padding: 4 }}>
@@ -258,8 +258,10 @@ function Dashboard({ me, data, setView, openNewTask, openNewSujet }) {
           <button className="btn btn-yellow" style={{ marginLeft: "auto" }} onClick={openNewSujet}>Noter un sujet</button>
         </div>
       )}
-      <div className="rise display" style={{ fontSize: 28, color: TEXT, marginBottom: 3 }}>Bonjour {f(me, "Prénom") || ""}</div>
-      <div className="rise" style={{ fontSize: 14.5, color: MUT, marginBottom: 22, animationDelay: ".05s" }}>Voici l'essentiel du club aujourd'hui — on avance ensemble.</div>
+      <div className="card rise" style={{ marginBottom: 18, padding: "16px 20px" }}>
+        <div className="display" style={{ fontSize: 25, color: TEXT, marginBottom: 2 }}>Bonjour {f(me, "Prénom") || ""}</div>
+        <div style={{ fontSize: 14, color: MUT }}>Voici l'essentiel du club aujourd'hui — on avance ensemble.</div>
+      </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 13, marginBottom: 14 }}>
         <StatCard icon="ti-checklist" color={RED} n={mine.length} label="mes tâches en cours" delay=".06s" onClick={() => setView("taches")} />
@@ -329,11 +331,11 @@ function Stat({ n, label, color = TEXT, bg = "#F1F3F5" }) {
 }
 function Section({ title, children }) {
   return <div style={{ marginBottom: 18 }}>
-    <div className="cond" style={{ fontSize: 12.5, color: MUT, marginBottom: 8, fontWeight: 600 }}>{title}</div>
+    <div className="cond" style={{ fontSize: 12.5, color: "#2A2622", marginBottom: 8, fontWeight: 700, background: "rgba(255,255,255,.93)", borderRadius: 9, padding: "5px 12px", display: "inline-block", boxShadow: "0 1px 2px rgba(20,22,30,.06)" }}>{title}</div>
     {children}
   </div>;
 }
-function Empty({ t }) { return <div style={{ fontSize: 13, color: MUT, fontStyle: "italic", padding: "6px 2px" }}>{t}</div>; }
+function Empty({ t }) { return <div className="card" style={{ fontSize: 13, color: MUT, fontStyle: "italic", padding: "11px 15px" }}>{t}</div>; }
 function RowTask({ t, uById, poleTag, help, onClick }) {
   const due = dueInfo(f(t, "Échéance"));
   const assignes = (f(t, "Assignés") || []).map((id) => uById[id]).filter(Boolean);
@@ -371,7 +373,7 @@ function TasksView({ me, data, isAdmin, reload, openNewTask }) {
 
   return (
     <div className="fade">
-      <div style={{ fontSize: 20, fontWeight: 500, color: TEXT, marginBottom: 12 }}>Tâches par pôle</div>
+      <div style={{ fontSize: 20, fontWeight: 700, color: TEXT, marginBottom: 12, background: "rgba(255,255,255,.93)", borderRadius: 12, padding: "8px 16px", display: "inline-block", boxShadow: "0 1px 2px rgba(20,22,30,.07)" }}>Tâches par pôle</div>
       <div className="navrow" style={{ display: "flex", gap: 8, marginBottom: 18, overflowX: "auto", paddingBottom: 4 }}>
         {poles.map((p) => {
           const id = f(p, "Identifiant"); const on = p.id === sel; const c = POLE_COLORS[id] || BLACK;
@@ -402,7 +404,7 @@ function TasksView({ me, data, isAdmin, reload, openNewTask }) {
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 9, cursor: "pointer" }} onClick={() => setShowSocle((v) => !v)}>
-            <span className="cond" style={{ fontSize: 13, fontWeight: 600, color: TEXT }}>Socle officiel</span>
+            <span className="cond" style={{ fontSize: 13, fontWeight: 700, color: TEXT, background: "rgba(255,255,255,.93)", borderRadius: 8, padding: "4px 11px" }}>Socle officiel</span>
             <span className="chip" style={{ background: "#EDE7F6", color: "#5E35B1" }}>{socle.length}</span>
             <span style={{ marginLeft: "auto", color: MUT, fontSize: 12 }}>{showSocle ? "masquer" : "afficher"}</span>
           </div>
@@ -410,7 +412,7 @@ function TasksView({ me, data, isAdmin, reload, openNewTask }) {
             socle.map((t) => <TaskCard key={t.id} t={t} me={me} uById={uById} pById={pById} users={users} isAdmin={isAdmin} reload={reload} commentaires={data.commentaires || []} />))}
 
           <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "22px 0 9px" }}>
-            <span className="cond" style={{ fontSize: 13, fontWeight: 600, color: TEXT }}>Tâches ponctuelles</span>
+            <span className="cond" style={{ fontSize: 13, fontWeight: 700, color: TEXT, background: "rgba(255,255,255,.93)", borderRadius: 8, padding: "4px 11px" }}>Tâches ponctuelles</span>
             <span className="chip" style={{ background: "#E6F0FB", color: "#1B5E9B" }}>{ponct.length}</span>
             <button className="btn btn-red" style={{ marginLeft: "auto", fontSize: 12.5, padding: "7px 13px" }} onClick={() => openNewTask(sel)}>+ Ajouter</button>
           </div>
@@ -639,7 +641,7 @@ function Annuaire({ data }) {
   const order = [...poles.map((p) => p.id), "_"];
   return (
     <div className="fade">
-      <div style={{ fontSize: 20, fontWeight: 500, color: TEXT, marginBottom: 14 }}>Annuaire du CA</div>
+      <div style={{ fontSize: 20, fontWeight: 700, color: TEXT, marginBottom: 14, background: "rgba(255,255,255,.93)", borderRadius: 12, padding: "8px 16px", display: "inline-block", boxShadow: "0 1px 2px rgba(20,22,30,.07)" }}>Annuaire du CA</div>
       {order.filter((pid) => byPole[pid]).map((pid) => {
         const p = pById[pid]; const id = p ? f(p, "Identifiant") : null;
         return <div key={pid} style={{ marginBottom: 18 }}>
@@ -682,7 +684,7 @@ function AdminUsers({ me, data, reload }) {
   const del = async (u) => { if (!confirm("Supprimer définitivement " + fullName(u) + " ?")) return; await db({ action: "delete", table: "Utilisateurs", recordId: u.id }); reload(); };
   return (
     <div className="fade">
-      <div style={{ fontSize: 20, fontWeight: 500, color: TEXT, marginBottom: 4 }}>Utilisateurs</div>
+      <div style={{ fontSize: 20, fontWeight: 700, color: TEXT, marginBottom: 10, background: "rgba(255,255,255,.93)", borderRadius: 12, padding: "8px 16px", display: "inline-block", boxShadow: "0 1px 2px rgba(20,22,30,.07)" }}>Utilisateurs</div>
       <div style={{ fontSize: 13, color: MUT, marginBottom: 16 }}>Crée un accès par email. La personne complètera son profil à sa première connexion.</div>
       <div className="card" style={{ marginBottom: 18, display: "flex", gap: 9, alignItems: "flex-end", flexWrap: "wrap" }}>
         <div style={{ flex: 2, minWidth: 180 }}><label className="lbl">Email du nouvel utilisateur</label><input className="inp" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="prenom@exemple.com" /></div>
@@ -726,7 +728,7 @@ function CAView({ me, data, isAdmin, reload, openNewSujet, openNewMeeting, openM
   return (
     <div className="fade">
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
-        <div className="display" style={{ fontSize: 22, color: TEXT, marginRight: "auto" }}>Réunions du CA</div>
+        <div className="display" style={{ fontSize: 22, color: TEXT, marginRight: "auto", background: "rgba(255,255,255,.93)", borderRadius: 12, padding: "8px 16px", display: "inline-block", boxShadow: "0 1px 2px rgba(20,22,30,.07)" }}>Réunions du CA</div>
         <nav style={{ display: "flex", gap: 4, background: "#EEF0F3", borderRadius: 30, padding: 4 }}>
           {subTab("sujets", "Sujets à aborder")}{subTab("reunions", "Réunions")}
         </nav>
@@ -970,7 +972,7 @@ export default function App() {
   const isAdmin = f(me, "Rôle") === "Admin";
   const unread = (data.commentaires || []).filter((c) => (f(c, "Mentions") || []).includes(me.id) && !String(f(c, "Lu par") || "").includes(me.id)).length;
   return (
-    <div style={{ minHeight: "100vh", background: HALO, color: TEXT, fontFamily: "'Manrope',system-ui,sans-serif" }}>
+    <div style={{ minHeight: "100vh", backgroundColor: "#EDEAE6", backgroundImage: "linear-gradient(rgba(240,238,235,.66), rgba(240,238,235,.74)), url(/bandeau.jpg)", backgroundSize: "cover", backgroundAttachment: "fixed", backgroundPosition: "center", color: TEXT, fontFamily: "'Manrope',system-ui,sans-serif" }}>
       <style>{CSS}</style>
       <Header me={me} view={view} setView={setView} isAdmin={isAdmin} onLogout={logout} unread={unread} onBell={() => setModal({ type: "notifs" })} />
       <div style={{ maxWidth: 920, margin: "0 auto", padding: "22px 16px 60px" }}>
