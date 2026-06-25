@@ -776,7 +776,7 @@ function CAView({ me, data, isAdmin, reload, openNewSujet, openNewMeeting, openM
               const p = pById[pid]; const pId = p ? f(p, "Identifiant") : null;
               return <div key={pid} style={{ marginBottom: 20 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 11 }}>
-                  <span style={{ width: 12, height: 12, borderRadius: "50%", background: POLE_COLORS[pId] || MUT }} />
+                  <span style={{ width: 28, height: 28, borderRadius: 8, background: POLE_COLORS[pId] || MUT, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}><i className={"ti " + (POLE_ICONS[pId] || "ti-folder")} style={{ fontSize: 16 }} aria-hidden="true" /></span>
                   <span style={{ fontSize: 15, fontWeight: 700, color: TEXT }}>{p ? f(p, "Pôles") : "Sans pôle"}</span>
                   <span style={{ fontSize: 12, color: MUT }}>· {items.length}</span>
                 </div>
@@ -820,7 +820,7 @@ function SujetCard({ s, me, uById, pById, reload, done }) {
     <div className="card" style={{ marginBottom: 11, padding: "16px 18px", opacity: done ? 0.72 : 1 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 9 }}>
         {f(s, "Thème") && <span className="chip" style={{ background: "#EEF1F4", color: "#5A6066" }}>{f(s, "Thème")}</span>}
-        {pole && <span className="tag" style={{ background: POLE_COLORS[f(pole, "Identifiant")] || BLACK }}>{f(pole, "Pôles")}</span>}
+        {pole && <span className="tag" style={{ background: POLE_COLORS[f(pole, "Identifiant")] || BLACK, display: "inline-flex", alignItems: "center", gap: 5 }}><i className={"ti " + (POLE_ICONS[f(pole, "Identifiant")] || "ti-folder")} style={{ fontSize: 12 }} aria-hidden="true" />{f(pole, "Pôles")}</span>}
         {f(s, "Thème") && <i className={"ti " + (THEME_ICONS[f(s, "Thème")] || "ti-dots")} style={{ marginLeft: "auto", fontSize: 28, color: THEME_COLORS[f(s, "Thème")] || MUT, opacity: 0.22 }} aria-hidden="true" />}
       </div>
       <div style={{ fontSize: 15.5, fontWeight: 700, color: TEXT, lineHeight: 1.35, letterSpacing: "-.01em" }}>{f(s, "Titre")}</div>
@@ -998,7 +998,7 @@ function TaskDetailPage({ taskId, me, data, isAdmin, onClose, reload }) {
       <button className="btn btn-ghost" style={{ marginBottom: 14 }} onClick={onClose}><i className="ti ti-arrow-left" />Retour</button>
       <div className="card" style={{ marginBottom: 16, padding: "20px 22px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap", marginBottom: 10 }}>
-          {pole && <span className="tag" style={{ background: POLE_COLORS[f(pole, "Identifiant")] || BLACK }}>{f(pole, "Pôles")}</span>}
+          {pole && <span className="tag" style={{ background: POLE_COLORS[f(pole, "Identifiant")] || BLACK, display: "inline-flex", alignItems: "center", gap: 5 }}><i className={"ti " + (POLE_ICONS[f(pole, "Identifiant")] || "ti-folder")} style={{ fontSize: 12 }} aria-hidden="true" />{f(pole, "Pôles")}</span>}
           {isSocle && <span className="chip" style={{ background: "#EDE7F6", color: "#5E35B1" }}>Socle</span>}
           {due && <span className="chip" style={{ background: due.color + "1f", color: due.color }}>{due.label}</span>}
         </div>
