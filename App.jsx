@@ -10,6 +10,7 @@ const POLE_COLORS = {
   gestion: "#C0392B", secretariat: "#C0562A", developpement: "#C9A227",
   communication: "#9C2B2F", sportif: "#A83328", benevoles: "#B8472B",
 };
+const POLE_ICONS = { gestion: "ti-coins", secretariat: "ti-mail", developpement: "ti-trending-up", communication: "ti-speakerphone", sportif: "ti-ball-basketball", benevoles: "ti-heart-handshake" };
 const THEME_ICONS = { "Finances": "ti-coin", "Sportif": "ti-ball-basketball", "Événements": "ti-confetti", "Bénévoles": "ti-heart-handshake", "Communication": "ti-speakerphone", "Administratif": "ti-file-text", "Partenariats": "ti-businessplan", "Divers": "ti-dots" };
 const THEME_COLORS = { "Finances": "#1B7A4B", "Sportif": "#C0392B", "Événements": "#B5660A", "Bénévoles": "#8E44AD", "Communication": "#1B5E9B", "Administratif": "#5A6066", "Partenariats": "#0E7C86", "Divers": "#6E747D" };
 
@@ -256,7 +257,7 @@ function Dashboard({ me, data, setView, openNewTask, openNewSujet, openTask }) {
   const done = tasks.filter((t) => f(t, "Statut") === "Fait").length;
   const pct = Math.round((done / total) * 100);
   const nextCA = meetings.filter((m) => f(m, "Statut") === "À venir").sort((a, b) => String(f(a, "Date")).localeCompare(String(f(b, "Date"))))[0];
-  const poleTag = (t) => { const p = pById[(f(t, "Pôle") || [])[0]]; if (!p) return null; const id = f(p, "Identifiant"); return <span className="tag" style={{ background: POLE_COLORS[id] || BLACK }}>{f(p, "Pôles")}</span>; };
+  const poleTag = (t) => { const p = pById[(f(t, "Pôle") || [])[0]]; if (!p) return null; const id = f(p, "Identifiant"); return <span className="tag" style={{ background: POLE_COLORS[id] || BLACK, display: "inline-flex", alignItems: "center", gap: 5 }}><i className={"ti " + (POLE_ICONS[id] || "ti-folder")} style={{ fontSize: 13 }} aria-hidden="true" />{f(p, "Pôles")}</span>; };
   const R = 32, CIRC = 2 * Math.PI * R;
 
   return (
@@ -396,11 +397,12 @@ function TasksView({ me, data, isAdmin, reload, openNewTask, openTask }) {
           const id = f(p, "Identifiant"); const on = p.id === sel; const c = POLE_COLORS[id] || BLACK;
           const cnt = countFor(p.id); const isMine = p.id === myPole;
           return (
-            <button key={p.id} onClick={() => setSel(p.id)} style={{ flex: "0 0 auto", cursor: "pointer", border: "1.5px solid " + (on ? c : BORDER), background: on ? c : "#fff", color: on ? "#fff" : TEXT, borderRadius: 14, padding: "9px 14px", textAlign: "left", minWidth: 118 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
-                {isMine && <span title="Mon pôle">★</span>}{f(p, "Pôles")}
+            <button key={p.id} onClick={() => setSel(p.id)} style={{ flex: "0 0 auto", cursor: "pointer", border: "1.5px solid " + (on ? c : BORDER), background: on ? c : "#fff", color: on ? "#fff" : TEXT, borderRadius: 14, padding: "9px 14px", textAlign: "left", minWidth: 124, display: "flex", alignItems: "center", gap: 10 }}>
+              <i className={"ti " + (POLE_ICONS[id] || "ti-folder")} style={{ fontSize: 21, color: on ? "#fff" : c, opacity: on ? 0.95 : 0.55 }} aria-hidden="true" />
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 5 }}>{isMine && <span title="Mon pôle">★</span>}{f(p, "Pôles")}</div>
+                <div style={{ fontSize: 11, opacity: .85, marginTop: 1 }}>{cnt.total} tâche{cnt.total > 1 ? "s" : ""}{cnt.urgent ? " · " + cnt.urgent + " urgent" + (cnt.urgent > 1 ? "es" : "e") : ""}</div>
               </div>
-              <div style={{ fontSize: 11, opacity: .85, marginTop: 2 }}>{cnt.total} tâche{cnt.total > 1 ? "s" : ""}{cnt.urgent ? " · " + cnt.urgent + " urgent" + (cnt.urgent > 1 ? "es" : "e") : ""}</div>
             </button>
           );
         })}
@@ -408,14 +410,15 @@ function TasksView({ me, data, isAdmin, reload, openNewTask, openTask }) {
 
       {selPole && (
         <div>
-          <div className="card" style={{ marginBottom: 14, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-            <span style={{ width: 14, height: 14, borderRadius: "50%", background: POLE_COLORS[selId] || BLACK }} />
-            <div style={{ marginRight: "auto" }}>
-              <div style={{ fontSize: 17, fontWeight: 600, color: TEXT }}>{f(selPole, "Pôles")}</div>
+          <div className="card" style={{ marginBottom: 14, display: "flex", alignItems: "center", gap: 13, flexWrap: "wrap", position: "relative", overflow: "hidden" }}>
+            <i className={"ti " + (POLE_ICONS[selId] || "ti-folder")} style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", fontSize: 70, color: POLE_COLORS[selId] || BLACK, opacity: 0.10, pointerEvents: "none" }} aria-hidden="true" />
+            <div style={{ width: 46, height: 46, borderRadius: 13, background: POLE_COLORS[selId] || BLACK, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto", position: "relative" }}><i className={"ti " + (POLE_ICONS[selId] || "ti-folder")} style={{ fontSize: 23 }} aria-hidden="true" /></div>
+            <div style={{ marginRight: "auto", position: "relative" }}>
+              <div style={{ fontSize: 17, fontWeight: 700, color: TEXT }}>{f(selPole, "Pôles")}</div>
               <div style={{ fontSize: 12.5, color: MUT }}>{responsable ? "Responsable : " + fullName(responsable) : "Responsable à nommer"}</div>
             </div>
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: 13, color: TEXT }}>{doneCount}/{poleTasks.length} à jour</div>
+            <div style={{ textAlign: "right", position: "relative" }}>
+              <div style={{ fontSize: 13, color: TEXT, fontWeight: 600 }}>{doneCount}/{poleTasks.length} à jour</div>
               {urgent > 0 && <div style={{ fontSize: 12, color: RED }}>{urgent} urgente{urgent > 1 ? "s" : ""}</div>}
             </div>
           </div>
@@ -449,55 +452,34 @@ function TaskCard({ t, me, uById, pById, users, isAdmin, reload, commentaires, o
   const assignes = (f(t, "Assignés") || []);
   const isMine = assignes.includes(me.id);
   const isSocle = f(t, "Type") === "Socle";
-  const canDelete = isSocle ? isAdmin : (isAdmin || (f(t, "Créé par") || []).includes(me.id));
-  const [showC, setShowC] = useState(false);
-  const coms = (commentaires || []).filter((c) => (f(c, "Tâche") || []).includes(t.id)).sort((a, b) => String(f(a, "Date")).localeCompare(String(f(b, "Date"))));
+  const coms = (commentaires || []).filter((c) => (f(c, "Tâche") || []).includes(t.id));
   const statut = f(t, "Statut") || "À faire";
-
   const update = async (fields) => { setBusy(true); try { await db({ action: "update", table: "Tâches", recordId: t.id, fields }); await reload(); } catch (e) { alert("Erreur : " + e.message); } setBusy(false); };
-  const take = () => update({ "Assignés": Array.from(new Set([...assignes, me.id])) });
-  const leave = () => update({ "Assignés": assignes.filter((id) => id !== me.id) });
-  const cycle = () => update({ "Statut": statut === "À faire" ? "En cours" : statut === "En cours" ? "Fait" : "À faire" });
-  const del = async () => { if (!confirm("Supprimer cette tâche ?")) return; setBusy(true); try { await db({ action: "delete", table: "Tâches", recordId: t.id }); await reload(); } catch (e) { alert("Erreur : " + e.message); setBusy(false); } };
-
-  const stColor = statut === "Fait" ? OK : statut === "En cours" ? "#B8860B" : MUT;
+  const seg = (v) => (v === "Fait" ? OK : v === "En cours" ? "#B8860B" : "#6E747D");
   return (
-    <div className="card" style={{ marginBottom: 9, padding: "13px 15px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
+    <div className="card lift" style={{ marginBottom: 10, padding: "15px 17px", position: "relative", overflow: "hidden" }}>
+      <i className={"ti " + (POLE_ICONS[poleId] || "ti-folder")} style={{ position: "absolute", right: 12, top: 13, fontSize: 40, color: POLE_COLORS[poleId] || BLACK, opacity: 0.10, pointerEvents: "none" }} aria-hidden="true" />
+      <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap", marginBottom: 8, position: "relative" }}>
         {pole && <span className="tag" style={{ background: POLE_COLORS[poleId] || BLACK }}>{f(pole, "Pôles")}</span>}
         {isSocle && <span className="chip" style={{ background: "#EDE7F6", color: "#5E35B1" }}>Socle</span>}
-        <span onClick={() => openTask && openTask(t.id)} style={{ fontSize: 14.5, color: TEXT, flex: 1, minWidth: 140, fontWeight: 500, cursor: "pointer" }}>{f(t, "Titre")}</span>
         {f(t, "Besoin d'aide") && <span className="chip" style={{ background: "#FBEDEC", color: RED }}>Besoin d'aide</span>}
         {due && <span className="chip" style={{ background: due.color + "1f", color: due.color }}>{due.label}</span>}
       </div>
-      {f(t, "Description") && <div style={{ fontSize: 13, color: MUT, marginTop: 7, lineHeight: 1.5 }}>{f(t, "Description")}</div>}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 11, flexWrap: "wrap" }}>
-        <button className="btn btn-ghost" style={{ color: stColor, borderColor: stColor + "55", fontSize: 12, padding: "6px 12px" }} disabled={busy} onClick={cycle}>● {statut}</button>
-        {isMine ? <button className="btn btn-ghost" style={{ fontSize: 12, padding: "6px 12px" }} disabled={busy} onClick={leave}>Me retirer</button>
-          : <button className="btn btn-dark" style={{ fontSize: 12, padding: "6px 12px" }} disabled={busy} onClick={take}>Je prends</button>}
-        <button className="btn btn-ghost" style={{ fontSize: 12, padding: "6px 12px" }} disabled={busy} onClick={() => update({ "Besoin d'aide": !f(t, "Besoin d'aide") })}>{f(t, "Besoin d'aide") ? "Aide ✓" : "Besoin d'aide"}</button>
-        <button className="btn btn-ghost" style={{ fontSize: 12, padding: "6px 12px" }} onClick={() => setShowC((v) => !v)}><i className="ti ti-message-circle" />{coms.length || "Commenter"}</button>
-        <div style={{ display: "flex", marginLeft: "auto", alignItems: "center", gap: 6 }}>
-          {assignes.map((id) => uById[id]).filter(Boolean).slice(0, 4).map((u, i) => <div key={u.id} title={fullName(u)} style={{ marginLeft: i ? -8 : 0 }}><Avatar u={u} size={26} /></div>)}
-          {canDelete && <button className="btn btn-ghost" style={{ color: RED, fontSize: 12, padding: "6px 10px", borderColor: "#F0C7C3" }} disabled={busy} onClick={del}>Suppr.</button>}
+      <div onClick={() => openTask && openTask(t.id)} style={{ fontSize: 15.5, fontWeight: 700, color: TEXT, lineHeight: 1.35, cursor: "pointer", position: "relative", paddingRight: 34 }}>{f(t, "Titre")}</div>
+      {f(t, "Description") && <div style={{ fontSize: 13, color: MUT, marginTop: 5, lineHeight: 1.5, position: "relative" }}>{f(t, "Description")}</div>}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 13, paddingTop: 12, borderTop: "1px solid #F0F1F3", flexWrap: "wrap", position: "relative" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          {assignes.map((id) => uById[id]).filter(Boolean).slice(0, 4).map((u, i2) => <div key={u.id} title={fullName(u)} style={{ marginLeft: i2 ? -8 : 0 }}><Avatar u={u} size={24} /></div>)}
+          <button className="btn btn-ghost" style={{ fontSize: 12, padding: "5px 10px" }} onClick={() => openTask && openTask(t.id)}><i className="ti ti-message-circle" />{coms.length || ""}</button>
+        </div>
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ display: "inline-flex", background: "#F1F3F5", borderRadius: 30, padding: 3 }}>
+            {["À faire", "En cours", "Fait"].map((v) => { const on = statut === v; const c = seg(v); return <button key={v} disabled={busy} onClick={() => update({ "Statut": v })} style={{ border: "none", background: on ? "#fff" : "transparent", color: on ? c : MUT, fontWeight: on ? 700 : 500, fontSize: 11.5, padding: "5px 10px", borderRadius: 30, cursor: "pointer", boxShadow: on ? "0 1px 2px rgba(20,22,30,.10)" : "none", fontFamily: "inherit" }}>{v}</button>; })}
+          </div>
+          {isMine ? <button className="btn btn-ghost" style={{ fontSize: 12, padding: "5px 11px" }} disabled={busy} onClick={() => update({ "Assignés": assignes.filter((id) => id !== me.id) })}>Me retirer</button>
+            : <button className="btn btn-dark" style={{ fontSize: 12, padding: "5px 11px" }} disabled={busy} onClick={() => update({ "Assignés": Array.from(new Set([...assignes, me.id])) })}>Je prends</button>}
         </div>
       </div>
-      {showC && (
-        <div style={{ marginTop: 12, borderTop: "1px solid " + BORDER, paddingTop: 12 }}>
-          {coms.length === 0 ? <div style={{ fontSize: 12.5, color: MUT, marginBottom: 8 }}>Aucun commentaire pour le moment.</div> :
-            coms.map((c) => {
-              const au = uById[(f(c, "Auteur") || [])[0]];
-              return <div key={c.id} style={{ display: "flex", gap: 9, marginBottom: 10 }}>
-                <Avatar u={au} size={28} />
-                <div style={{ background: "#F4F6F8", borderRadius: 12, padding: "8px 11px", flex: 1 }}>
-                  <div style={{ fontSize: 12, color: MUT, marginBottom: 2 }}>{au ? fullName(au) : "?"}{f(c, "Date") ? " · " + fmtDateTime(f(c, "Date")) : ""}</div>
-                  <div style={{ fontSize: 13.5, color: TEXT, whiteSpace: "pre-wrap" }}>{renderMentions(f(c, "Texte"))}</div>
-                </div>
-              </div>;
-            })}
-          <CommentBox task={t} me={me} users={users} reload={reload} />
-        </div>
-      )}
     </div>
   );
 }
@@ -682,8 +664,8 @@ function Annuaire({ data }) {
       {order.filter((pid) => byPole[pid]).map((pid) => {
         const p = pById[pid]; const id = p ? f(p, "Identifiant") : null;
         return <div key={pid} style={{ marginBottom: 18 }}>
-          <div className="cond" style={{ fontSize: 13, fontWeight: 600, marginBottom: 9, display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ width: 11, height: 11, borderRadius: "50%", background: POLE_COLORS[id] || MUT, display: "inline-block" }} />
+          <div className="cond" style={{ fontSize: 14, fontWeight: 600, marginBottom: 9, display: "flex", alignItems: "center", gap: 9 }}>
+            <span style={{ width: 26, height: 26, borderRadius: 8, background: POLE_COLORS[id] || MUT, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}><i className={"ti " + (POLE_ICONS[id] || "ti-folder")} style={{ fontSize: 15 }} aria-hidden="true" /></span>
             {p ? f(p, "Pôles") : "Sans pôle"}
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))", gap: 10 }}>
