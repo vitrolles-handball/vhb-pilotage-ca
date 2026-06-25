@@ -126,7 +126,7 @@ function Login({ onLogin }) {
     } catch (e) { setErr("Erreur de connexion : " + e.message); setBusy(false); }
   };
   return (
-    <div style={{ minHeight: "100vh", background: HALO, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+    <div style={{ minHeight: "100vh", backgroundColor: "#E8590C", backgroundImage: "url(/accent.jpg)", backgroundSize: "cover", backgroundPosition: "center", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
       <style>{CSS}</style>
       <div className="fade" style={{ textAlign: "center", maxWidth: 380, width: "100%" }}>
         <img src={LOGO} width={96} height={96} alt="VHB" style={{ marginBottom: 14 }} />
@@ -170,7 +170,7 @@ function ProfileForm({ me, poles, onSaved }) {
     } catch (e) { alert("Erreur : " + e.message); setBusy(false); }
   };
   return (
-    <div style={{ minHeight: "100vh", background: HALO, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+    <div style={{ minHeight: "100vh", backgroundColor: "#E8590C", backgroundImage: "url(/accent.jpg)", backgroundSize: "cover", backgroundPosition: "center", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
       <style>{CSS}</style>
       <div className="fade card" style={{ maxWidth: 440, width: "100%" }}>
         <div className="display" style={{ fontSize: 20, color: TEXT, marginBottom: 4 }}>Bienvenue !</div>
@@ -213,7 +213,7 @@ function Header({ me, view, setView, isAdmin, onLogout, unread, onBell }) {
   const tabs = [["dash", "Accueil"], ["taches", "Tâches"], ["ca", "Réunions"], ["annuaire", "Annuaire"]];
   if (isAdmin) tabs.push(["admin", "Utilisateurs"]);
   return (
-    <header style={{ background: "#16171B", padding: "14px 18px", display: "flex", alignItems: "center", gap: 13, position: "sticky", top: 0, zIndex: 30, flexWrap: "wrap", boxShadow: "0 2px 18px rgba(0,0,0,.22)" }}>
+    <header style={{ backgroundColor: "#16171B", backgroundImage: "linear-gradient(rgba(16,14,15,.55), rgba(16,14,15,.72)), url(/bandeau.jpg)", backgroundSize: "cover", backgroundPosition: "center", padding: "14px 18px", display: "flex", alignItems: "center", gap: 13, position: "sticky", top: 0, zIndex: 30, flexWrap: "wrap", boxShadow: "0 2px 18px rgba(0,0,0,.22)" }}>
       <img src={LOGO} width={40} height={40} alt="VHB" style={{ cursor: "pointer", flex: "0 0 auto", filter: "drop-shadow(0 4px 10px rgba(214,40,40,.35))" }} onClick={() => setView("dash")} />
       <div style={{ lineHeight: 1.12 }}>
         <div style={{ fontSize: 15.5, color: "#fff", fontWeight: 800, letterSpacing: "-.01em" }}>VHB Pilotage</div>
