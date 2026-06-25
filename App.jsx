@@ -37,7 +37,7 @@ html{overflow-x:clip;}body{margin:0;font-family:'Manrope',system-ui,sans-serif;o
 .ta{min-height:74px;resize:vertical;}
 .inp:focus,.sel:focus,.ta:focus{outline:none;border-color:#D62828;box-shadow:0 0 0 4px rgba(214,40,40,.10);}
 .lbl{font-size:12.5px;color:#6E747D;margin:0 0 6px;display:block;font-weight:500;}
-.navb{background:none;border:none;font-size:13px;color:#B9BDC4;padding:8px 15px;border-radius:30px;cursor:pointer;font-family:inherit;white-space:nowrap;font-weight:500;transition:background .15s,color .15s;}
+.navb{background:none;border:none;font-size:13.5px;color:rgba(255,255,255,.85);padding:8px 16px;border-radius:30px;cursor:pointer;font-family:inherit;white-space:nowrap;font-weight:600;transition:background .15s,color .15s;}
 .navb.on{background:#fff;color:#16171B;}
 .chip{font-size:11px;font-weight:600;border-radius:30px;padding:4px 11px;display:inline-flex;align-items:center;gap:5px;}
 .tag{font-size:10.5px;font-weight:700;color:#fff;border-radius:8px;padding:3px 9px;}
@@ -51,7 +51,9 @@ html{overflow-x:clip;}body{margin:0;font-family:'Manrope',system-ui,sans-serif;o
 @media(max-width:760px){.wrap{padding:14px 12px 104px;}}
 .appheader{padding:12px 22px;display:flex;align-items:center;gap:14px;}
 .appactions{display:flex;align-items:center;gap:8px;margin-left:auto;}
-.appnav{display:inline-flex;gap:2px;background:rgba(255,255,255,.08);border-radius:30px;padding:4px;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+.appnav{display:inline-flex;gap:2px;background:rgba(0,0,0,.22);border-radius:30px;padding:4px;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+.appbrand{display:flex;align-items:center;gap:12px;min-width:0;}
+@media(min-width:761px){.appheader{display:grid;grid-template-columns:1fr auto 1fr;}.appnav{justify-self:center;}.appactions{justify-self:end;}}
 .appnav::-webkit-scrollbar{display:none;}
 .bottomnav{display:none;position:fixed;left:0;right:0;bottom:0;z-index:40;background-color:#16110f;background-image:linear-gradient(rgba(16,11,12,.62),rgba(16,11,12,.80)),url(/bandeau.jpg);background-size:cover;background-position:center;padding:8px 6px calc(8px + env(safe-area-inset-bottom));justify-content:space-around;box-shadow:0 -4px 18px rgba(0,0,0,.30);}
 .bottomnav button{flex:1;background:none;border:none;display:flex;flex-direction:column;align-items:center;gap:3px;color:#C7CACF;font-family:inherit;font-size:10.5px;font-weight:600;cursor:pointer;padding:4px 0;}
@@ -246,10 +248,12 @@ function Header({ me, view, setView, isAdmin, onLogout, unread, onBell, onProfil
   const tabs = [["dash", "Accueil"], ["taches", "Tâches"], ["ca", "Réunions"], ["annuaire", "Annuaire"]];
   return (
     <header className="appheader" style={{ backgroundColor: "#E8590C", backgroundImage: "linear-gradient(rgba(28,10,0,.22), rgba(28,10,0,.36)), url(/accent.jpg)", backgroundSize: "cover", backgroundPosition: "center", position: "sticky", top: 0, zIndex: 30, boxShadow: "0 2px 18px rgba(0,0,0,.22)" }}>
-      <img src={LOGO} width={40} height={40} alt="VHB" style={{ cursor: "pointer", flex: "0 0 auto", filter: "drop-shadow(0 4px 10px rgba(214,40,40,.35))" }} onClick={() => setView("dash")} />
-      <div style={{ lineHeight: 1.12, minWidth: 0 }}>
-        <div style={{ fontSize: 16, color: "#fff", fontWeight: 800, letterSpacing: "-.01em" }}>VHB Pilotage</div>
-        <div style={{ fontSize: 10.5, color: "#FFFFFF", fontWeight: 600 }}>Tous Hand'semble</div>
+      <div className="appbrand">
+        <img src={LOGO} width={40} height={40} alt="VHB" style={{ cursor: "pointer", flex: "0 0 auto", filter: "drop-shadow(0 4px 10px rgba(214,40,40,.35))" }} onClick={() => setView("dash")} />
+        <div style={{ lineHeight: 1.12, minWidth: 0 }}>
+          <div style={{ fontSize: 16, color: "#fff", fontWeight: 800, letterSpacing: "-.01em" }}>VHB Pilotage</div>
+          <div style={{ fontSize: 10.5, color: "#FFFFFF", fontWeight: 600 }}>Tous Hand'semble</div>
+        </div>
       </div>
       <nav className="appnav">
         {tabs.map(([v, l]) => <button key={v} className={"navb" + (view === v ? " on" : "")} onClick={() => setView(v)}>{l}</button>)}
