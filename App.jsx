@@ -46,6 +46,8 @@ body{margin:0;font-family:'Manrope',system-ui,sans-serif;}
 .dash-grid{display:grid;grid-template-columns:1fr;gap:18px;align-items:start;}
 .cardgrid{display:grid;grid-template-columns:1fr;}
 @media(min-width:1000px){.dash-grid{grid-template-columns:1.7fr 1fr;gap:24px;}.cardgrid{grid-template-columns:1fr 1fr;column-gap:12px;}}
+.detail-grid{display:grid;grid-template-columns:1fr;gap:18px;align-items:start;}
+@media(min-width:1000px){.detail-grid{grid-template-columns:1.65fr 1fr;gap:22px;}}
 @media(max-width:760px){.wrap{padding:14px 12px 76px;}}
 @media (max-width:760px){
   header{padding-top:calc(14px + env(safe-area-inset-top)) !important;}
@@ -534,8 +536,8 @@ function CommentBox({ task, me, users, reload }) {
   );
 }
 function Modal({ children, onClose }) {
-  return <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(16,17,20,.55)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "6vh 16px 40px", zIndex: 100, overflowY: "auto" }}>
-    <div onClick={(e) => e.stopPropagation()} className="rise card" style={{ maxWidth: 480, width: "100%", padding: "22px 22px" }}>{children}</div>
+  return <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(16,17,20,.55)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "5vh 16px 40px", zIndex: 100, overflowY: "auto" }}>
+    <div onClick={(e) => e.stopPropagation()} className="rise card" style={{ maxWidth: 680, width: "100%", padding: "30px 34px" }}>{children}</div>
   </div>;
 }
 function AssigneePicker({ assignes, users, onChange, busy }) {
@@ -1026,65 +1028,77 @@ function TaskDetailPage({ taskId, me, data, isAdmin, onClose, reload }) {
     setUploading(false);
   };
   const stColor = statut === "Fait" ? OK : statut === "En cours" ? "#B8860B" : MUT;
+  const segC = (v) => (v === "Fait" ? OK : v === "En cours" ? "#B8860B" : MUT);
   return (
     <div className="fade">
-      <button className="btn btn-ghost" style={{ marginBottom: 14 }} onClick={onClose}><i className="ti ti-arrow-left" />Retour</button>
-      <div className="card" style={{ marginBottom: 16, padding: "20px 22px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap", marginBottom: 10 }}>
+      <button className="btn btn-ghost" style={{ marginBottom: 16 }} onClick={onClose}><i className="ti ti-arrow-left" />Retour</button>
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap", marginBottom: 12 }}>
           {pole && <span className="tag" style={{ background: POLE_COLORS[f(pole, "Identifiant")] || BLACK, display: "inline-flex", alignItems: "center", gap: 5 }}><i className={"ti " + (POLE_ICONS[f(pole, "Identifiant")] || "ti-folder")} style={{ fontSize: 12 }} aria-hidden="true" />{f(pole, "Pôles")}</span>}
           {isSocle && <span className="chip" style={{ background: "#EDE7F6", color: "#5E35B1" }}>Socle</span>}
+          {f(t, "Besoin d'aide") && <span className="chip" style={{ background: "#FBEDEC", color: RED }}>Besoin d'aide</span>}
           {due && <span className="chip" style={{ background: due.color + "1f", color: due.color }}>{due.label}</span>}
         </div>
-        <div style={{ fontSize: 23, fontWeight: 800, color: TEXT, letterSpacing: "-.01em", marginBottom: 16 }}>{f(t, "Titre")}</div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 16 }}>
-          <button className="btn btn-ghost" style={{ color: stColor, borderColor: stColor + "55" }} disabled={busy} onClick={() => upd({ "Statut": statut === "À faire" ? "En cours" : statut === "En cours" ? "Fait" : "À faire" })}>● {statut}</button>
-          {isMine ? <button className="btn btn-ghost" disabled={busy} onClick={() => upd({ "Assignés": assignes.filter((id) => id !== me.id) })}>Me retirer</button>
-            : <button className="btn btn-dark" disabled={busy} onClick={() => upd({ "Assignés": Array.from(new Set([...assignes, me.id])) })}>Je prends</button>}
-          <button className="btn btn-ghost" disabled={busy} onClick={() => upd({ "Besoin d'aide": !f(t, "Besoin d'aide") })}>{f(t, "Besoin d'aide") ? "Aide ✓" : "Besoin d'aide"}</button>
-          <div style={{ display: "flex", marginLeft: "auto", alignItems: "center", gap: 5 }}>
-            {assignes.map((id) => uById[id]).filter(Boolean).map((u, i2) => <div key={u.id} title={fullName(u)} style={{ marginLeft: i2 ? -8 : 0 }}><Avatar u={u} size={28} /></div>)}
+        <div style={{ fontSize: 30, fontWeight: 800, color: TEXT, letterSpacing: "-.02em", lineHeight: 1.2 }}>{f(t, "Titre")}</div>
+      </div>
+      <div className="detail-grid">
+        <div>
+          <div className="card" style={{ marginBottom: 16, padding: "24px 26px" }}>
+            <div className="lbl" style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 0 }}>Description {!editDesc && <button className="btn btn-ghost" style={{ fontSize: 11.5, padding: "3px 9px" }} onClick={() => setEditDesc(true)}>{f(t, "Description") ? "Modifier" : "Ajouter"}</button>}</div>
+            {editDesc ? (
+              <div style={{ marginBottom: 2 }}>
+                <textarea className="ta" style={{ minHeight: 120 }} value={desc} onChange={(e) => setDesc(e.target.value)} autoFocus />
+                <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                  <button className="btn btn-ghost" style={{ fontSize: 12.5 }} onClick={() => { setDesc(f(t, "Description") || ""); setEditDesc(false); }}>Annuler</button>
+                  <button className="btn btn-red" style={{ fontSize: 12.5 }} disabled={busy} onClick={async () => { await upd({ "Description": desc }); setEditDesc(false); }}>Enregistrer</button>
+                </div>
+              </div>
+            ) : <div style={{ fontSize: 15, color: f(t, "Description") ? TEXT : MUT, lineHeight: 1.65, whiteSpace: "pre-wrap" }}>{f(t, "Description") || "Aucune description."}</div>}
           </div>
-        </div>
-        <div className="lbl">Affecté à</div>
-        <div style={{ marginBottom: 16 }}><AssigneePicker assignes={assignes} users={users} busy={busy} onChange={(next) => upd({ "Assignés": next })} /></div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
-          <span className="lbl" style={{ margin: 0 }}>Échéance</span>
-          <input className="inp" type="date" style={{ width: "auto" }} value={f(t, "Échéance") || ""} onChange={(e) => upd({ "Échéance": e.target.value || null })} />
-        </div>
-        <div className="lbl" style={{ display: "flex", alignItems: "center", gap: 8 }}>Description {!editDesc && <button className="btn btn-ghost" style={{ fontSize: 11.5, padding: "3px 9px" }} onClick={() => setEditDesc(true)}>{f(t, "Description") ? "Modifier" : "Ajouter"}</button>}</div>
-        {editDesc ? (
-          <div style={{ marginBottom: 6 }}>
-            <textarea className="ta" value={desc} onChange={(e) => setDesc(e.target.value)} autoFocus />
-            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-              <button className="btn btn-ghost" style={{ fontSize: 12.5 }} onClick={() => { setDesc(f(t, "Description") || ""); setEditDesc(false); }}>Annuler</button>
-              <button className="btn btn-red" style={{ fontSize: 12.5 }} disabled={busy} onClick={async () => { await upd({ "Description": desc }); setEditDesc(false); }}>Enregistrer</button>
+          <div className="card" style={{ marginBottom: 16, padding: "24px 26px" }}>
+            <div className="lbl" style={{ marginTop: 0 }}>Documents</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              {docs.map((a, idx) => {
+                const thumb = a.thumbnails && a.thumbnails.small && a.thumbnails.small.url;
+                return <a key={idx} href={a.url} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "#1B5E9B", textDecoration: "none", border: "1px solid " + BORDER, borderRadius: 10, padding: "5px 10px" }}>{thumb ? <img src={thumb} alt="" style={{ width: 24, height: 24, borderRadius: 5, objectFit: "cover" }} /> : <i className="ti ti-paperclip" />}{a.filename || "fichier"}</a>;
+              })}
+              <label className="btn btn-ghost" style={{ cursor: "pointer", fontSize: 12.5 }}>{uploading ? "Envoi…" : "+ Ajouter un document"}<input type="file" multiple style={{ display: "none" }} onChange={(e) => e.target.files.length && addDocs(e.target.files)} /></label>
             </div>
           </div>
-        ) : <div style={{ fontSize: 14, color: f(t, "Description") ? TEXT : MUT, lineHeight: 1.6, whiteSpace: "pre-wrap", marginBottom: 6 }}>{f(t, "Description") || "Aucune description."}</div>}
-        <div className="lbl" style={{ marginTop: 14 }}>Documents</div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          {docs.map((a, idx) => {
-            const thumb = a.thumbnails && a.thumbnails.small && a.thumbnails.small.url;
-            return <a key={idx} href={a.url} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "#1B5E9B", textDecoration: "none", border: "1px solid " + BORDER, borderRadius: 10, padding: "5px 10px" }}>{thumb ? <img src={thumb} alt="" style={{ width: 24, height: 24, borderRadius: 5, objectFit: "cover" }} /> : <i className="ti ti-paperclip" />}{a.filename || "fichier"}</a>;
-          })}
-          <label className="btn btn-ghost" style={{ cursor: "pointer", fontSize: 12.5 }}>{uploading ? "Envoi…" : "+ Ajouter un document"}<input type="file" multiple style={{ display: "none" }} onChange={(e) => e.target.files.length && addDocs(e.target.files)} /></label>
+          <div className="card" style={{ padding: "24px 26px" }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: TEXT, marginBottom: 16 }}>Suivi & commentaires</div>
+            {coms.length === 0 ? <div style={{ fontSize: 13, color: MUT, marginBottom: 12 }}>Aucune action notée pour le moment.</div> :
+              coms.map((c) => {
+                const au = uById[(f(c, "Auteur") || [])[0]];
+                return <div key={c.id} style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+                  <Avatar u={au} size={30} />
+                  <div style={{ background: "#F4F6F8", borderRadius: 12, padding: "9px 12px", flex: 1 }}>
+                    <div style={{ fontSize: 12, color: MUT, marginBottom: 3 }}>{au ? fullName(au) : "?"}{f(c, "Date") ? " · " + fmtDateTime(f(c, "Date")) : ""}</div>
+                    <div style={{ fontSize: 14, color: TEXT, whiteSpace: "pre-wrap" }}>{renderMentions(f(c, "Texte"))}</div>
+                  </div>
+                </div>;
+              })}
+            <CommentBox task={t} me={me} users={users} reload={reload} />
+          </div>
         </div>
-      </div>
-      <div className="card" style={{ padding: "20px 22px" }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: TEXT, marginBottom: 14 }}>Suivi & commentaires</div>
-        {coms.length === 0 ? <div style={{ fontSize: 13, color: MUT, marginBottom: 12 }}>Aucune action notée pour le moment.</div> :
-          coms.map((c) => {
-            const au = uById[(f(c, "Auteur") || [])[0]];
-            return <div key={c.id} style={{ display: "flex", gap: 10, marginBottom: 12 }}>
-              <Avatar u={au} size={30} />
-              <div style={{ background: "#F4F6F8", borderRadius: 12, padding: "9px 12px", flex: 1 }}>
-                <div style={{ fontSize: 12, color: MUT, marginBottom: 3 }}>{au ? fullName(au) : "?"}{f(c, "Date") ? " · " + fmtDateTime(f(c, "Date")) : ""}</div>
-                <div style={{ fontSize: 14, color: TEXT, whiteSpace: "pre-wrap" }}>{renderMentions(f(c, "Texte"))}</div>
-              </div>
-            </div>;
-          })}
-        <CommentBox task={t} me={me} users={users} reload={reload} />
-        {canDelete && <div style={{ marginTop: 16, textAlign: "right" }}><button className="btn btn-ghost" style={{ color: RED, borderColor: "#F0C7C3" }} disabled={busy} onClick={async () => { if (!confirm("Supprimer cette tâche ?")) return; setBusy(true); try { await db({ action: "delete", table: "Tâches", recordId: t.id }); await reload(); onClose(); } catch (e) { alert("Erreur : " + e.message); setBusy(false); } }}>Supprimer la tâche</button></div>}
+        <div>
+          <div className="card" style={{ padding: "22px 24px" }}>
+            <div className="lbl" style={{ marginTop: 0 }}>Statut</div>
+            <div style={{ display: "inline-flex", background: "#F1F3F5", borderRadius: 30, padding: 3, marginBottom: 4 }}>
+              {["À faire", "En cours", "Fait"].map((v) => { const on = statut === v; const c = segC(v); return <button key={v} disabled={busy} onClick={() => upd({ "Statut": v })} style={{ border: "none", background: on ? "#fff" : "transparent", color: on ? c : MUT, fontWeight: on ? 700 : 500, fontSize: 12.5, padding: "7px 13px", borderRadius: 30, cursor: "pointer", boxShadow: on ? "0 1px 2px rgba(20,22,30,.10)" : "none", fontFamily: "inherit" }}>{v}</button>; })}
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 14 }}>
+              {isMine ? <button className="btn btn-ghost" disabled={busy} onClick={() => upd({ "Assignés": assignes.filter((id) => id !== me.id) })}>Me retirer</button>
+                : <button className="btn btn-dark" disabled={busy} onClick={() => upd({ "Assignés": Array.from(new Set([...assignes, me.id])) })}>Je prends</button>}
+              <button className="btn btn-ghost" disabled={busy} onClick={() => upd({ "Besoin d'aide": !f(t, "Besoin d'aide") })}>{f(t, "Besoin d'aide") ? "Aide ✓" : "Besoin d'aide"}</button>
+            </div>
+            <div className="lbl" style={{ marginTop: 18 }}>Affecté à</div>
+            <AssigneePicker assignes={assignes} users={users} busy={busy} onChange={(next) => upd({ "Assignés": next })} />
+            <div className="lbl" style={{ marginTop: 18 }}>Échéance</div>
+            <input className="inp" type="date" value={f(t, "Échéance") || ""} onChange={(e) => upd({ "Échéance": e.target.value || null })} />
+            {canDelete && <div style={{ marginTop: 20, borderTop: "1px solid " + BORDER, paddingTop: 16 }}><button className="btn btn-ghost" style={{ color: RED, borderColor: "#F0C7C3", width: "100%", justifyContent: "center" }} disabled={busy} onClick={async () => { if (!confirm("Supprimer cette tâche ?")) return; setBusy(true); try { await db({ action: "delete", table: "Tâches", recordId: t.id }); await reload(); onClose(); } catch (e) { alert("Erreur : " + e.message); setBusy(false); } }}>Supprimer la tâche</button></div>}
+          </div>
+        </div>
       </div>
     </div>
   );
