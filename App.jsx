@@ -57,6 +57,8 @@ html{overflow-x:clip;}body{margin:0;font-family:'Manrope',system-ui,sans-serif;o
 .bottomnav button{flex:1;background:none;border:none;display:flex;flex-direction:column;align-items:center;gap:2px;color:#8A9098;font-family:inherit;font-size:10.5px;font-weight:600;cursor:pointer;padding:4px 0;}
 .bottomnav button.on{color:#D62828;}
 .bottomnav button i{font-size:21px;}
+@keyframes pulsevhb{0%,100%{transform:scale(1);opacity:.82}50%{transform:scale(1.06);opacity:1}}
+.pulse{animation:pulsevhb 1.6s ease-in-out infinite;}
 @media(max-width:380px){.hide-xs{display:none;}}
 @media(max-width:760px){.inp,.sel,.ta{font-size:16px;}.appheader{padding:calc(8px + env(safe-area-inset-top)) 12px 10px;}.navb{padding:7px 12px;font-size:12.5px;}.caprep{padding:14px 15px !important;}.caprep .btn{font-size:12.5px;padding:9px 13px;}.appnav{display:none;}.bottomnav{display:flex;}}
 @media (max-width:760px){
@@ -1329,8 +1331,8 @@ export default function App() {
   );
 }
 function Splash() {
-  return <div style={{ minHeight: "100vh", background: HALO, display: "flex", alignItems: "center", justifyContent: "center" }}>
+  return <div style={{ minHeight: "100vh", backgroundColor: "#16110f", backgroundImage: "linear-gradient(rgba(16,11,12,.42), rgba(16,11,12,.60)), url(/bandeau.jpg)", backgroundSize: "cover", backgroundPosition: "center", display: "flex", alignItems: "center", justifyContent: "center" }}>
     <style>{CSS}</style>
-    <img src={LOGO} width={80} height={80} alt="VHB" style={{ opacity: .85 }} />
+    <img src={LOGO} width={96} height={96} alt="VHB" className="pulse" style={{ filter: "drop-shadow(0 8px 24px rgba(0,0,0,.45))" }} />
   </div>;
 }
