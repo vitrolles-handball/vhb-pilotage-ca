@@ -290,8 +290,8 @@ function Dashboard({ me, data, setView, openNewTask, openNewSujet }) {
             return <div key={p.id} style={{ marginBottom: 10 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 6 }}>
                 <span style={{ width: 9, height: 9, borderRadius: "50%", background: POLE_COLORS[id] || MUT }} />
-                <span style={{ fontSize: 12.5, fontWeight: 700, color: "#FFFFFF" }}>{f(p, "Pôles")}</span>
-                <span style={{ fontSize: 11.5, color: "#D7CEC2" }}>· {list.length}</span>
+                <span style={{ fontSize: 12.5, fontWeight: 700, color: TEXT }}>{f(p, "Pôles")}</span>
+                <span style={{ fontSize: 11.5, color: MUT }}>· {list.length}</span>
               </div>
               {list.map((x) => <div key={x.id} className="card lift" style={{ padding: "9px 13px", marginBottom: 6, display: "flex", alignItems: "center", gap: 8 }}>
                 <span style={{ fontSize: 13.5, color: TEXT, flex: 1 }}>{f(x, "Titre")}</span>
@@ -331,11 +331,11 @@ function Stat({ n, label, color = TEXT, bg = "#F1F3F5" }) {
 }
 function Section({ title, children }) {
   return <div style={{ marginBottom: 18 }}>
-    <div className="cond" style={{ fontSize: 12.5, color: "#2A2622", marginBottom: 8, fontWeight: 700, background: "rgba(255,255,255,.93)", borderRadius: 9, padding: "5px 12px", display: "inline-block", boxShadow: "0 1px 2px rgba(20,22,30,.06)" }}>{title}</div>
+    <div className="cond" style={{ fontSize: 12.5, color: MUT, marginBottom: 8, fontWeight: 700 }}>{title}</div>
     {children}
   </div>;
 }
-function Empty({ t }) { return <div className="card" style={{ fontSize: 13, color: MUT, fontStyle: "italic", padding: "11px 15px" }}>{t}</div>; }
+function Empty({ t }) { return <div style={{ fontSize: 13, color: MUT, fontStyle: "italic", padding: "8px 2px" }}>{t}</div>; }
 function RowTask({ t, uById, poleTag, help, onClick }) {
   const due = dueInfo(f(t, "Échéance"));
   const assignes = (f(t, "Assignés") || []).map((id) => uById[id]).filter(Boolean);
@@ -373,7 +373,7 @@ function TasksView({ me, data, isAdmin, reload, openNewTask }) {
 
   return (
     <div className="fade">
-      <div style={{ fontSize: 20, fontWeight: 700, color: TEXT, marginBottom: 12, background: "rgba(255,255,255,.93)", borderRadius: 12, padding: "8px 16px", display: "inline-block", boxShadow: "0 1px 2px rgba(20,22,30,.07)" }}>Tâches par pôle</div>
+      <div style={{ fontSize: 20, fontWeight: 700, color: TEXT, marginBottom: 12 }}>Tâches par pôle</div>
       <div className="navrow" style={{ display: "flex", gap: 8, marginBottom: 18, overflowX: "auto", paddingBottom: 4 }}>
         {poles.map((p) => {
           const id = f(p, "Identifiant"); const on = p.id === sel; const c = POLE_COLORS[id] || BLACK;
@@ -404,15 +404,15 @@ function TasksView({ me, data, isAdmin, reload, openNewTask }) {
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 9, cursor: "pointer" }} onClick={() => setShowSocle((v) => !v)}>
-            <span className="cond" style={{ fontSize: 13, fontWeight: 700, color: TEXT, background: "rgba(255,255,255,.93)", borderRadius: 8, padding: "4px 11px" }}>Socle officiel</span>
+            <span className="cond" style={{ fontSize: 13, fontWeight: 600, color: TEXT }}>Socle officiel</span>
             <span className="chip" style={{ background: "#EDE7F6", color: "#5E35B1" }}>{socle.length}</span>
-            <span style={{ marginLeft: "auto", color: "#E4DCD2", fontSize: 12 }}>{showSocle ? "masquer" : "afficher"}</span>
+            <span style={{ marginLeft: "auto", color: MUT, fontSize: 12 }}>{showSocle ? "masquer" : "afficher"}</span>
           </div>
           {showSocle && (socle.length === 0 ? <Empty t="Aucune tâche socle." /> :
             socle.map((t) => <TaskCard key={t.id} t={t} me={me} uById={uById} pById={pById} users={users} isAdmin={isAdmin} reload={reload} commentaires={data.commentaires || []} />))}
 
           <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "22px 0 9px" }}>
-            <span className="cond" style={{ fontSize: 13, fontWeight: 700, color: TEXT, background: "rgba(255,255,255,.93)", borderRadius: 8, padding: "4px 11px" }}>Tâches ponctuelles</span>
+            <span className="cond" style={{ fontSize: 13, fontWeight: 600, color: TEXT }}>Tâches ponctuelles</span>
             <span className="chip" style={{ background: "#E6F0FB", color: "#1B5E9B" }}>{ponct.length}</span>
             <button className="btn btn-red" style={{ marginLeft: "auto", fontSize: 12.5, padding: "7px 13px" }} onClick={() => openNewTask(sel)}>+ Ajouter</button>
           </div>
@@ -641,11 +641,11 @@ function Annuaire({ data }) {
   const order = [...poles.map((p) => p.id), "_"];
   return (
     <div className="fade">
-      <div style={{ fontSize: 20, fontWeight: 700, color: TEXT, marginBottom: 14, background: "rgba(255,255,255,.93)", borderRadius: 12, padding: "8px 16px", display: "inline-block", boxShadow: "0 1px 2px rgba(20,22,30,.07)" }}>Annuaire du CA</div>
+      <div style={{ fontSize: 20, fontWeight: 700, color: TEXT, marginBottom: 14 }}>Annuaire du CA</div>
       {order.filter((pid) => byPole[pid]).map((pid) => {
         const p = pById[pid]; const id = p ? f(p, "Identifiant") : null;
         return <div key={pid} style={{ marginBottom: 18 }}>
-          <div className="cond" style={{ fontSize: 13, fontWeight: 600, color: "#FFFFFF", marginBottom: 9, display: "flex", alignItems: "center", gap: 8 }}>
+          <div className="cond" style={{ fontSize: 13, fontWeight: 600, marginBottom: 9, display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ width: 11, height: 11, borderRadius: "50%", background: POLE_COLORS[id] || MUT, display: "inline-block" }} />
             {p ? f(p, "Pôles") : "Sans pôle"}
           </div>
@@ -684,8 +684,8 @@ function AdminUsers({ me, data, reload }) {
   const del = async (u) => { if (!confirm("Supprimer définitivement " + fullName(u) + " ?")) return; await db({ action: "delete", table: "Utilisateurs", recordId: u.id }); reload(); };
   return (
     <div className="fade">
-      <div style={{ fontSize: 20, fontWeight: 700, color: TEXT, marginBottom: 10, background: "rgba(255,255,255,.93)", borderRadius: 12, padding: "8px 16px", display: "inline-block", boxShadow: "0 1px 2px rgba(20,22,30,.07)" }}>Utilisateurs</div>
-      <div style={{ fontSize: 13, color: "#EBE2D6", marginBottom: 16 }}>Crée un accès par email. La personne complètera son profil à sa première connexion.</div>
+      <div style={{ fontSize: 20, fontWeight: 700, color: TEXT, marginBottom: 10 }}>Utilisateurs</div>
+      <div style={{ fontSize: 13, color: MUT, marginBottom: 16 }}>Crée un accès par email. La personne complètera son profil à sa première connexion.</div>
       <div className="card" style={{ marginBottom: 18, display: "flex", gap: 9, alignItems: "flex-end", flexWrap: "wrap" }}>
         <div style={{ flex: 2, minWidth: 180 }}><label className="lbl">Email du nouvel utilisateur</label><input className="inp" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="prenom@exemple.com" /></div>
         <div style={{ flex: 1, minWidth: 120 }}><label className="lbl">Rôle</label><select className="sel" value={role} onChange={(e) => setRole(e.target.value)}><option>Équipier</option><option>Admin</option></select></div>
@@ -728,7 +728,7 @@ function CAView({ me, data, isAdmin, reload, openNewSujet, openNewMeeting, openM
   return (
     <div className="fade">
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
-        <div className="display" style={{ fontSize: 22, color: TEXT, marginRight: "auto", background: "rgba(255,255,255,.93)", borderRadius: 12, padding: "8px 16px", display: "inline-block", boxShadow: "0 1px 2px rgba(20,22,30,.07)" }}>Réunions du CA</div>
+        <div className="display" style={{ fontSize: 22, color: TEXT, marginRight: "auto" }}>Réunions du CA</div>
         <nav style={{ display: "flex", gap: 4, background: "#EEF0F3", borderRadius: 30, padding: 4 }}>
           {subTab("sujets", "Sujets à aborder")}{subTab("reunions", "Réunions")}
         </nav>
@@ -747,7 +747,7 @@ function CAView({ me, data, isAdmin, reload, openNewSujet, openNewMeeting, openM
             actifs.map((x) => <SujetCard key={x.id} s={x} me={me} uById={uById} pById={pById} reload={reload} />)}
           {traites.length > 0 && (
             <div style={{ marginTop: 22 }}>
-              <div className="cond" style={{ fontSize: 12.5, color: "#FFFFFF", fontWeight: 700, marginBottom: 9 }}>Sujets traités ({traites.length})</div>
+              <div className="cond" style={{ fontSize: 12.5, color: MUT, fontWeight: 700, marginBottom: 9 }}>Sujets traités ({traites.length})</div>
               {traites.map((x) => <SujetCard key={x.id} s={x} me={me} uById={uById} pById={pById} reload={reload} done />)}
             </div>
           )}
@@ -758,9 +758,9 @@ function CAView({ me, data, isAdmin, reload, openNewSujet, openNewMeeting, openM
         <div>
           {isAdmin && <button className="btn btn-red" style={{ marginBottom: 14 }} onClick={openNewMeeting}><i className="ti ti-calendar-plus" />Planifier un CA</button>}
           {aVenir.length === 0 && passees.length === 0 && <Empty t="Aucune réunion programmée." />}
-          {aVenir.length > 0 && <div className="cond" style={{ fontSize: 12.5, color: "#FFFFFF", fontWeight: 700, margin: "4px 0 9px" }}>À venir</div>}
+          {aVenir.length > 0 && <div className="cond" style={{ fontSize: 12.5, color: MUT, fontWeight: 700, margin: "4px 0 9px" }}>À venir</div>}
           {aVenir.map((m) => <MeetingRow key={m.id} m={m} sujets={sujets} onClick={() => openMeeting(m.id)} />)}
-          {passees.length > 0 && <div className="cond" style={{ fontSize: 12.5, color: "#FFFFFF", fontWeight: 700, margin: "18px 0 9px" }}>Réunions passées</div>}
+          {passees.length > 0 && <div className="cond" style={{ fontSize: 12.5, color: MUT, fontWeight: 700, margin: "18px 0 9px" }}>Réunions passées</div>}
           {passees.map((m) => <MeetingRow key={m.id} m={m} sujets={sujets} onClick={() => openMeeting(m.id)} past />)}
         </div>
       )}
@@ -972,7 +972,7 @@ export default function App() {
   const isAdmin = f(me, "Rôle") === "Admin";
   const unread = (data.commentaires || []).filter((c) => (f(c, "Mentions") || []).includes(me.id) && !String(f(c, "Lu par") || "").includes(me.id)).length;
   return (
-    <div style={{ minHeight: "100vh", backgroundColor: "#1a1413", backgroundImage: "url(/bandeau.jpg)", backgroundSize: "cover", backgroundAttachment: "fixed", backgroundPosition: "center", color: TEXT, fontFamily: "'Manrope',system-ui,sans-serif" }}>
+    <div style={{ minHeight: "100vh", backgroundColor: "#F4F5F8", backgroundImage: "radial-gradient(720px circle at 100% -6%, rgba(214,40,40,.06), transparent 58%), radial-gradient(620px circle at -6% 112%, rgba(245,197,24,.07), transparent 58%)", backgroundAttachment: "fixed", color: TEXT, fontFamily: "'Manrope',system-ui,sans-serif" }}>
       <style>{CSS}</style>
       <Header me={me} view={view} setView={setView} isAdmin={isAdmin} onLogout={logout} unread={unread} onBell={() => setModal({ type: "notifs" })} />
       <div style={{ maxWidth: 920, margin: "0 auto", padding: "22px 16px 60px" }}>
