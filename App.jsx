@@ -136,7 +136,7 @@ function Login({ onLogin }) {
 function ProfileForm({ me, poles, onSaved }) {
   const [prenom, setPrenom] = useState(f(me, "Prénom") || "");
   const [nom, setNom] = useState(f(me, "Nom") || "");
-  const [pole, setPole] = useState((f(me, "Pôle") || [])[0] || "");
+  const [pole, setPole] = useState(initialPole || (f(me, "Pôle") || [])[0] || "");
   const [fonction, setFonction] = useState(f(me, "Fonction") || "Membre");
   const [tel, setTel] = useState(f(me, "Téléphone") || "");
   const [photo, setPhoto] = useState(f(me, "Photo") || "");
@@ -295,34 +295,73 @@ function TasksView({ me, data, isAdmin, reload, openNewTask }) {
   const { tasks, users, poles } = data;
   const uById = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users]);
   const pById = useMemo(() => Object.fromEntries(poles.map((p) => [p.id, p])), [poles]);
-  const [fPole, setFPole] = useState("");
-  const [fStatut, setFStatut] = useState("");
-  const [q, setQ] = useState("");
-  const list = tasks.filter((t) => {
-    if (fPole && (f(t, "Pôle") || [])[0] !== fPole) return false;
-    if (fStatut && f(t, "Statut") !== fStatut) return false;
-    if (q && !String(f(t, "Titre") || "").toLowerCase().includes(q.toLowerCase())) return false;
-    return true;
-  });
+  const myPole = (f(me, "Pôle") || [])[0];
+  const [sel, setSel] = useState(myPole || (poles[0] && poles[0].id) || "");
+  const [showSocle, setShowSocle] = useState(true);
+
+  const poleTasks = tasks.filter((t) => (f(t, "Pôle") || [])[0] === sel);
+  const socle = poleTasks.filter((t) => f(t, "Type") === "Socle");
+  const ponct = poleTasks.filter((t) => f(t, "Type") !== "Socle");
+  const selPole = pById[sel];
+  const selId = selPole ? f(selPole, "Identifiant") : null;
+  const responsable = users.find((u) => (f(u, "Pôle") || [])[0] === sel && f(u, "Fonction") === "Responsable");
+  const doneCount = poleTasks.filter((t) => f(t, "Statut") === "Fait").length;
+  const urgent = poleTasks.filter((t) => { const d = dueInfo(f(t, "Échéance")); return d && d.urg >= 3; }).length;
+  const countFor = (pid) => {
+    const ts = tasks.filter((t) => (f(t, "Pôle") || [])[0] === pid);
+    const u = ts.filter((t) => { const d = dueInfo(f(t, "Échéance")); return d && d.urg >= 3; }).length;
+    return { total: ts.length, urgent: u };
+  };
+
   return (
     <div className="fade">
-      <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 14, flexWrap: "wrap" }}>
-        <div style={{ fontSize: 20, fontWeight: 500, color: TEXT, marginRight: "auto" }}>Tâches</div>
-        <button className="btn btn-red" onClick={openNewTask}>+ Nouvelle tâche</button>
+      <div style={{ fontSize: 20, fontWeight: 500, color: TEXT, marginBottom: 12 }}>Tâches par pôle</div>
+      <div className="navrow" style={{ display: "flex", gap: 8, marginBottom: 18, overflowX: "auto", paddingBottom: 4 }}>
+        {poles.map((p) => {
+          const id = f(p, "Identifiant"); const on = p.id === sel; const c = POLE_COLORS[id] || BLACK;
+          const cnt = countFor(p.id); const isMine = p.id === myPole;
+          return (
+            <button key={p.id} onClick={() => setSel(p.id)} style={{ flex: "0 0 auto", cursor: "pointer", border: "1.5px solid " + (on ? c : BORDER), background: on ? c : "#fff", color: on ? "#fff" : TEXT, borderRadius: 14, padding: "9px 14px", textAlign: "left", minWidth: 118 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
+                {isMine && <span title="Mon pôle">★</span>}{f(p, "Pôles")}
+              </div>
+              <div style={{ fontSize: 11, opacity: .85, marginTop: 2 }}>{cnt.total} tâche{cnt.total > 1 ? "s" : ""}{cnt.urgent ? " · " + cnt.urgent + " urgent" + (cnt.urgent > 1 ? "es" : "e") : ""}</div>
+            </button>
+          );
+        })}
       </div>
-      <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
-        <input className="inp" style={{ flex: 2, minWidth: 150 }} placeholder="Rechercher…" value={q} onChange={(e) => setQ(e.target.value)} />
-        <select className="sel" style={{ flex: 1, minWidth: 120 }} value={fPole} onChange={(e) => setFPole(e.target.value)}>
-          <option value="">Tous les pôles</option>
-          {poles.map((p) => <option key={p.id} value={p.id}>{f(p, "Pôles")}</option>)}
-        </select>
-        <select className="sel" style={{ flex: 1, minWidth: 120 }} value={fStatut} onChange={(e) => setFStatut(e.target.value)}>
-          <option value="">Tous les statuts</option>
-          <option>À faire</option><option>En cours</option><option>Fait</option>
-        </select>
-      </div>
-      {list.length === 0 ? <Empty t="Aucune tâche ne correspond." /> :
-        list.map((t) => <TaskCard key={t.id} t={t} me={me} uById={uById} pById={pById} users={users} isAdmin={isAdmin} reload={reload} />)}
+
+      {selPole && (
+        <div>
+          <div className="card" style={{ marginBottom: 14, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <span style={{ width: 14, height: 14, borderRadius: "50%", background: POLE_COLORS[selId] || BLACK }} />
+            <div style={{ marginRight: "auto" }}>
+              <div style={{ fontSize: 17, fontWeight: 600, color: TEXT }}>{f(selPole, "Pôles")}</div>
+              <div style={{ fontSize: 12.5, color: MUT }}>{responsable ? "Responsable : " + fullName(responsable) : "Responsable à nommer"}</div>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 13, color: TEXT }}>{doneCount}/{poleTasks.length} à jour</div>
+              {urgent > 0 && <div style={{ fontSize: 12, color: RED }}>{urgent} urgente{urgent > 1 ? "s" : ""}</div>}
+            </div>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 9, cursor: "pointer" }} onClick={() => setShowSocle((v) => !v)}>
+            <span className="cond" style={{ fontSize: 13, fontWeight: 600, color: TEXT }}>Socle officiel</span>
+            <span className="chip" style={{ background: "#EDE7F6", color: "#5E35B1" }}>{socle.length}</span>
+            <span style={{ marginLeft: "auto", color: MUT, fontSize: 12 }}>{showSocle ? "masquer" : "afficher"}</span>
+          </div>
+          {showSocle && (socle.length === 0 ? <Empty t="Aucune tâche socle." /> :
+            socle.map((t) => <TaskCard key={t.id} t={t} me={me} uById={uById} pById={pById} users={users} isAdmin={isAdmin} reload={reload} />))}
+
+          <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "22px 0 9px" }}>
+            <span className="cond" style={{ fontSize: 13, fontWeight: 600, color: TEXT }}>Tâches ponctuelles</span>
+            <span className="chip" style={{ background: "#E6F0FB", color: "#1B5E9B" }}>{ponct.length}</span>
+            <button className="btn btn-red" style={{ marginLeft: "auto", fontSize: 12.5, padding: "7px 13px" }} onClick={() => openNewTask(sel)}>+ Ajouter</button>
+          </div>
+          {ponct.length === 0 ? <Empty t="Aucune tâche ponctuelle pour l'instant — ajoutes-en une !" /> :
+            ponct.map((t) => <TaskCard key={t.id} t={t} me={me} uById={uById} pById={pById} users={users} isAdmin={isAdmin} reload={reload} />)}
+        </div>
+      )}
     </div>
   );
 }
@@ -374,11 +413,11 @@ function Modal({ children, onClose }) {
     <div onClick={(e) => e.stopPropagation()} className="fade card" style={{ maxWidth: 480, width: "100%", marginTop: 40 }}>{children}</div>
   </div>;
 }
-function NewTask({ me, data, isAdmin, onClose, reload }) {
+function NewTask({ me, data, isAdmin, onClose, reload, initialPole }) {
   const { poles, users } = data;
   const [titre, setTitre] = useState("");
   const [desc, setDesc] = useState("");
-  const [pole, setPole] = useState((f(me, "Pôle") || [])[0] || "");
+  const [pole, setPole] = useState(initialPole || (f(me, "Pôle") || [])[0] || "");
   const [type, setType] = useState("Ponctuelle");
   const [ech, setEch] = useState("");
   const [assignes, setAssignes] = useState([me.id]);
@@ -591,13 +630,13 @@ export default function App() {
       <style>{CSS}</style>
       <Header me={me} view={view} setView={setView} isAdmin={isAdmin} onLogout={logout} />
       <div style={{ maxWidth: 920, margin: "0 auto", padding: "22px 16px 60px" }}>
-        {view === "dash" && <Dashboard me={me} data={data} setView={setView} openNewTask={() => setModal("task")} openNewSujet={() => setModal("sujet")} />}
-        {view === "taches" && <TasksView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewTask={() => setModal("task")} />}
+        {view === "dash" && <Dashboard me={me} data={data} setView={setView} openNewTask={() => setModal({ type: "task", pole: (f(me, "Pôle") || [])[0] || "" })} openNewSujet={() => setModal({ type: "sujet" })} />}
+        {view === "taches" && <TasksView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewTask={(pole) => setModal({ type: "task", pole })} />}
         {view === "annuaire" && <Annuaire data={data} />}
         {view === "admin" && isAdmin && <AdminUsers me={me} data={data} reload={reload} />}
       </div>
-      {modal === "task" && <NewTask me={me} data={data} isAdmin={isAdmin} onClose={() => setModal(null)} reload={reload} />}
-      {modal === "sujet" && <NewSujet me={me} data={data} onClose={() => setModal(null)} reload={reload} />}
+      {modal && modal.type === "task" && <NewTask me={me} data={data} isAdmin={isAdmin} initialPole={modal.pole} onClose={() => setModal(null)} reload={reload} />}
+      {modal && modal.type === "sujet" && <NewSujet me={me} data={data} onClose={() => setModal(null)} reload={reload} />}
     </div>
   );
 }
