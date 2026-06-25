@@ -42,6 +42,11 @@ body{margin:0;font-family:'Manrope',system-ui,sans-serif;}
 .chip{font-size:11px;font-weight:600;border-radius:30px;padding:4px 11px;display:inline-flex;align-items:center;gap:5px;}
 .tag{font-size:10.5px;font-weight:700;color:#fff;border-radius:8px;padding:3px 9px;}
 .ti{font-style:normal;line-height:1;}
+.wrap{max-width:1180px;margin:0 auto;padding:26px 26px 64px;}
+.dash-grid{display:grid;grid-template-columns:1fr;gap:18px;align-items:start;}
+.cardgrid{display:grid;grid-template-columns:1fr;}
+@media(min-width:1000px){.dash-grid{grid-template-columns:1.7fr 1fr;gap:24px;}.cardgrid{grid-template-columns:1fr 1fr;column-gap:12px;}}
+@media(max-width:760px){.wrap{padding:14px 12px 76px;}}
 @media (max-width:760px){
   header{padding-top:calc(14px + env(safe-area-inset-top)) !important;}
   .navrow{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
@@ -278,55 +283,57 @@ function Dashboard({ me, data, setView, openNewTask, openNewSujet, openTask }) {
         <span className="chip" style={{ background: f(me, "Rôle") === "Admin" ? "#16171B" : "#EEF1F4", color: f(me, "Rôle") === "Admin" ? YELLOW : "#5A6066", padding: "6px 12px", fontSize: 12.5, fontWeight: 600 }}><i className={"ti " + (f(me, "Rôle") === "Admin" ? "ti-shield-check" : "ti-user")} aria-hidden="true" />{f(me, "Rôle") === "Admin" ? "Administrateur" : "Équipier"}</span>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 13, marginBottom: 14 }}>
-        <StatCard icon="ti-checklist" color={RED} n={mine.length} label="mes tâches en cours" sub="à suivre" delay=".06s" onClick={() => setView("taches")} />
-        <StatCard icon="ti-flame" color="#C99700" n={proches.length} label="échéances proches" sub={rouge + " urgent · " + orange + " bientôt"} delay=".12s" onClick={() => setView("taches")} />
-        <StatCard icon="ti-users-group" color="#1B5E9B" n={enCours.length} label="tâches du club en cours" sub="en mouvement" delay=".18s" onClick={() => setView("taches")} />
-      </div>
-
-      <div className="card rise" style={{ padding: "18px 20px", marginBottom: 22, display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap", animationDelay: ".22s" }}>
-        <svg width="78" height="78" viewBox="0 0 78 78" style={{ transform: "rotate(-90deg)", flex: "0 0 auto" }}>
-          <circle cx="39" cy="39" r={R} fill="none" stroke="#EEF0F3" strokeWidth="9" />
-          <circle cx="39" cy="39" r={R} fill="none" stroke={RED} strokeWidth="9" strokeLinecap="round" strokeDasharray={CIRC} strokeDashoffset={CIRC * (1 - pct / 100)} />
-        </svg>
-        <div style={{ marginRight: "auto" }}>
-          <div style={{ fontSize: 16, fontWeight: 700, color: TEXT }}>{pct >= 60 ? "Le club avance bien" : pct > 0 ? "On est en route" : "C'est parti !"}</div>
-          <div style={{ fontSize: 13.5, color: MUT, marginTop: 3 }}>{pct}% des tâches sont à jour. Chaque tâche cochée fait avancer le club.</div>
+      <div className="dash-grid">
+        <div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 13, marginBottom: 16 }}>
+            <StatCard icon="ti-checklist" color={RED} n={mine.length} label="mes tâches en cours" sub="à suivre" delay=".06s" onClick={() => setView("taches")} />
+            <StatCard icon="ti-flame" color="#C99700" n={proches.length} label="échéances proches" sub={rouge + " urgent · " + orange + " bientôt"} delay=".12s" onClick={() => setView("taches")} />
+            <StatCard icon="ti-users-group" color="#1B5E9B" n={enCours.length} label="tâches du club en cours" sub="en mouvement" delay=".18s" onClick={() => setView("taches")} />
+          </div>
+          <div className="card rise" style={{ padding: "18px 20px", marginBottom: 18, display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap", animationDelay: ".22s" }}>
+            <svg width="78" height="78" viewBox="0 0 78 78" style={{ transform: "rotate(-90deg)", flex: "0 0 auto" }}>
+              <circle cx="39" cy="39" r={R} fill="none" stroke="#EEF0F3" strokeWidth="9" />
+              <circle cx="39" cy="39" r={R} fill="none" stroke={RED} strokeWidth="9" strokeLinecap="round" strokeDasharray={CIRC} strokeDashoffset={CIRC * (1 - pct / 100)} />
+            </svg>
+            <div style={{ marginRight: "auto" }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: TEXT }}>{pct >= 60 ? "Le club avance bien" : pct > 0 ? "On est en route" : "C'est parti !"}</div>
+              <div style={{ fontSize: 13.5, color: MUT, marginTop: 3 }}>{pct}% des tâches sont à jour. Chaque tâche cochée fait avancer le club.</div>
+            </div>
+            <button className="btn btn-red" onClick={openNewTask}><i className="ti ti-plus" />Nouvelle tâche</button>
+          </div>
+          <Section title="Mes tâches">
+            {mine.length === 0 ? <Empty t="Rien ne t'est assigné — prends une tâche pour donner un coup de main !" /> :
+              mine.slice(0, 8).map((t) => <RowTask key={t.id} t={t} uById={uById} poleTag={poleTag} onClick={() => openTask(t.id)} />)}
+          </Section>
+          {aides.length > 0 && (
+            <Section title="On demande un coup de main">
+              {aides.map((t) => <RowTask key={t.id} t={t} uById={uById} poleTag={poleTag} help onClick={() => openTask(t.id)} />)}
+            </Section>
+          )}
         </div>
-        <button className="btn btn-red" onClick={openNewTask}><i className="ti ti-plus" />Nouvelle tâche</button>
+        <div>
+          {(data.sujets || []).filter((x) => f(x, "Statut") !== "Traité").length > 0 ? (
+            <Section title="Sujets du prochain CA">
+              {poles.map((p) => {
+                const list = (data.sujets || []).filter((x) => f(x, "Statut") !== "Traité" && (f(x, "Pôle") || [])[0] === p.id);
+                if (!list.length) return null;
+                const id = f(p, "Identifiant");
+                return <div key={p.id} style={{ marginBottom: 10 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 6 }}>
+                    <span style={{ width: 22, height: 22, borderRadius: 7, background: POLE_COLORS[id] || MUT, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}><i className={"ti " + (POLE_ICONS[id] || "ti-folder")} style={{ fontSize: 13 }} aria-hidden="true" /></span>
+                    <span style={{ fontSize: 12.5, fontWeight: 700, color: TEXT }}>{f(p, "Pôles")}</span>
+                    <span style={{ fontSize: 11.5, color: MUT }}>· {list.length}</span>
+                  </div>
+                  {list.map((x) => <div key={x.id} className="card lift" style={{ padding: "9px 13px", marginBottom: 6, display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 13.5, color: TEXT, flex: 1 }}>{f(x, "Titre")}</span>
+                    {f(x, "Thème") && <span className="chip" style={{ background: "#EEF0F3", color: "#444" }}>{f(x, "Thème")}</span>}
+                  </div>)}
+                </div>;
+              })}
+            </Section>
+          ) : <Section title="Sujets du prochain CA"><Empty t="Aucun sujet en attente — propose-en un depuis l'espace Réunion CA." /></Section>}
+        </div>
       </div>
-
-      {(data.sujets || []).filter((x) => f(x, "Statut") !== "Traité").length > 0 && (
-        <Section title="Sujets du prochain CA">
-          {poles.map((p) => {
-            const list = (data.sujets || []).filter((x) => f(x, "Statut") !== "Traité" && (f(x, "Pôle") || [])[0] === p.id);
-            if (!list.length) return null;
-            const id = f(p, "Identifiant");
-            return <div key={p.id} style={{ marginBottom: 10 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 6 }}>
-                <span style={{ width: 9, height: 9, borderRadius: "50%", background: POLE_COLORS[id] || MUT }} />
-                <span style={{ fontSize: 12.5, fontWeight: 700, color: TEXT }}>{f(p, "Pôles")}</span>
-                <span style={{ fontSize: 11.5, color: MUT }}>· {list.length}</span>
-              </div>
-              {list.map((x) => <div key={x.id} className="card lift" style={{ padding: "9px 13px", marginBottom: 6, display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 13.5, color: TEXT, flex: 1 }}>{f(x, "Titre")}</span>
-                {f(x, "Thème") && <span className="chip" style={{ background: "#EEF0F3", color: "#444" }}>{f(x, "Thème")}</span>}
-              </div>)}
-            </div>;
-          })}
-        </Section>
-      )}
-
-      <Section title="Mes tâches">
-        {mine.length === 0 ? <Empty t="Rien ne t'est assigné — prends une tâche pour donner un coup de main !" /> :
-          mine.slice(0, 8).map((t) => <RowTask key={t.id} t={t} uById={uById} poleTag={poleTag} onClick={() => openTask(t.id)} />)}
-      </Section>
-
-      {aides.length > 0 && (
-        <Section title="On demande un coup de main">
-          {aides.map((t) => <RowTask key={t.id} t={t} uById={uById} poleTag={poleTag} help onClick={() => openTask(t.id)} />)}
-        </Section>
-      )}
     </div>
   );
 }
@@ -429,7 +436,7 @@ function TasksView({ me, data, isAdmin, reload, openNewTask, openTask }) {
             <span style={{ marginLeft: "auto", color: MUT, fontSize: 12 }}>{showSocle ? "masquer" : "afficher"}</span>
           </div>
           {showSocle && (socle.length === 0 ? <Empty t="Aucune tâche socle." /> :
-            socle.map((t) => <TaskCard key={t.id} t={t} me={me} uById={uById} pById={pById} users={users} isAdmin={isAdmin} reload={reload} commentaires={data.commentaires || []} openTask={openTask} />))}
+            <div className="cardgrid">{socle.map((t) => <TaskCard key={t.id} t={t} me={me} uById={uById} pById={pById} users={users} isAdmin={isAdmin} reload={reload} commentaires={data.commentaires || []} openTask={openTask} />)}</div>)}
 
           <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "22px 0 9px" }}>
             <span className="cond" style={{ fontSize: 13, fontWeight: 600, color: TEXT }}>Tâches ponctuelles</span>
@@ -437,7 +444,7 @@ function TasksView({ me, data, isAdmin, reload, openNewTask, openTask }) {
             <button className="btn btn-red" style={{ marginLeft: "auto", fontSize: 12.5, padding: "7px 13px" }} onClick={() => openNewTask(sel)}>+ Ajouter</button>
           </div>
           {ponct.length === 0 ? <Empty t="Aucune tâche ponctuelle pour l'instant — ajoutes-en une !" /> :
-            ponct.map((t) => <TaskCard key={t.id} t={t} me={me} uById={uById} pById={pById} users={users} isAdmin={isAdmin} reload={reload} commentaires={data.commentaires || []} openTask={openTask} />)}
+            <div className="cardgrid">{ponct.map((t) => <TaskCard key={t.id} t={t} me={me} uById={uById} pById={pById} users={users} isAdmin={isAdmin} reload={reload} commentaires={data.commentaires || []} openTask={openTask} />)}</div>}
         </div>
       )}
     </div>
@@ -1105,7 +1112,7 @@ export default function App() {
     <div style={{ minHeight: "100vh", backgroundColor: "#F4F5F8", backgroundImage: "radial-gradient(720px circle at 100% -6%, rgba(214,40,40,.06), transparent 58%), radial-gradient(620px circle at -6% 112%, rgba(245,197,24,.07), transparent 58%)", backgroundAttachment: "fixed", color: TEXT, fontFamily: "'Manrope',system-ui,sans-serif" }}>
       <style>{CSS}</style>
       <Header me={me} view={view} setView={(v) => { setTaskOpen(null); setView(v); }} isAdmin={isAdmin} onLogout={logout} unread={unread} onBell={() => setModal({ type: "notifs" })} />
-      <div style={{ maxWidth: 920, margin: "0 auto", padding: "22px 16px 60px" }}>
+      <div className="wrap">
         {taskOpen && <TaskDetailPage taskId={taskOpen} me={me} data={data} isAdmin={isAdmin} onClose={() => setTaskOpen(null)} reload={reload} />}
         {!taskOpen && view === "dash" && <Dashboard me={me} data={data} setView={setView} openNewTask={() => setModal({ type: "task", pole: (f(me, "Pôle") || [])[0] || "" })} openNewSujet={() => setModal({ type: "sujet" })} openTask={(id) => setTaskOpen(id)} />}
         {!taskOpen && view === "taches" && <TasksView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewTask={(pole) => setModal({ type: "task", pole })} openTask={(id) => setTaskOpen(id)} />}
