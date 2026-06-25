@@ -73,6 +73,12 @@ function dueInfo(dateStr) {
   if (days <= 10) return { label: "Dans " + days + "j", color: "#B8860B", urg: 1 };
   return { label: "Dans " + days + "j", color: MUT, urg: 0 };
 }
+function fmtDateTime(iso) {
+  if (!iso) return "";
+  const d = new Date(iso); if (isNaN(d.getTime())) return "";
+  const p = (n) => String(n).padStart(2, "0");
+  return p(d.getDate()) + "/" + p(d.getMonth() + 1) + " à " + p(d.getHours()) + "h" + p(d.getMinutes());
+}
 function resizeImage(file, cb) {
   const reader = new FileReader();
   reader.onload = (e) => {
@@ -473,7 +479,7 @@ function TaskCard({ t, me, uById, pById, users, isAdmin, reload, commentaires, o
               return <div key={c.id} style={{ display: "flex", gap: 9, marginBottom: 10 }}>
                 <Avatar u={au} size={28} />
                 <div style={{ background: "#F4F6F8", borderRadius: 12, padding: "8px 11px", flex: 1 }}>
-                  <div style={{ fontSize: 12, color: MUT, marginBottom: 2 }}>{au ? fullName(au) : "?"}</div>
+                  <div style={{ fontSize: 12, color: MUT, marginBottom: 2 }}>{au ? fullName(au) : "?"}{f(c, "Date") ? " · " + fmtDateTime(f(c, "Date")) : ""}</div>
                   <div style={{ fontSize: 13.5, color: TEXT, whiteSpace: "pre-wrap" }}>{renderMentions(f(c, "Texte"))}</div>
                 </div>
               </div>;
@@ -921,7 +927,7 @@ function NotifsModal({ me, data, setView, onClose, reload, openTask }) {
   );
 }
 
-function TaskDetail({ taskId, me, data, isAdmin, onClose, reload }) {
+function TaskDetailPage({ taskId, me, data, isAdmin, onClose, reload }) {
   const { tasks, users, poles, commentaires } = data;
   const t = tasks.find((x) => x.id === taskId);
   const uById = Object.fromEntries(users.map((u) => [u.id, u]));
@@ -929,7 +935,8 @@ function TaskDetail({ taskId, me, data, isAdmin, onClose, reload }) {
   const [busy, setBusy] = useState(false);
   const [editDesc, setEditDesc] = useState(false);
   const [desc, setDesc] = useState(t ? (f(t, "Description") || "") : "");
-  if (!t) return null;
+  const [uploading, setUploading] = useState(false);
+  if (!t) return <div className="fade"><button className="btn btn-ghost" onClick={onClose}>Retour</button></div>;
   const pole = pById[(f(t, "Pôle") || [])[0]];
   const due = dueInfo(f(t, "Échéance"));
   const assignes = (f(t, "Assignés") || []);
@@ -937,56 +944,75 @@ function TaskDetail({ taskId, me, data, isAdmin, onClose, reload }) {
   const statut = f(t, "Statut") || "À faire";
   const isSocle = f(t, "Type") === "Socle";
   const canDelete = isSocle ? isAdmin : (isAdmin || (f(t, "Créé par") || []).includes(me.id));
+  const docs = f(t, "Documents") || [];
   const coms = (commentaires || []).filter((c) => (f(c, "Tâche") || []).includes(t.id)).sort((a, b) => String(f(a, "Date")).localeCompare(String(f(b, "Date"))));
   const upd = async (fields) => { setBusy(true); try { await db({ action: "update", table: "Tâches", recordId: t.id, fields }); await reload(); } catch (e) { alert("Erreur : " + e.message); } setBusy(false); };
+  const addDocs = async (list) => {
+    setUploading(true);
+    try { for (const file of Array.from(list)) { const fb = await readFileB64(file); await db({ action: "uploadAttachment", recordId: t.id, field: "Documents", file: fb.base64, filename: fb.filename, contentType: fb.contentType }); } await reload(); }
+    catch (e) { alert("Erreur : " + e.message); }
+    setUploading(false);
+  };
   const stColor = statut === "Fait" ? OK : statut === "En cours" ? "#B8860B" : MUT;
   return (
-    <Modal onClose={onClose}>
-      <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap", marginBottom: 8 }}>
-        {pole && <span className="tag" style={{ background: POLE_COLORS[f(pole, "Identifiant")] || BLACK }}>{f(pole, "Pôles")}</span>}
-        {isSocle && <span className="chip" style={{ background: "#EDE7F6", color: "#5E35B1" }}>Socle</span>}
-        {due && <span className="chip" style={{ background: due.color + "1f", color: due.color }}>{due.label}</span>}
-      </div>
-      <div style={{ fontSize: 19, fontWeight: 700, color: TEXT, marginBottom: 12 }}>{f(t, "Titre")}</div>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 14 }}>
-        <button className="btn btn-ghost" style={{ color: stColor, borderColor: stColor + "55", fontSize: 12.5 }} disabled={busy} onClick={() => upd({ "Statut": statut === "À faire" ? "En cours" : statut === "En cours" ? "Fait" : "À faire" })}>● {statut}</button>
-        {isMine ? <button className="btn btn-ghost" style={{ fontSize: 12.5 }} disabled={busy} onClick={() => upd({ "Assignés": assignes.filter((id) => id !== me.id) })}>Me retirer</button>
-          : <button className="btn btn-dark" style={{ fontSize: 12.5 }} disabled={busy} onClick={() => upd({ "Assignés": Array.from(new Set([...assignes, me.id])) })}>Je prends</button>}
-        <button className="btn btn-ghost" style={{ fontSize: 12.5 }} disabled={busy} onClick={() => upd({ "Besoin d'aide": !f(t, "Besoin d'aide") })}>{f(t, "Besoin d'aide") ? "Aide ✓" : "Besoin d'aide"}</button>
-        <div style={{ display: "flex", marginLeft: "auto", alignItems: "center", gap: 5 }}>
-          {assignes.map((id) => uById[id]).filter(Boolean).map((u, i) => <div key={u.id} title={fullName(u)} style={{ marginLeft: i ? -8 : 0 }}><Avatar u={u} size={26} /></div>)}
+    <div className="fade">
+      <button className="btn btn-ghost" style={{ marginBottom: 14 }} onClick={onClose}><i className="ti ti-arrow-left" />Retour</button>
+      <div className="card" style={{ marginBottom: 16, padding: "20px 22px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap", marginBottom: 10 }}>
+          {pole && <span className="tag" style={{ background: POLE_COLORS[f(pole, "Identifiant")] || BLACK }}>{f(pole, "Pôles")}</span>}
+          {isSocle && <span className="chip" style={{ background: "#EDE7F6", color: "#5E35B1" }}>Socle</span>}
+          {due && <span className="chip" style={{ background: due.color + "1f", color: due.color }}>{due.label}</span>}
         </div>
-      </div>
-      <div className="lbl" style={{ display: "flex", alignItems: "center", gap: 8 }}>Description {!editDesc && <button className="btn btn-ghost" style={{ fontSize: 11.5, padding: "3px 9px" }} onClick={() => setEditDesc(true)}>{f(t, "Description") ? "Modifier" : "Ajouter"}</button>}</div>
-      {editDesc ? (
-        <div>
-          <textarea className="ta" value={desc} onChange={(e) => setDesc(e.target.value)} autoFocus />
-          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-            <button className="btn btn-ghost" style={{ fontSize: 12.5 }} onClick={() => { setDesc(f(t, "Description") || ""); setEditDesc(false); }}>Annuler</button>
-            <button className="btn btn-red" style={{ fontSize: 12.5 }} disabled={busy} onClick={async () => { await upd({ "Description": desc }); setEditDesc(false); }}>Enregistrer</button>
+        <div style={{ fontSize: 23, fontWeight: 800, color: TEXT, letterSpacing: "-.01em", marginBottom: 16 }}>{f(t, "Titre")}</div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 16 }}>
+          <button className="btn btn-ghost" style={{ color: stColor, borderColor: stColor + "55" }} disabled={busy} onClick={() => upd({ "Statut": statut === "À faire" ? "En cours" : statut === "En cours" ? "Fait" : "À faire" })}>● {statut}</button>
+          {isMine ? <button className="btn btn-ghost" disabled={busy} onClick={() => upd({ "Assignés": assignes.filter((id) => id !== me.id) })}>Me retirer</button>
+            : <button className="btn btn-dark" disabled={busy} onClick={() => upd({ "Assignés": Array.from(new Set([...assignes, me.id])) })}>Je prends</button>}
+          <button className="btn btn-ghost" disabled={busy} onClick={() => upd({ "Besoin d'aide": !f(t, "Besoin d'aide") })}>{f(t, "Besoin d'aide") ? "Aide ✓" : "Besoin d'aide"}</button>
+          <div style={{ display: "flex", marginLeft: "auto", alignItems: "center", gap: 5 }}>
+            {assignes.map((id) => uById[id]).filter(Boolean).map((u, i2) => <div key={u.id} title={fullName(u)} style={{ marginLeft: i2 ? -8 : 0 }}><Avatar u={u} size={28} /></div>)}
           </div>
         </div>
-      ) : <div style={{ fontSize: 13.5, color: f(t, "Description") ? TEXT : MUT, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>{f(t, "Description") || "Aucune description."}</div>}
-      <div style={{ borderTop: "1px solid " + BORDER, marginTop: 16, paddingTop: 14 }}>
-        <div className="lbl">Suivi & commentaires</div>
-        {coms.length === 0 ? <div style={{ fontSize: 12.5, color: MUT, marginBottom: 10 }}>Aucune action notée pour le moment.</div> :
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
+          <span className="lbl" style={{ margin: 0 }}>Échéance</span>
+          <input className="inp" type="date" style={{ width: "auto" }} value={f(t, "Échéance") || ""} onChange={(e) => upd({ "Échéance": e.target.value || null })} />
+        </div>
+        <div className="lbl" style={{ display: "flex", alignItems: "center", gap: 8 }}>Description {!editDesc && <button className="btn btn-ghost" style={{ fontSize: 11.5, padding: "3px 9px" }} onClick={() => setEditDesc(true)}>{f(t, "Description") ? "Modifier" : "Ajouter"}</button>}</div>
+        {editDesc ? (
+          <div style={{ marginBottom: 6 }}>
+            <textarea className="ta" value={desc} onChange={(e) => setDesc(e.target.value)} autoFocus />
+            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+              <button className="btn btn-ghost" style={{ fontSize: 12.5 }} onClick={() => { setDesc(f(t, "Description") || ""); setEditDesc(false); }}>Annuler</button>
+              <button className="btn btn-red" style={{ fontSize: 12.5 }} disabled={busy} onClick={async () => { await upd({ "Description": desc }); setEditDesc(false); }}>Enregistrer</button>
+            </div>
+          </div>
+        ) : <div style={{ fontSize: 14, color: f(t, "Description") ? TEXT : MUT, lineHeight: 1.6, whiteSpace: "pre-wrap", marginBottom: 6 }}>{f(t, "Description") || "Aucune description."}</div>}
+        <div className="lbl" style={{ marginTop: 14 }}>Documents</div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          {docs.map((a, idx) => {
+            const thumb = a.thumbnails && a.thumbnails.small && a.thumbnails.small.url;
+            return <a key={idx} href={a.url} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "#1B5E9B", textDecoration: "none", border: "1px solid " + BORDER, borderRadius: 10, padding: "5px 10px" }}>{thumb ? <img src={thumb} alt="" style={{ width: 24, height: 24, borderRadius: 5, objectFit: "cover" }} /> : <i className="ti ti-paperclip" />}{a.filename || "fichier"}</a>;
+          })}
+          <label className="btn btn-ghost" style={{ cursor: "pointer", fontSize: 12.5 }}>{uploading ? "Envoi…" : "+ Ajouter un document"}<input type="file" multiple style={{ display: "none" }} onChange={(e) => e.target.files.length && addDocs(e.target.files)} /></label>
+        </div>
+      </div>
+      <div className="card" style={{ padding: "20px 22px" }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: TEXT, marginBottom: 14 }}>Suivi & commentaires</div>
+        {coms.length === 0 ? <div style={{ fontSize: 13, color: MUT, marginBottom: 12 }}>Aucune action notée pour le moment.</div> :
           coms.map((c) => {
             const au = uById[(f(c, "Auteur") || [])[0]];
-            return <div key={c.id} style={{ display: "flex", gap: 9, marginBottom: 10 }}>
-              <Avatar u={au} size={28} />
-              <div style={{ background: "#F4F6F8", borderRadius: 12, padding: "8px 11px", flex: 1 }}>
-                <div style={{ fontSize: 12, color: MUT, marginBottom: 2 }}>{au ? fullName(au) : "?"}</div>
-                <div style={{ fontSize: 13.5, color: TEXT, whiteSpace: "pre-wrap" }}>{renderMentions(f(c, "Texte"))}</div>
+            return <div key={c.id} style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+              <Avatar u={au} size={30} />
+              <div style={{ background: "#F4F6F8", borderRadius: 12, padding: "9px 12px", flex: 1 }}>
+                <div style={{ fontSize: 12, color: MUT, marginBottom: 3 }}>{au ? fullName(au) : "?"}{f(c, "Date") ? " · " + fmtDateTime(f(c, "Date")) : ""}</div>
+                <div style={{ fontSize: 14, color: TEXT, whiteSpace: "pre-wrap" }}>{renderMentions(f(c, "Texte"))}</div>
               </div>
             </div>;
           })}
         <CommentBox task={t} me={me} users={users} reload={reload} />
+        {canDelete && <div style={{ marginTop: 16, textAlign: "right" }}><button className="btn btn-ghost" style={{ color: RED, borderColor: "#F0C7C3" }} disabled={busy} onClick={async () => { if (!confirm("Supprimer cette tâche ?")) return; setBusy(true); try { await db({ action: "delete", table: "Tâches", recordId: t.id }); await reload(); onClose(); } catch (e) { alert("Erreur : " + e.message); setBusy(false); } }}>Supprimer la tâche</button></div>}
       </div>
-      <div style={{ display: "flex", gap: 9, marginTop: 16, flexWrap: "wrap" }}>
-        <button className="btn btn-ghost" onClick={onClose}>Fermer</button>
-        {canDelete && <button className="btn btn-ghost" style={{ marginLeft: "auto", color: RED, borderColor: "#F0C7C3" }} disabled={busy} onClick={async () => { if (!confirm("Supprimer cette tâche ?")) return; setBusy(true); try { await db({ action: "delete", table: "Tâches", recordId: t.id }); await reload(); onClose(); } catch (e) { alert("Erreur : " + e.message); setBusy(false); } }}>Supprimer</button>}
-      </div>
-    </Modal>
+    </div>
   );
 }
 
@@ -996,6 +1022,7 @@ export default function App() {
   const [view, setView] = useState("dash");
   const [data, setData] = useState({ poles: [], users: [], tasks: [], meetings: [], sujets: [], commentaires: [] });
   const [modal, setModal] = useState(null);
+  const [taskOpen, setTaskOpen] = useState(null);
 
   const loadData = useCallback(async () => {
     const [poles, users, tasks, meetings, sujets, commentaires] = await Promise.all([
@@ -1043,18 +1070,18 @@ export default function App() {
   return (
     <div style={{ minHeight: "100vh", backgroundColor: "#F4F5F8", backgroundImage: "radial-gradient(720px circle at 100% -6%, rgba(214,40,40,.06), transparent 58%), radial-gradient(620px circle at -6% 112%, rgba(245,197,24,.07), transparent 58%)", backgroundAttachment: "fixed", color: TEXT, fontFamily: "'Manrope',system-ui,sans-serif" }}>
       <style>{CSS}</style>
-      <Header me={me} view={view} setView={setView} isAdmin={isAdmin} onLogout={logout} unread={unread} onBell={() => setModal({ type: "notifs" })} />
+      <Header me={me} view={view} setView={(v) => { setTaskOpen(null); setView(v); }} isAdmin={isAdmin} onLogout={logout} unread={unread} onBell={() => setModal({ type: "notifs" })} />
       <div style={{ maxWidth: 920, margin: "0 auto", padding: "22px 16px 60px" }}>
-        {view === "dash" && <Dashboard me={me} data={data} setView={setView} openNewTask={() => setModal({ type: "task", pole: (f(me, "Pôle") || [])[0] || "" })} openNewSujet={() => setModal({ type: "sujet" })} openTask={(id) => setModal({ type: "taskDetail", id })} />}
-        {view === "taches" && <TasksView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewTask={(pole) => setModal({ type: "task", pole })} openTask={(id) => setModal({ type: "taskDetail", id })} />}
-        {view === "ca" && <CAView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewSujet={() => setModal({ type: "sujet" })} openNewMeeting={() => setModal({ type: "meeting" })} openMeeting={(id) => setModal({ type: "meetingDetail", id })} />}
-        {view === "annuaire" && <Annuaire data={data} />}
-        {view === "admin" && isAdmin && <AdminUsers me={me} data={data} reload={reload} />}
+        {taskOpen && <TaskDetailPage taskId={taskOpen} me={me} data={data} isAdmin={isAdmin} onClose={() => setTaskOpen(null)} reload={reload} />}
+        {!taskOpen && view === "dash" && <Dashboard me={me} data={data} setView={setView} openNewTask={() => setModal({ type: "task", pole: (f(me, "Pôle") || [])[0] || "" })} openNewSujet={() => setModal({ type: "sujet" })} openTask={(id) => setTaskOpen(id)} />}
+        {!taskOpen && view === "taches" && <TasksView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewTask={(pole) => setModal({ type: "task", pole })} openTask={(id) => setTaskOpen(id)} />}
+        {!taskOpen && view === "ca" && <CAView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewSujet={() => setModal({ type: "sujet" })} openNewMeeting={() => setModal({ type: "meeting" })} openMeeting={(id) => setModal({ type: "meetingDetail", id })} />}
+        {!taskOpen && view === "annuaire" && <Annuaire data={data} />}
+        {!taskOpen && view === "admin" && isAdmin && <AdminUsers me={me} data={data} reload={reload} />}
       </div>
       {modal && modal.type === "task" && <NewTask me={me} data={data} isAdmin={isAdmin} initialPole={modal.pole} onClose={() => setModal(null)} reload={reload} />}
       {modal && modal.type === "sujet" && <NewSujet me={me} data={data} onClose={() => setModal(null)} reload={reload} />}
-      {modal && modal.type === "notifs" && <NotifsModal me={me} data={data} setView={setView} onClose={() => setModal(null)} reload={reload} openTask={(id) => setModal({ type: "taskDetail", id })} />}
-      {modal && modal.type === "taskDetail" && <TaskDetail taskId={modal.id} me={me} data={data} isAdmin={isAdmin} onClose={() => setModal(null)} reload={reload} />}
+      {modal && modal.type === "notifs" && <NotifsModal me={me} data={data} setView={setView} onClose={() => setModal(null)} reload={reload} openTask={(id) => { setModal(null); setTaskOpen(id); }} />}
       {modal && modal.type === "meeting" && <NewMeeting onClose={() => setModal(null)} reload={reload} />}
       {modal && modal.type === "meetingDetail" && <MeetingDetail meetingId={modal.id} me={me} data={data} isAdmin={isAdmin} onClose={() => setModal(null)} reload={reload} />}
     </div>
