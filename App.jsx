@@ -538,6 +538,33 @@ function Modal({ children, onClose }) {
     <div onClick={(e) => e.stopPropagation()} className="rise card" style={{ maxWidth: 480, width: "100%", padding: "22px 22px" }}>{children}</div>
   </div>;
 }
+function AssigneePicker({ assignes, users, onChange, busy }) {
+  const [q, setQ] = useState("");
+  const [openL, setOpenL] = useState(false);
+  const uById = Object.fromEntries(users.map((u) => [u.id, u]));
+  const assigned = (assignes || []).map((id) => uById[id]).filter(Boolean);
+  const label = (u) => (f(u, "Prénom") ? fullName(u) : (f(u, "Email") || "?"));
+  const avail = users.filter((u) => f(u, "Actif") !== false && !(assignes || []).includes(u.id) && label(u).toLowerCase().includes(q.toLowerCase()));
+  const add = (u) => { onChange(Array.from(new Set([...(assignes || []), u.id]))); setQ(""); };
+  const remove = (id) => onChange((assignes || []).filter((x) => x !== id));
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+        {assigned.map((u) => <span key={u.id} className="chip" style={{ background: "#FBE9E9", color: "#A41C1C", border: "1px solid #F3C9C9", padding: "4px 6px 4px 4px" }}><Avatar u={u} size={18} />{label(u)}<button disabled={busy} onClick={() => remove(u.id)} style={{ border: "none", background: "none", color: "#A41C1C", cursor: "pointer", fontSize: 15, lineHeight: 1, padding: "0 2px" }} aria-label="Retirer">×</button></span>)}
+        <button className="btn btn-ghost" style={{ fontSize: 12, padding: "5px 11px" }} onClick={() => setOpenL((o) => !o)}><i className="ti ti-plus" />Affecter</button>
+      </div>
+      {openL && (
+        <div style={{ marginTop: 8, border: "1px solid " + BORDER, borderRadius: 12, padding: 8, background: "#fff", maxWidth: 340 }}>
+          <input className="inp" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher une personne…" autoFocus style={{ marginBottom: 6 }} />
+          <div style={{ maxHeight: 190, overflowY: "auto" }}>
+            {avail.length === 0 ? <div style={{ fontSize: 12.5, color: MUT, padding: "6px 8px" }}>Personne à ajouter.</div> :
+              avail.slice(0, 40).map((u) => <div key={u.id} onClick={() => add(u)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 8px", cursor: "pointer", fontSize: 13, borderRadius: 8 }}><Avatar u={u} size={22} />{label(u)}</div>)}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 function NewTask({ me, data, isAdmin, onClose, reload, initialPole }) {
   const { poles, users } = data;
   const [titre, setTitre] = useState("");
@@ -578,14 +605,7 @@ function NewTask({ me, data, isAdmin, onClose, reload, initialPole }) {
         </div>
       )}
       <div style={{ marginTop: 11 }}><label className="lbl">Affecter à</label>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
-          {users.filter((u) => f(u, "Actif") !== false).map((u) => {
-            const on = assignes.includes(u.id);
-            return <button key={u.id} onClick={() => toggle(u.id)} className="chip" style={{ cursor: "pointer", border: "1px solid " + (on ? RED : BORDER), background: on ? "#FBEDEC" : "#fff", color: on ? RED : TEXT, padding: "5px 10px" }}>
-              <Avatar u={u} size={18} />{f(u, "Prénom") || f(u, "Email")}
-            </button>;
-          })}
-        </div>
+        <AssigneePicker assignes={assignes} users={users} onChange={setAssignes} />
       </div>
       <div style={{ display: "flex", gap: 9, marginTop: 18 }}>
         <button className="btn btn-ghost" style={{ flex: 1, justifyContent: "center" }} onClick={onClose}>Annuler</button>
@@ -980,12 +1000,7 @@ function TaskDetailPage({ taskId, me, data, isAdmin, onClose, reload }) {
           </div>
         </div>
         <div className="lbl">Affecté à</div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 16 }}>
-          {users.filter((u) => f(u, "Actif") !== false).map((u) => {
-            const on = assignes.includes(u.id);
-            return <button key={u.id} disabled={busy} onClick={() => upd({ "Assignés": on ? assignes.filter((id) => id !== u.id) : Array.from(new Set([...assignes, u.id])) })} className="chip" style={{ cursor: "pointer", border: "1px solid " + (on ? RED : BORDER), background: on ? "#FBE9E9" : "#fff", color: on ? RED : TEXT, padding: "5px 10px" }}><Avatar u={u} size={18} />{f(u, "Prénom") || f(u, "Email")}</button>;
-          })}
-        </div>
+        <div style={{ marginBottom: 16 }}><AssigneePicker assignes={assignes} users={users} busy={busy} onChange={(next) => upd({ "Assignés": next })} /></div>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
           <span className="lbl" style={{ margin: 0 }}>Échéance</span>
           <input className="inp" type="date" style={{ width: "auto" }} value={f(t, "Échéance") || ""} onChange={(e) => upd({ "Échéance": e.target.value || null })} />
