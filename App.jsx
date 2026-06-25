@@ -233,7 +233,7 @@ function Header({ me, view, setView, isAdmin, onLogout, unread, onBell }) {
   );
 }
 
-function Dashboard({ me, data, setView, openNewTask, openNewSujet }) {
+function Dashboard({ me, data, setView, openNewTask, openNewSujet, openTask }) {
   const { tasks, users, poles, meetings } = data;
   const uById = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users]);
   const pById = useMemo(() => Object.fromEntries(poles.map((p) => [p.id, p])), [poles]);
@@ -304,12 +304,12 @@ function Dashboard({ me, data, setView, openNewTask, openNewSujet }) {
 
       <Section title="Mes tâches">
         {mine.length === 0 ? <Empty t="Rien ne t'est assigné — prends une tâche pour donner un coup de main !" /> :
-          mine.slice(0, 8).map((t) => <RowTask key={t.id} t={t} uById={uById} poleTag={poleTag} onClick={() => setView("taches")} />)}
+          mine.slice(0, 8).map((t) => <RowTask key={t.id} t={t} uById={uById} poleTag={poleTag} onClick={() => openTask(t.id)} />)}
       </Section>
 
       {aides.length > 0 && (
         <Section title="On demande un coup de main">
-          {aides.map((t) => <RowTask key={t.id} t={t} uById={uById} poleTag={poleTag} help onClick={() => setView("taches")} />)}
+          {aides.map((t) => <RowTask key={t.id} t={t} uById={uById} poleTag={poleTag} help onClick={() => openTask(t.id)} />)}
         </Section>
       )}
     </div>
@@ -349,7 +349,7 @@ function RowTask({ t, uById, poleTag, help, onClick }) {
   );
 }
 
-function TasksView({ me, data, isAdmin, reload, openNewTask }) {
+function TasksView({ me, data, isAdmin, reload, openNewTask, openTask }) {
   const { tasks, users, poles } = data;
   const uById = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users]);
   const pById = useMemo(() => Object.fromEntries(poles.map((p) => [p.id, p])), [poles]);
@@ -409,7 +409,7 @@ function TasksView({ me, data, isAdmin, reload, openNewTask }) {
             <span style={{ marginLeft: "auto", color: MUT, fontSize: 12 }}>{showSocle ? "masquer" : "afficher"}</span>
           </div>
           {showSocle && (socle.length === 0 ? <Empty t="Aucune tâche socle." /> :
-            socle.map((t) => <TaskCard key={t.id} t={t} me={me} uById={uById} pById={pById} users={users} isAdmin={isAdmin} reload={reload} commentaires={data.commentaires || []} />))}
+            socle.map((t) => <TaskCard key={t.id} t={t} me={me} uById={uById} pById={pById} users={users} isAdmin={isAdmin} reload={reload} commentaires={data.commentaires || []} openTask={openTask} />))}
 
           <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "22px 0 9px" }}>
             <span className="cond" style={{ fontSize: 13, fontWeight: 600, color: TEXT }}>Tâches ponctuelles</span>
@@ -417,14 +417,14 @@ function TasksView({ me, data, isAdmin, reload, openNewTask }) {
             <button className="btn btn-red" style={{ marginLeft: "auto", fontSize: 12.5, padding: "7px 13px" }} onClick={() => openNewTask(sel)}>+ Ajouter</button>
           </div>
           {ponct.length === 0 ? <Empty t="Aucune tâche ponctuelle pour l'instant — ajoutes-en une !" /> :
-            ponct.map((t) => <TaskCard key={t.id} t={t} me={me} uById={uById} pById={pById} users={users} isAdmin={isAdmin} reload={reload} commentaires={data.commentaires || []} />)}
+            ponct.map((t) => <TaskCard key={t.id} t={t} me={me} uById={uById} pById={pById} users={users} isAdmin={isAdmin} reload={reload} commentaires={data.commentaires || []} openTask={openTask} />)}
         </div>
       )}
     </div>
   );
 }
 
-function TaskCard({ t, me, uById, pById, users, isAdmin, reload, commentaires }) {
+function TaskCard({ t, me, uById, pById, users, isAdmin, reload, commentaires, openTask }) {
   const [busy, setBusy] = useState(false);
   const due = dueInfo(f(t, "Échéance"));
   const pole = pById[(f(t, "Pôle") || [])[0]];
@@ -449,7 +449,7 @@ function TaskCard({ t, me, uById, pById, users, isAdmin, reload, commentaires })
       <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
         {pole && <span className="tag" style={{ background: POLE_COLORS[poleId] || BLACK }}>{f(pole, "Pôles")}</span>}
         {isSocle && <span className="chip" style={{ background: "#EDE7F6", color: "#5E35B1" }}>Socle</span>}
-        <span style={{ fontSize: 14.5, color: TEXT, flex: 1, minWidth: 140, fontWeight: 500 }}>{f(t, "Titre")}</span>
+        <span onClick={() => openTask && openTask(t.id)} style={{ fontSize: 14.5, color: TEXT, flex: 1, minWidth: 140, fontWeight: 500, cursor: "pointer" }}>{f(t, "Titre")}</span>
         {f(t, "Besoin d'aide") && <span className="chip" style={{ background: "#FBEDEC", color: RED }}>Besoin d'aide</span>}
         {due && <span className="chip" style={{ background: due.color + "1f", color: due.color }}>{due.label}</span>}
       </div>
@@ -898,12 +898,12 @@ function MeetingDetail({ meetingId, me, data, isAdmin, onClose, reload }) {
   );
 }
 
-function NotifsModal({ me, data, setView, onClose, reload }) {
+function NotifsModal({ me, data, setView, onClose, reload, openTask }) {
   const { commentaires, tasks, users } = data;
   const uById = Object.fromEntries(users.map((u) => [u.id, u]));
   const tById = Object.fromEntries(tasks.map((t) => [t.id, t]));
   const unread = commentaires.filter((c) => (f(c, "Mentions") || []).includes(me.id) && !String(f(c, "Lu par") || "").includes(me.id)).sort((a, b) => String(f(b, "Date")).localeCompare(String(f(a, "Date"))));
-  const goTo = async (c) => { const lu = String(f(c, "Lu par") || ""); try { await db({ action: "update", table: "Commentaires", recordId: c.id, fields: { "Lu par": lu ? lu + "," + me.id : me.id } }); } catch (e) {} setView("taches"); onClose(); reload(); };
+  const goTo = async (c) => { const lu = String(f(c, "Lu par") || ""); try { await db({ action: "update", table: "Commentaires", recordId: c.id, fields: { "Lu par": lu ? lu + "," + me.id : me.id } }); } catch (e) {} reload(); openTask((f(c, "Tâche") || [])[0]); };
   return (
     <Modal onClose={onClose}>
       <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 12 }}>Mes notifications</div>
@@ -917,6 +917,75 @@ function NotifsModal({ me, data, setView, onClose, reload }) {
             <button className="btn btn-ghost" style={{ fontSize: 12, padding: "6px 11px" }} onClick={() => goTo(c)}>Voir la tâche</button>
           </div>;
         })}
+    </Modal>
+  );
+}
+
+function TaskDetail({ taskId, me, data, isAdmin, onClose, reload }) {
+  const { tasks, users, poles, commentaires } = data;
+  const t = tasks.find((x) => x.id === taskId);
+  const uById = Object.fromEntries(users.map((u) => [u.id, u]));
+  const pById = Object.fromEntries(poles.map((p) => [p.id, p]));
+  const [busy, setBusy] = useState(false);
+  const [editDesc, setEditDesc] = useState(false);
+  const [desc, setDesc] = useState(t ? (f(t, "Description") || "") : "");
+  if (!t) return null;
+  const pole = pById[(f(t, "Pôle") || [])[0]];
+  const due = dueInfo(f(t, "Échéance"));
+  const assignes = (f(t, "Assignés") || []);
+  const isMine = assignes.includes(me.id);
+  const statut = f(t, "Statut") || "À faire";
+  const isSocle = f(t, "Type") === "Socle";
+  const canDelete = isSocle ? isAdmin : (isAdmin || (f(t, "Créé par") || []).includes(me.id));
+  const coms = (commentaires || []).filter((c) => (f(c, "Tâche") || []).includes(t.id)).sort((a, b) => String(f(a, "Date")).localeCompare(String(f(b, "Date"))));
+  const upd = async (fields) => { setBusy(true); try { await db({ action: "update", table: "Tâches", recordId: t.id, fields }); await reload(); } catch (e) { alert("Erreur : " + e.message); } setBusy(false); };
+  const stColor = statut === "Fait" ? OK : statut === "En cours" ? "#B8860B" : MUT;
+  return (
+    <Modal onClose={onClose}>
+      <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap", marginBottom: 8 }}>
+        {pole && <span className="tag" style={{ background: POLE_COLORS[f(pole, "Identifiant")] || BLACK }}>{f(pole, "Pôles")}</span>}
+        {isSocle && <span className="chip" style={{ background: "#EDE7F6", color: "#5E35B1" }}>Socle</span>}
+        {due && <span className="chip" style={{ background: due.color + "1f", color: due.color }}>{due.label}</span>}
+      </div>
+      <div style={{ fontSize: 19, fontWeight: 700, color: TEXT, marginBottom: 12 }}>{f(t, "Titre")}</div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 14 }}>
+        <button className="btn btn-ghost" style={{ color: stColor, borderColor: stColor + "55", fontSize: 12.5 }} disabled={busy} onClick={() => upd({ "Statut": statut === "À faire" ? "En cours" : statut === "En cours" ? "Fait" : "À faire" })}>● {statut}</button>
+        {isMine ? <button className="btn btn-ghost" style={{ fontSize: 12.5 }} disabled={busy} onClick={() => upd({ "Assignés": assignes.filter((id) => id !== me.id) })}>Me retirer</button>
+          : <button className="btn btn-dark" style={{ fontSize: 12.5 }} disabled={busy} onClick={() => upd({ "Assignés": Array.from(new Set([...assignes, me.id])) })}>Je prends</button>}
+        <button className="btn btn-ghost" style={{ fontSize: 12.5 }} disabled={busy} onClick={() => upd({ "Besoin d'aide": !f(t, "Besoin d'aide") })}>{f(t, "Besoin d'aide") ? "Aide ✓" : "Besoin d'aide"}</button>
+        <div style={{ display: "flex", marginLeft: "auto", alignItems: "center", gap: 5 }}>
+          {assignes.map((id) => uById[id]).filter(Boolean).map((u, i) => <div key={u.id} title={fullName(u)} style={{ marginLeft: i ? -8 : 0 }}><Avatar u={u} size={26} /></div>)}
+        </div>
+      </div>
+      <div className="lbl" style={{ display: "flex", alignItems: "center", gap: 8 }}>Description {!editDesc && <button className="btn btn-ghost" style={{ fontSize: 11.5, padding: "3px 9px" }} onClick={() => setEditDesc(true)}>{f(t, "Description") ? "Modifier" : "Ajouter"}</button>}</div>
+      {editDesc ? (
+        <div>
+          <textarea className="ta" value={desc} onChange={(e) => setDesc(e.target.value)} autoFocus />
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <button className="btn btn-ghost" style={{ fontSize: 12.5 }} onClick={() => { setDesc(f(t, "Description") || ""); setEditDesc(false); }}>Annuler</button>
+            <button className="btn btn-red" style={{ fontSize: 12.5 }} disabled={busy} onClick={async () => { await upd({ "Description": desc }); setEditDesc(false); }}>Enregistrer</button>
+          </div>
+        </div>
+      ) : <div style={{ fontSize: 13.5, color: f(t, "Description") ? TEXT : MUT, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>{f(t, "Description") || "Aucune description."}</div>}
+      <div style={{ borderTop: "1px solid " + BORDER, marginTop: 16, paddingTop: 14 }}>
+        <div className="lbl">Suivi & commentaires</div>
+        {coms.length === 0 ? <div style={{ fontSize: 12.5, color: MUT, marginBottom: 10 }}>Aucune action notée pour le moment.</div> :
+          coms.map((c) => {
+            const au = uById[(f(c, "Auteur") || [])[0]];
+            return <div key={c.id} style={{ display: "flex", gap: 9, marginBottom: 10 }}>
+              <Avatar u={au} size={28} />
+              <div style={{ background: "#F4F6F8", borderRadius: 12, padding: "8px 11px", flex: 1 }}>
+                <div style={{ fontSize: 12, color: MUT, marginBottom: 2 }}>{au ? fullName(au) : "?"}</div>
+                <div style={{ fontSize: 13.5, color: TEXT, whiteSpace: "pre-wrap" }}>{renderMentions(f(c, "Texte"))}</div>
+              </div>
+            </div>;
+          })}
+        <CommentBox task={t} me={me} users={users} reload={reload} />
+      </div>
+      <div style={{ display: "flex", gap: 9, marginTop: 16, flexWrap: "wrap" }}>
+        <button className="btn btn-ghost" onClick={onClose}>Fermer</button>
+        {canDelete && <button className="btn btn-ghost" style={{ marginLeft: "auto", color: RED, borderColor: "#F0C7C3" }} disabled={busy} onClick={async () => { if (!confirm("Supprimer cette tâche ?")) return; setBusy(true); try { await db({ action: "delete", table: "Tâches", recordId: t.id }); await reload(); onClose(); } catch (e) { alert("Erreur : " + e.message); setBusy(false); } }}>Supprimer</button>}
+      </div>
     </Modal>
   );
 }
@@ -976,15 +1045,16 @@ export default function App() {
       <style>{CSS}</style>
       <Header me={me} view={view} setView={setView} isAdmin={isAdmin} onLogout={logout} unread={unread} onBell={() => setModal({ type: "notifs" })} />
       <div style={{ maxWidth: 920, margin: "0 auto", padding: "22px 16px 60px" }}>
-        {view === "dash" && <Dashboard me={me} data={data} setView={setView} openNewTask={() => setModal({ type: "task", pole: (f(me, "Pôle") || [])[0] || "" })} openNewSujet={() => setModal({ type: "sujet" })} />}
-        {view === "taches" && <TasksView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewTask={(pole) => setModal({ type: "task", pole })} />}
+        {view === "dash" && <Dashboard me={me} data={data} setView={setView} openNewTask={() => setModal({ type: "task", pole: (f(me, "Pôle") || [])[0] || "" })} openNewSujet={() => setModal({ type: "sujet" })} openTask={(id) => setModal({ type: "taskDetail", id })} />}
+        {view === "taches" && <TasksView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewTask={(pole) => setModal({ type: "task", pole })} openTask={(id) => setModal({ type: "taskDetail", id })} />}
         {view === "ca" && <CAView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewSujet={() => setModal({ type: "sujet" })} openNewMeeting={() => setModal({ type: "meeting" })} openMeeting={(id) => setModal({ type: "meetingDetail", id })} />}
         {view === "annuaire" && <Annuaire data={data} />}
         {view === "admin" && isAdmin && <AdminUsers me={me} data={data} reload={reload} />}
       </div>
       {modal && modal.type === "task" && <NewTask me={me} data={data} isAdmin={isAdmin} initialPole={modal.pole} onClose={() => setModal(null)} reload={reload} />}
       {modal && modal.type === "sujet" && <NewSujet me={me} data={data} onClose={() => setModal(null)} reload={reload} />}
-      {modal && modal.type === "notifs" && <NotifsModal me={me} data={data} setView={setView} onClose={() => setModal(null)} reload={reload} />}
+      {modal && modal.type === "notifs" && <NotifsModal me={me} data={data} setView={setView} onClose={() => setModal(null)} reload={reload} openTask={(id) => setModal({ type: "taskDetail", id })} />}
+      {modal && modal.type === "taskDetail" && <TaskDetail taskId={modal.id} me={me} data={data} isAdmin={isAdmin} onClose={() => setModal(null)} reload={reload} />}
       {modal && modal.type === "meeting" && <NewMeeting onClose={() => setModal(null)} reload={reload} />}
       {modal && modal.type === "meetingDetail" && <MeetingDetail meetingId={modal.id} me={me} data={data} isAdmin={isAdmin} onClose={() => setModal(null)} reload={reload} />}
     </div>
