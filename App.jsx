@@ -55,7 +55,7 @@ html{overflow-x:clip;}body{margin:0;font-family:'Manrope',system-ui,sans-serif;o
 .appbrand{display:flex;align-items:center;gap:12px;min-width:0;}
 @media(min-width:761px){.appheader{display:grid;grid-template-columns:1fr auto 1fr;}.appnav{justify-self:center;}.appactions{justify-self:end;}}
 .appnav::-webkit-scrollbar{display:none;}
-.bottomnav{display:none;position:fixed;left:0;right:0;bottom:0;z-index:40;background-color:#16110f;background-image:linear-gradient(rgba(16,11,12,.62),rgba(16,11,12,.80)),url(/bandeau.jpg);background-size:cover;background-position:center;padding:8px 6px calc(8px + env(safe-area-inset-bottom));justify-content:space-around;box-shadow:0 -4px 18px rgba(0,0,0,.30);}
+.bottomnav{display:none;position:fixed;left:0;right:0;bottom:0;z-index:40;background-color:#16110f;background-image:linear-gradient(rgba(16,11,12,.52),rgba(16,11,12,.72)),url(/bandeau.jpg);background-size:cover;background-position:center 73%;padding:8px 6px calc(8px + env(safe-area-inset-bottom));justify-content:space-around;box-shadow:0 -4px 18px rgba(0,0,0,.30);}
 .bottomnav button{flex:1;background:none;border:none;display:flex;flex-direction:column;align-items:center;gap:3px;color:#C7CACF;font-family:inherit;font-size:10.5px;font-weight:600;cursor:pointer;padding:4px 0;}
 .bottomnav button.on{color:#F5C518;}
 .bottomnav button i{font-size:21px;}
