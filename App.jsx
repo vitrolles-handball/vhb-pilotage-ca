@@ -49,9 +49,9 @@ html{overflow-x:clip;}body{margin:0;font-family:'Manrope',system-ui,sans-serif;o
 .detail-grid{display:grid;grid-template-columns:1fr;gap:18px;align-items:start;}
 @media(min-width:1000px){.detail-grid{grid-template-columns:1.65fr 1fr;gap:22px;}}
 @media(max-width:760px){.wrap{padding:14px 12px 104px;}}
-.appheader{padding:12px 20px;display:flex;flex-direction:column;gap:10px;}
-.appheader-top{display:flex;align-items:center;gap:12px;}
-.appnav{display:inline-flex;gap:2px;background:rgba(255,255,255,.08);border-radius:30px;padding:4px;max-width:100%;overflow-x:auto;align-self:flex-start;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+.appheader{padding:12px 22px;display:flex;align-items:center;gap:14px;}
+.appactions{display:flex;align-items:center;gap:8px;margin-left:auto;}
+.appnav{display:inline-flex;gap:2px;background:rgba(255,255,255,.08);border-radius:30px;padding:4px;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
 .appnav::-webkit-scrollbar{display:none;}
 .bottomnav{display:none;position:fixed;left:0;right:0;bottom:0;z-index:40;background-color:#16110f;background-image:linear-gradient(rgba(16,11,12,.62),rgba(16,11,12,.80)),url(/bandeau.jpg);background-size:cover;background-position:center;padding:8px 6px calc(8px + env(safe-area-inset-bottom));justify-content:space-around;box-shadow:0 -4px 18px rgba(0,0,0,.30);}
 .bottomnav button{flex:1;background:none;border:none;display:flex;flex-direction:column;align-items:center;gap:3px;color:#C7CACF;font-family:inherit;font-size:10.5px;font-weight:600;cursor:pointer;padding:4px 0;}
@@ -246,23 +246,21 @@ function Header({ me, view, setView, isAdmin, onLogout, unread, onBell, onProfil
   const tabs = [["dash", "Accueil"], ["taches", "Tâches"], ["ca", "Réunions"], ["annuaire", "Annuaire"]];
   return (
     <header className="appheader" style={{ backgroundColor: "#E8590C", backgroundImage: "linear-gradient(rgba(28,10,0,.22), rgba(28,10,0,.36)), url(/accent.jpg)", backgroundSize: "cover", backgroundPosition: "center", position: "sticky", top: 0, zIndex: 30, boxShadow: "0 2px 18px rgba(0,0,0,.22)" }}>
-      <div className="appheader-top">
-        <img src={LOGO} width={40} height={40} alt="VHB" style={{ cursor: "pointer", flex: "0 0 auto", filter: "drop-shadow(0 4px 10px rgba(214,40,40,.35))" }} onClick={() => setView("dash")} />
-        <div style={{ lineHeight: 1.12, minWidth: 0 }}>
-          <div style={{ fontSize: 15.5, color: "#fff", fontWeight: 800, letterSpacing: "-.01em" }}>VHB Pilotage</div>
-          <div style={{ fontSize: 10.5, color: "#FFFFFF", fontWeight: 600 }}>Tous Hand'semble</div>
-        </div>
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8, flex: "0 0 auto" }}>
-          <button onClick={onBell} title="Notifications" style={{ position: "relative", background: "rgba(255,255,255,.08)", border: "none", color: "#E9EAEC", width: 36, height: 36, borderRadius: 11, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}><i className="ti ti-bell" style={{ fontSize: 18 }} />{unread > 0 && <span style={{ position: "absolute", top: -5, right: -5, background: RED, color: "#fff", fontSize: 10, fontWeight: 700, borderRadius: 10, minWidth: 17, height: 17, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>{unread}</span>}</button>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", flex: "0 0 auto" }} onClick={onProfile} title="Mon espace">
-            <Avatar u={me} size={32} />
-            <span className="hide-xs" style={{ fontSize: 12.5, color: "#E9EAEC", fontWeight: 500 }}>{f(me, "Prénom") || "Moi"}</span>
-          </div>
-        </div>
+      <img src={LOGO} width={40} height={40} alt="VHB" style={{ cursor: "pointer", flex: "0 0 auto", filter: "drop-shadow(0 4px 10px rgba(214,40,40,.35))" }} onClick={() => setView("dash")} />
+      <div style={{ lineHeight: 1.12, minWidth: 0 }}>
+        <div style={{ fontSize: 16, color: "#fff", fontWeight: 800, letterSpacing: "-.01em" }}>VHB Pilotage</div>
+        <div style={{ fontSize: 10.5, color: "#FFFFFF", fontWeight: 600 }}>Tous Hand'semble</div>
       </div>
       <nav className="appnav">
         {tabs.map(([v, l]) => <button key={v} className={"navb" + (view === v ? " on" : "")} onClick={() => setView(v)}>{l}</button>)}
       </nav>
+      <div className="appactions">
+        <button onClick={onBell} title="Notifications" style={{ position: "relative", background: "rgba(255,255,255,.08)", border: "none", color: "#E9EAEC", width: 36, height: 36, borderRadius: 11, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}><i className="ti ti-bell" style={{ fontSize: 18 }} />{unread > 0 && <span style={{ position: "absolute", top: -5, right: -5, background: RED, color: "#fff", fontSize: 10, fontWeight: 700, borderRadius: 10, minWidth: 17, height: 17, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>{unread}</span>}</button>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", flex: "0 0 auto" }} onClick={onProfile} title="Mon espace">
+          <Avatar u={me} size={32} />
+          <span className="hide-xs" style={{ fontSize: 12.5, color: "#E9EAEC", fontWeight: 500 }}>{f(me, "Prénom") || "Moi"}</span>
+        </div>
+      </div>
     </header>
   );
 }
@@ -325,13 +323,13 @@ function Dashboard({ me, data, setView, openNewTask, openNewSujet, openTask, rel
         </div>
       )}
 
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))", gap: 14, marginBottom: 18 }}>
+        <StatCard icon="ti-checklist" color={RED} n={mine.length} label="mes tâches en cours" sub="à suivre" delay=".06s" onClick={() => setView("taches")} />
+        <StatCard icon="ti-flame" color="#C99700" n={proches.length} label="échéances proches" sub={rouge + " urgent · " + orange + " bientôt"} delay=".12s" onClick={() => setView("taches")} />
+        <StatCard icon="ti-users-group" color="#1B5E9B" n={enCours.length} label="tâches du club en cours" sub="en mouvement" delay=".18s" onClick={() => setView("taches")} />
+      </div>
       <div className="dash-grid">
         <div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 13, marginBottom: 16 }}>
-            <StatCard icon="ti-checklist" color={RED} n={mine.length} label="mes tâches en cours" sub="à suivre" delay=".06s" onClick={() => setView("taches")} />
-            <StatCard icon="ti-flame" color="#C99700" n={proches.length} label="échéances proches" sub={rouge + " urgent · " + orange + " bientôt"} delay=".12s" onClick={() => setView("taches")} />
-            <StatCard icon="ti-users-group" color="#1B5E9B" n={enCours.length} label="tâches du club en cours" sub="en mouvement" delay=".18s" onClick={() => setView("taches")} />
-          </div>
           <div className="card rise" style={{ padding: "18px 20px", marginBottom: 18, display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap", animationDelay: ".22s" }}>
             <svg width="78" height="78" viewBox="0 0 78 78" style={{ transform: "rotate(-90deg)", flex: "0 0 auto" }}>
               <circle cx="39" cy="39" r={R} fill="none" stroke="#EEF0F3" strokeWidth="9" />
