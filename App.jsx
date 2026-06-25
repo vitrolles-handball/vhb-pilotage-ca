@@ -902,25 +902,57 @@ function MeetingDetail({ meetingId, me, data, isAdmin, onClose, reload }) {
   const m = meetings.find((x) => x.id === meetingId);
   const [busy, setBusy] = useState(false);
   const [cr, setCr] = useState(m ? (f(m, "Compte-rendu") || "") : "");
+  const [edit, setEdit] = useState(false);
+  const [titre, setTitre] = useState(m ? (f(m, "Titre") || "") : "");
+  const [date, setDate] = useState(m ? (f(m, "Date") || "") : "");
+  const [heure, setHeure] = useState(m ? (f(m, "Heure") || "") : "");
+  const [lieu, setLieu] = useState(m ? (f(m, "Lieu") || "") : "");
   if (!m) return null;
   const past = f(m, "Statut") === "Passée";
   const linked = sujets.filter((s) => (f(s, "Réunion") || []).includes(m.id));
   const dispo = sujets.filter((s) => f(s, "Statut") !== "Traité" && !(f(s, "Réunion") || []).includes(m.id));
   const updM = async (fields) => { setBusy(true); try { await db({ action: "update", table: "Réunions", recordId: m.id, fields }); await reload(); } catch (e) { alert("Erreur : " + e.message); } setBusy(false); };
   const attach = async (s) => { try { await db({ action: "update", table: "Sujets CA", recordId: s.id, fields: { "Réunion": Array.from(new Set([...(f(s, "Réunion") || []), m.id])), "Statut": "En cours" } }); await reload(); } catch (e) { alert("Erreur : " + e.message); } };
+  const detach = async (s) => { if (!confirm("Retirer « " + (f(s, "Titre") || "ce sujet") + " » de l'ordre du jour ?")) return; setBusy(true); try { await db({ action: "update", table: "Sujets CA", recordId: s.id, fields: { "Réunion": (f(s, "Réunion") || []).filter((id) => id !== m.id), "Statut": "À traiter" } }); await reload(); } catch (e) { alert("Erreur : " + e.message); } setBusy(false); };
+  const saveEdit = async () => { if (!date) { alert("La date est obligatoire."); return; } if (!confirm("Enregistrer les modifications de la réunion ?")) return; await updM({ "Titre": titre.trim() || "Réunion du CA", "Date": date, "Heure": heure.trim(), "Lieu": lieu.trim() }); setEdit(false); };
+  const cancelMeeting = async () => { if (!confirm("Annuler définitivement cette réunion ? Les sujets de l'ordre du jour seront détachés et redeviendront « à traiter ».")) return; setBusy(true); try { for (const s of linked) { await db({ action: "update", table: "Sujets CA", recordId: s.id, fields: { "Réunion": (f(s, "Réunion") || []).filter((id) => id !== m.id), "Statut": "À traiter" } }); } await db({ action: "delete", table: "Réunions", recordId: m.id }); await reload(); onClose(); } catch (e) { alert("Erreur : " + e.message); setBusy(false); } };
   const buildCR = () => {
     const lines = linked.map((s) => "- " + f(s, "Titre") + (f(s, "Décision / notes") ? " : " + f(s, "Décision / notes") : ""));
     setCr((f(m, "Titre") || "Réunion du CA") + " - " + (f(m, "Date") || "") + "\n\n" + lines.join("\n"));
   };
   return (
     <Modal onClose={onClose}>
-      <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 2 }}>{f(m, "Titre") || "Réunion du CA"}</div>
-      <div style={{ fontSize: 13, color: MUT, marginBottom: 14 }}>{f(m, "Date")}{f(m, "Heure") ? " · " + f(m, "Heure") : ""}{f(m, "Lieu") ? " · " + f(m, "Lieu") : ""}{past ? " · clôturée" : ""}</div>
+      {edit ? (
+        <div style={{ marginBottom: 6 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>Modifier la réunion</div>
+          <label className="lbl">Titre</label><input className="inp" value={titre} onChange={(e) => setTitre(e.target.value)} />
+          <div style={{ display: "flex", gap: 11, marginTop: 11 }}>
+            <div style={{ flex: 1 }}><label className="lbl">Date</label><input className="inp" type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
+            <div style={{ flex: 1 }}><label className="lbl">Heure</label><input className="inp" type="time" value={heure} onChange={(e) => setHeure(e.target.value)} /></div>
+          </div>
+          <div style={{ marginTop: 11 }}><label className="lbl">Lieu (facultatif)</label><input className="inp" value={lieu} onChange={(e) => setLieu(e.target.value)} /></div>
+          <div style={{ display: "flex", gap: 9, marginTop: 14, flexWrap: "wrap" }}>
+            <button className="btn btn-ghost" disabled={busy} onClick={() => setEdit(false)}>Annuler</button>
+            <button className="btn btn-dark" disabled={busy} onClick={saveEdit}>Enregistrer</button>
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 14 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 2 }}>{f(m, "Titre") || "Réunion du CA"}</div>
+            <div style={{ fontSize: 13, color: MUT }}>{f(m, "Date")}{f(m, "Heure") ? " · " + f(m, "Heure") : ""}{f(m, "Lieu") ? " · " + f(m, "Lieu") : ""}{past ? " · clôturée" : ""}</div>
+          </div>
+          {isAdmin && !past && <button className="btn btn-ghost" style={{ fontSize: 12, padding: "6px 11px" }} onClick={() => setEdit(true)}><i className="ti ti-pencil" />Modifier</button>}
+        </div>
+      )}
       <div className="cond" style={{ fontSize: 12.5, color: MUT, fontWeight: 700, marginBottom: 8 }}>Ordre du jour ({linked.length})</div>
       {linked.length === 0 ? <Empty t="Aucun sujet rattaché pour l'instant." /> :
-        linked.map((s) => <div key={s.id} className="card" style={{ marginBottom: 7, padding: "10px 13px" }}>
-          <div style={{ fontSize: 13.5, fontWeight: 500 }}>{f(s, "Titre")} <span className="chip" style={{ background: "#EEF0F3", color: "#444" }}>{f(s, "Statut")}</span></div>
-          {f(s, "Décision / notes") && <div style={{ fontSize: 12.5, color: MUT, marginTop: 4 }}>{f(s, "Décision / notes")}</div>}
+        linked.map((s) => <div key={s.id} className="card" style={{ marginBottom: 7, padding: "10px 13px", display: "flex", alignItems: "flex-start", gap: 10 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 500 }}>{f(s, "Titre")} <span className="chip" style={{ background: "#EEF0F3", color: "#444" }}>{f(s, "Statut")}</span></div>
+            {f(s, "Décision / notes") && <div style={{ fontSize: 12.5, color: MUT, marginTop: 4 }}>{f(s, "Décision / notes")}</div>}
+          </div>
+          {!past && <button className="btn btn-ghost" style={{ fontSize: 12, padding: "5px 10px", color: RED, borderColor: "#F0C7C3" }} disabled={busy} onClick={() => detach(s)}>Retirer</button>}
         </div>)}
       {!past && dispo.length > 0 && (
         <div>
@@ -933,11 +965,12 @@ function MeetingDetail({ meetingId, me, data, isAdmin, onClose, reload }) {
       )}
       <div className="cond" style={{ fontSize: 12.5, color: MUT, fontWeight: 700, margin: "16px 0 8px", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>Compte-rendu <button className="btn btn-ghost" style={{ fontSize: 11.5, padding: "4px 9px" }} onClick={buildCR}>Générer depuis les sujets</button></div>
       <textarea className="ta" style={{ minHeight: 120 }} value={cr} onChange={(e) => setCr(e.target.value)} />
-      <div style={{ display: "flex", gap: 9, marginTop: 14, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 9, marginTop: 14, flexWrap: "wrap", alignItems: "center" }}>
         <button className="btn btn-ghost" onClick={onClose}>Fermer</button>
         <button className="btn btn-dark" disabled={busy} onClick={() => updM({ "Compte-rendu": cr })}>Enregistrer le CR</button>
-        {isAdmin && !past && <button className="btn btn-red" style={{ marginLeft: "auto" }} disabled={busy} onClick={() => updM({ "Statut": "Passée", "Compte-rendu": cr })}>Clôturer</button>}
-        {isAdmin && past && <button className="btn btn-ghost" style={{ marginLeft: "auto" }} disabled={busy} onClick={() => updM({ "Statut": "À venir" })}>Rouvrir</button>}
+        {isAdmin && !past && <button className="btn btn-yellow" disabled={busy} onClick={() => { if (confirm("Clôturer cette réunion ?")) updM({ "Statut": "Passée", "Compte-rendu": cr }); }}>Clôturer</button>}
+        {isAdmin && past && <button className="btn btn-ghost" disabled={busy} onClick={() => updM({ "Statut": "À venir" })}>Rouvrir</button>}
+        {isAdmin && <button className="btn btn-ghost" style={{ marginLeft: "auto", color: RED, borderColor: "#F0C7C3" }} disabled={busy} onClick={cancelMeeting}><i className="ti ti-trash" />Annuler la réunion</button>}
       </div>
     </Modal>
   );
