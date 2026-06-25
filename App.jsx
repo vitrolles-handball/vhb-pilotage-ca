@@ -249,7 +249,29 @@ function Header({ me, view, setView, isAdmin, onLogout, unread, onBell, onProfil
   );
 }
 
-function Dashboard({ me, data, setView, openNewTask, openNewSujet, openTask }) {
+function HelpCard({ t, me, data, reload, openTask, poleTag }) {
+  const [busy, setBusy] = useState(false);
+  const msg = f(t, "Message aide");
+  const resp = (data.commentaires || []).filter((c) => (f(c, "Tâche") || []).includes(t.id) && String(f(c, "Texte") || "").includes("Je suis dispo"));
+  const already = resp.some((c) => (f(c, "Auteur") || []).includes(me.id));
+  const sayDispo = async () => { setBusy(true); try { await db({ action: "create", table: "Commentaires", fields: { "Texte": "✋ Je suis dispo pour aider !", "Tâche": [t.id], "Auteur": [me.id], "Date": new Date().toISOString() } }); await reload(); } catch (e) { alert("Erreur : " + e.message); } setBusy(false); };
+  return (
+    <div className="card" style={{ marginBottom: 9, padding: "14px 16px", borderLeft: "4px solid " + RED, background: "#FCF0EF" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap", marginBottom: msg ? 7 : 0 }}>
+        {poleTag(t)}
+        <span style={{ fontSize: 14.5, fontWeight: 700, color: TEXT, flex: 1, minWidth: 140, cursor: "pointer" }} onClick={() => openTask(t.id)}>{f(t, "Titre")}</span>
+      </div>
+      {msg && <div style={{ fontSize: 13.5, color: TEXT, lineHeight: 1.5, marginBottom: 10, whiteSpace: "pre-wrap" }}>{msg}</div>}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        {already ? <span className="chip" style={{ background: "#E4F6E9", color: OK }}><i className="ti ti-check" />Tu es dispo</span>
+          : <button className="btn btn-dark" style={{ fontSize: 12.5, padding: "6px 12px" }} disabled={busy} onClick={sayDispo}><i className="ti ti-check" />Je suis dispo</button>}
+        {resp.length > 0 && <span style={{ fontSize: 12.5, color: MUT }}>{resp.length} dispo{resp.length > 1 ? "s" : ""}</span>}
+        <button className="btn btn-ghost" style={{ marginLeft: "auto", fontSize: 12.5, padding: "6px 12px" }} onClick={() => openTask(t.id)}>Ouvrir</button>
+      </div>
+    </div>
+  );
+}
+function Dashboard({ me, data, setView, openNewTask, openNewSujet, openTask, reload }) {
   const { tasks, users, poles, meetings } = data;
   const uById = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users]);
   const pById = useMemo(() => Object.fromEntries(poles.map((p) => [p.id, p])), [poles]);
@@ -309,7 +331,7 @@ function Dashboard({ me, data, setView, openNewTask, openNewSujet, openTask }) {
           </Section>
           {aides.length > 0 && (
             <Section title="On demande un coup de main">
-              {aides.map((t) => <RowTask key={t.id} t={t} uById={uById} poleTag={poleTag} help onClick={() => openTask(t.id)} />)}
+              {aides.map((t) => <HelpCard key={t.id} t={t} me={me} data={data} reload={reload} openTask={openTask} poleTag={poleTag} />)}
             </Section>
           )}
         </div>
@@ -1034,6 +1056,8 @@ function TaskDetailPage({ taskId, me, data, isAdmin, onClose, reload }) {
   const [editDesc, setEditDesc] = useState(false);
   const [desc, setDesc] = useState(t ? (f(t, "Description") || "") : "");
   const [uploading, setUploading] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [helpMsg, setHelpMsg] = useState("");
   if (!t) return <div className="fade"><button className="btn btn-ghost" onClick={onClose}>Retour</button></div>;
   const pole = pById[(f(t, "Pôle") || [])[0]];
   const due = dueInfo(f(t, "Échéance"));
@@ -1052,6 +1076,8 @@ function TaskDetailPage({ taskId, me, data, isAdmin, onClose, reload }) {
     setUploading(false);
   };
   const toCA = async () => { if (!confirm("Ajouter cette tâche comme sujet à aborder au prochain CA ?")) return; setBusy(true); try { const sf = { "Titre": f(t, "Titre"), "Description": f(t, "Description") || "", "Statut": "À traiter", "Proposé par": [me.id] }; const pid = (f(t, "Pôle") || [])[0]; if (pid) sf["Pôle"] = [pid]; await db({ action: "create", table: "Sujets CA", fields: sf }); await reload(); alert("Sujet ajouté au CA ✓"); } catch (e) { alert("Erreur : " + e.message); } setBusy(false); };
+  const raiseHelp = async () => { if (!helpMsg.trim()) return; await upd({ "Besoin d'aide": true, "Message aide": helpMsg.trim() }); setHelpOpen(false); setHelpMsg(""); };
+  const sayDispo = async () => { setBusy(true); try { await db({ action: "create", table: "Commentaires", fields: { "Texte": "✋ Je suis dispo pour aider !", "Tâche": [t.id], "Auteur": [me.id], "Date": new Date().toISOString() } }); await reload(); } catch (e) { alert("Erreur : " + e.message); } setBusy(false); };
   const stColor = statut === "Fait" ? OK : statut === "En cours" ? "#B8860B" : MUT;
   const segC = (v) => (v === "Fait" ? OK : v === "En cours" ? "#B8860B" : MUT);
   return (
@@ -1068,6 +1094,17 @@ function TaskDetailPage({ taskId, me, data, isAdmin, onClose, reload }) {
       </div>
       <div className="detail-grid">
         <div>
+          {f(t, "Besoin d'aide") && (
+            <div className="card" style={{ marginBottom: 16, padding: "18px 20px", background: "#FCF0EF", border: "1px solid #F3C9C5" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: f(t, "Message aide") ? 8 : 0 }}>
+                <i className="ti ti-alert-triangle" style={{ color: RED, fontSize: 20 }} aria-hidden="true" />
+                <div style={{ fontSize: 15, fontWeight: 700, color: RED }}>Coup de main demandé</div>
+                <button className="btn btn-ghost" style={{ marginLeft: "auto", fontSize: 12, padding: "5px 10px" }} disabled={busy} onClick={() => upd({ "Besoin d'aide": false, "Message aide": "" })}>Lever l'alerte</button>
+              </div>
+              {f(t, "Message aide") && <div style={{ fontSize: 14, color: TEXT, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>{f(t, "Message aide")}</div>}
+              <button className="btn btn-dark" style={{ marginTop: 12 }} disabled={busy} onClick={sayDispo}><i className="ti ti-check" />Je suis dispo</button>
+            </div>
+          )}
           <div className="card" style={{ marginBottom: 16, padding: "24px 26px" }}>
             <div className="lbl" style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 0 }}>Description {!editDesc && <button className="btn btn-ghost" style={{ fontSize: 11.5, padding: "3px 9px" }} onClick={() => setEditDesc(true)}>{f(t, "Description") ? "Modifier" : "Ajouter"}</button>}</div>
             {editDesc ? (
@@ -1115,8 +1152,14 @@ function TaskDetailPage({ taskId, me, data, isAdmin, onClose, reload }) {
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 14 }}>
               {isMine ? <button className="btn btn-ghost" disabled={busy} onClick={() => upd({ "Assignés": assignes.filter((id) => id !== me.id) })}>Me retirer</button>
                 : <button className="btn btn-dark" disabled={busy} onClick={() => upd({ "Assignés": Array.from(new Set([...assignes, me.id])) })}>Je prends</button>}
-              <button className="btn btn-ghost" disabled={busy} onClick={() => upd({ "Besoin d'aide": !f(t, "Besoin d'aide") })}>{f(t, "Besoin d'aide") ? "Aide ✓" : "Besoin d'aide"}</button>
+              {f(t, "Besoin d'aide")
+                ? <button className="btn btn-ghost" disabled={busy} onClick={() => upd({ "Besoin d'aide": false, "Message aide": "" })}>Lever l'aide</button>
+                : <button className="btn btn-ghost" disabled={busy} onClick={() => setHelpOpen((v) => !v)}><i className="ti ti-alert-triangle" />Demander un coup de main</button>}
             </div>
+            {helpOpen && !f(t, "Besoin d'aide") && <div style={{ marginTop: 10 }}>
+              <textarea className="ta" style={{ minHeight: 70 }} placeholder="Explique ce qui bloque ou ce qui presse (échéance proche, besoin de renfort…)" value={helpMsg} onChange={(e) => setHelpMsg(e.target.value)} />
+              <button className="btn btn-red" style={{ marginTop: 8, fontSize: 12.5 }} disabled={busy} onClick={raiseHelp}>Lancer l'alerte</button>
+            </div>}
             <div className="lbl" style={{ marginTop: 18 }}>Affecté à</div>
             <AssigneePicker assignes={assignes} users={users} busy={busy} onChange={(next) => upd({ "Assignés": next })} />
             <div className="lbl" style={{ marginTop: 18 }}>Échéance</div>
@@ -1236,7 +1279,7 @@ export default function App() {
       <Header me={me} view={view} setView={(v) => { setTaskOpen(null); setView(v); }} isAdmin={isAdmin} onLogout={logout} unread={unread} onBell={() => setModal({ type: "notifs" })} onProfile={() => setModal({ type: "profile" })} />
       <div className="wrap">
         {taskOpen && <TaskDetailPage taskId={taskOpen} me={me} data={data} isAdmin={isAdmin} onClose={() => setTaskOpen(null)} reload={reload} />}
-        {!taskOpen && view === "dash" && <Dashboard me={me} data={data} setView={setView} openNewTask={() => setModal({ type: "task", pole: (f(me, "Pôle") || [])[0] || "" })} openNewSujet={() => setModal({ type: "sujet" })} openTask={(id) => setTaskOpen(id)} />}
+        {!taskOpen && view === "dash" && <Dashboard me={me} data={data} setView={setView} openNewTask={() => setModal({ type: "task", pole: (f(me, "Pôle") || [])[0] || "" })} openNewSujet={() => setModal({ type: "sujet" })} openTask={(id) => setTaskOpen(id)} reload={reload} />}
         {!taskOpen && view === "taches" && <TasksView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewTask={(pole) => setModal({ type: "task", pole })} openTask={(id) => setTaskOpen(id)} />}
         {!taskOpen && view === "ca" && <CAView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewSujet={() => setModal({ type: "sujet" })} openNewMeeting={() => setModal({ type: "meeting" })} openMeeting={(id) => setModal({ type: "meetingDetail", id })} />}
         {!taskOpen && view === "annuaire" && <Annuaire data={data} />}
