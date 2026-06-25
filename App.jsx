@@ -102,11 +102,16 @@ function dueInfo(dateStr) {
   if (days <= 10) return { label: "Dans " + days + "j", color: "#B8860B", urg: 1 };
   return { label: "Dans " + days + "j", color: MUT, urg: 0 };
 }
+function fmtDate(s) {
+  if (!s) return "";
+  const d = String(s).slice(0, 10).split("-");
+  return d.length === 3 ? d[2] + "/" + d[1] + "/" + d[0] : String(s);
+}
 function fmtDateTime(iso) {
   if (!iso) return "";
   const d = new Date(iso); if (isNaN(d.getTime())) return "";
   const p = (n) => String(n).padStart(2, "0");
-  return p(d.getDate()) + "/" + p(d.getMonth() + 1) + " à " + p(d.getHours()) + "h" + p(d.getMinutes());
+  return p(d.getDate()) + "/" + p(d.getMonth() + 1) + "/" + d.getFullYear() + " à " + p(d.getHours()) + "h" + p(d.getMinutes());
 }
 function resizeImage(file, cb) {
   const reader = new FileReader();
@@ -319,7 +324,7 @@ function Dashboard({ me, data, setView, openNewTask, openNewSujet, openTask, rel
           <div style={{ width: 42, height: 42, borderRadius: 12, background: YELLOW, display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}><i className="ti ti-calendar-event" style={{ fontSize: 21, color: BLACK }} aria-hidden="true" /></div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 10.5, color: YELLOW, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em" }}>Prochain CA</div>
-            <div style={{ fontSize: 14, color: "#F0F1F2", fontWeight: 600 }}>{f(nextCA, "Date")}{f(nextCA, "Heure") ? " · " + f(nextCA, "Heure") : ""}{f(nextCA, "Lieu") ? " · " + f(nextCA, "Lieu") : ""}</div>
+            <div style={{ fontSize: 14, color: "#F0F1F2", fontWeight: 600 }}>{fmtDate(f(nextCA, "Date"))}{f(nextCA, "Heure") ? " · " + f(nextCA, "Heure") : ""}{f(nextCA, "Lieu") ? " · " + f(nextCA, "Lieu") : ""}</div>
             <div style={{ fontSize: 12, color: "#9aa0a6" }}>{caSujets.length} sujet{caSujets.length > 1 ? "s" : ""} à l'ordre du jour · touche pour préparer</div>
           </div>
           <button onClick={(e) => { e.stopPropagation(); openNewSujet({ meetingId: nextCA.id, pole: myPoleId || "" }); }} title="Proposer un sujet pour ce CA" style={{ background: YELLOW, border: "none", width: 34, height: 34, borderRadius: 10, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}><i className="ti ti-plus" style={{ fontSize: 18, color: BLACK }} aria-hidden="true" /></button>
@@ -941,7 +946,7 @@ function MeetingRow({ m, sujets, onClick, past }) {
       </div>
       <div style={{ flex: 1, minWidth: 140 }}>
         <div style={{ fontSize: 15, fontWeight: 600, color: TEXT }}>{f(m, "Titre") || "Réunion du CA"}</div>
-        <div style={{ fontSize: 12.5, color: MUT }}>{f(m, "Date")}{f(m, "Heure") ? " · " + f(m, "Heure") : ""}{f(m, "Lieu") ? " · " + f(m, "Lieu") : ""}</div>
+        <div style={{ fontSize: 12.5, color: MUT }}>{fmtDate(f(m, "Date"))}{f(m, "Heure") ? " · " + f(m, "Heure") : ""}{f(m, "Lieu") ? " · " + f(m, "Lieu") : ""}</div>
       </div>
       <span className="chip" style={{ background: past ? "#EEF0F3" : "#FEF6D8", color: past ? MUT : "#8A6D00" }}>{past ? "Passée" : "À venir"}{linked.length ? " · " + linked.length + " sujet" + (linked.length > 1 ? "s" : "") : ""}</span>
     </div>
@@ -996,7 +1001,7 @@ function MeetingDetail({ meetingId, me, data, isAdmin, onClose, reload }) {
   const cancelMeeting = async () => { if (!confirm("Annuler définitivement cette réunion ? Les sujets de l'ordre du jour seront détachés et redeviendront « à traiter ».")) return; setBusy(true); try { for (const s of linked) { await db({ action: "update", table: "Sujets CA", recordId: s.id, fields: { "Réunion": (f(s, "Réunion") || []).filter((id) => id !== m.id), "Statut": "À traiter" } }); } await db({ action: "delete", table: "Réunions", recordId: m.id }); await reload(); onClose(); } catch (e) { alert("Erreur : " + e.message); setBusy(false); } };
   const buildCR = () => {
     const lines = linked.map((s) => "- " + f(s, "Titre") + (f(s, "Décision / notes") ? " : " + f(s, "Décision / notes") : ""));
-    setCr((f(m, "Titre") || "Réunion du CA") + " - " + (f(m, "Date") || "") + "\n\n" + lines.join("\n"));
+    setCr((f(m, "Titre") || "Réunion du CA") + " - " + fmtDate(f(m, "Date")) + "\n\n" + lines.join("\n"));
   };
   return (
     <Modal onClose={onClose}>
@@ -1018,7 +1023,7 @@ function MeetingDetail({ meetingId, me, data, isAdmin, onClose, reload }) {
         <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 14 }}>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 2 }}>{f(m, "Titre") || "Réunion du CA"}</div>
-            <div style={{ fontSize: 13, color: MUT }}>{f(m, "Date")}{f(m, "Heure") ? " · " + f(m, "Heure") : ""}{f(m, "Lieu") ? " · " + f(m, "Lieu") : ""}{past ? " · clôturée" : ""}</div>
+            <div style={{ fontSize: 13, color: MUT }}>{fmtDate(f(m, "Date"))}{f(m, "Heure") ? " · " + f(m, "Heure") : ""}{f(m, "Lieu") ? " · " + f(m, "Lieu") : ""}{past ? " · clôturée" : ""}</div>
           </div>
           {isAdmin && !past && <button className="btn btn-ghost" style={{ fontSize: 12, padding: "6px 11px" }} onClick={() => setEdit(true)}><i className="ti ti-pencil" />Modifier</button>}
         </div>
