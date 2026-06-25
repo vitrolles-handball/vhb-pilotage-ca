@@ -17,7 +17,7 @@ const CSS = `
 body{margin:0;font-family:'Manrope',system-ui,sans-serif;}
 .cond{font-weight:700;letter-spacing:-.01em;}
 .display{font-weight:800;letter-spacing:-.02em;}
-.card{background:#fff;border:1px solid #ECEEF1;border-radius:20px;box-shadow:0 1px 2px rgba(20,22,30,.04);}
+.card{background:#fff;border:1px solid #ECEEF1;border-radius:20px;padding:16px 18px;box-shadow:0 1px 2px rgba(20,22,30,.04);}
 .lift{transition:transform .22s ease,box-shadow .22s ease;}
 .lift:hover{transform:translateY(-4px);box-shadow:0 16px 34px rgba(20,22,30,.12);}
 .rise{animation:vrise .55s cubic-bezier(.2,.7,.2,1) both;}
@@ -88,6 +88,13 @@ function resizeImage(file, cb) {
     img.src = e.target.result;
   };
   reader.readAsDataURL(file);
+}
+function readFileB64(file) {
+  return new Promise((resolve) => {
+    const r = new FileReader();
+    r.onload = () => { const x = String(r.result); const i = x.indexOf(","); resolve({ base64: x.slice(i + 1), filename: file.name, contentType: file.type || "application/octet-stream" }); };
+    r.readAsDataURL(file);
+  });
 }
 
 function Avatar({ u, size = 34 }) {
@@ -271,6 +278,27 @@ function Dashboard({ me, data, setView, openNewTask, openNewSujet }) {
         <button className="btn btn-red" onClick={openNewTask}><i className="ti ti-plus" />Nouvelle tâche</button>
       </div>
 
+      {(data.sujets || []).filter((x) => f(x, "Statut") !== "Traité").length > 0 && (
+        <Section title="Sujets du prochain CA">
+          {poles.map((p) => {
+            const list = (data.sujets || []).filter((x) => f(x, "Statut") !== "Traité" && (f(x, "Pôle") || [])[0] === p.id);
+            if (!list.length) return null;
+            const id = f(p, "Identifiant");
+            return <div key={p.id} style={{ marginBottom: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 6 }}>
+                <span style={{ width: 9, height: 9, borderRadius: "50%", background: POLE_COLORS[id] || MUT }} />
+                <span style={{ fontSize: 12.5, fontWeight: 700, color: TEXT }}>{f(p, "Pôles")}</span>
+                <span style={{ fontSize: 11.5, color: MUT }}>· {list.length}</span>
+              </div>
+              {list.map((x) => <div key={x.id} className="card lift" style={{ padding: "9px 13px", marginBottom: 6, display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 13.5, color: TEXT, flex: 1 }}>{f(x, "Titre")}</span>
+                {f(x, "Thème") && <span className="chip" style={{ background: "#EEF0F3", color: "#444" }}>{f(x, "Thème")}</span>}
+              </div>)}
+            </div>;
+          })}
+        </Section>
+      )}
+
       <Section title="Mes tâches">
         {mine.length === 0 ? <Empty t="Rien ne t'est assigné — prends une tâche pour donner un coup de main !" /> :
           mine.slice(0, 8).map((t) => <RowTask key={t.id} t={t} uById={uById} poleTag={poleTag} onClick={() => setView("taches")} />)}
@@ -436,8 +464,8 @@ function TaskCard({ t, me, uById, pById, users, isAdmin, reload }) {
 }
 
 function Modal({ children, onClose }) {
-  return <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(20,18,16,.5)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: 20, zIndex: 50, overflowY: "auto" }}>
-    <div onClick={(e) => e.stopPropagation()} className="fade card" style={{ maxWidth: 480, width: "100%", marginTop: 40 }}>{children}</div>
+  return <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(16,17,20,.55)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "6vh 16px 40px", zIndex: 100, overflowY: "auto" }}>
+    <div onClick={(e) => e.stopPropagation()} className="rise card" style={{ maxWidth: 480, width: "100%", padding: "22px 22px" }}>{children}</div>
   </div>;
 }
 function NewTask({ me, data, isAdmin, onClose, reload, initialPole }) {
@@ -502,13 +530,22 @@ function NewSujet({ me, data, onClose, reload }) {
   const [theme, setTheme] = useState("Divers");
   const [desc, setDesc] = useState("");
   const [pole, setPole] = useState("");
+  const [files, setFiles] = useState([]);
   const [busy, setBusy] = useState(false);
   const themes = ["Finances", "Sportif", "Événements", "Bénévoles", "Communication", "Administratif", "Partenariats", "Divers"];
   const save = async () => {
     if (!titre.trim()) return; setBusy(true);
     const fields = { "Titre": titre.trim(), "Thème": theme, "Description": desc.trim(), "Statut": "À traiter", "Proposé par": [me.id] };
     if (pole) fields["Pôle"] = [pole];
-    try { await db({ action: "create", table: "Sujets CA", fields }); await reload(); onClose(); } catch (e) { alert("Erreur : " + e.message); setBusy(false); }
+    try {
+      const j = await db({ action: "create", table: "Sujets CA", fields });
+      const recId = ((j.records || [])[0] || {}).id;
+      for (const file of files) {
+        const fb = await readFileB64(file);
+        await db({ action: "uploadAttachment", recordId: recId, field: "Documents", file: fb.base64, filename: fb.filename, contentType: fb.contentType });
+      }
+      await reload(); onClose();
+    } catch (e) { alert("Erreur : " + e.message); setBusy(false); }
   };
   return (
     <Modal onClose={onClose}>
@@ -520,6 +557,10 @@ function NewSujet({ me, data, onClose, reload }) {
         <div style={{ flex: 1 }}><label className="lbl">Pôle (facultatif)</label><select className="sel" value={pole} onChange={(e) => setPole(e.target.value)}><option value="">—</option>{poles.map((p) => <option key={p.id} value={p.id}>{f(p, "Pôles")}</option>)}</select></div>
       </div>
       <div style={{ marginTop: 11 }}><label className="lbl">Précisions (facultatif)</label><textarea className="ta" value={desc} onChange={(e) => setDesc(e.target.value)} /></div>
+      <div style={{ marginTop: 11 }}><label className="lbl">Documents / images (facultatif)</label>
+        <input type="file" multiple onChange={(e) => setFiles(Array.from(e.target.files))} style={{ fontSize: 13 }} />
+        {files.length > 0 && <div style={{ fontSize: 12, color: MUT, marginTop: 5 }}>{files.length} fichier(s) seront joints</div>}
+      </div>
       <div style={{ display: "flex", gap: 9, marginTop: 18 }}>
         <button className="btn btn-ghost" style={{ flex: 1, justifyContent: "center" }} onClick={onClose}>Annuler</button>
         <button className="btn btn-red" style={{ flex: 2, justifyContent: "center" }} disabled={busy} onClick={save}>{busy ? "…" : "Ajouter le sujet"}</button>
@@ -681,6 +722,14 @@ function SujetCard({ s, me, uById, pById, reload, done }) {
         <span className="chip" style={{ background: stC + "1f", color: stC }}>{statut}</span>
       </div>
       {f(s, "Description") && <div style={{ fontSize: 13, color: MUT, marginTop: 7, lineHeight: 1.5 }}>{f(s, "Description")}</div>}
+      {(f(s, "Documents") || []).length > 0 && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 9 }}>
+        {(f(s, "Documents") || []).map((a, idx) => {
+          const thumb = a.thumbnails && a.thumbnails.small && a.thumbnails.small.url;
+          return <a key={idx} href={a.url} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "#1B5E9B", textDecoration: "none", border: "1px solid " + BORDER, borderRadius: 9, padding: "4px 9px" }}>
+            {thumb ? <img src={thumb} alt="" style={{ width: 22, height: 22, borderRadius: 5, objectFit: "cover" }} /> : <i className="ti ti-paperclip" />}{a.filename || "fichier"}
+          </a>;
+        })}
+      </div>}
       <div style={{ fontSize: 11.5, color: MUT, marginTop: 7 }}>Proposé par {prop ? fullName(prop) : "—"}</div>
       <div style={{ display: "flex", gap: 7, marginTop: 11, flexWrap: "wrap", alignItems: "center" }}>
         {["À traiter", "En cours", "Traité"].map((v) => <button key={v} className="btn btn-ghost" style={{ fontSize: 12, padding: "6px 11px", borderColor: statut === v ? stC : BORDER, color: statut === v ? stC : MUT }} disabled={busy} onClick={() => upd({ "Statut": v })}>{v}</button>)}
