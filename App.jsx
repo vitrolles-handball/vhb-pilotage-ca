@@ -290,8 +290,8 @@ function Dashboard({ me, data, setView, openNewTask, openNewSujet }) {
             return <div key={p.id} style={{ marginBottom: 10 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 6 }}>
                 <span style={{ width: 9, height: 9, borderRadius: "50%", background: POLE_COLORS[id] || MUT }} />
-                <span style={{ fontSize: 12.5, fontWeight: 700, color: TEXT }}>{f(p, "Pôles")}</span>
-                <span style={{ fontSize: 11.5, color: MUT }}>· {list.length}</span>
+                <span style={{ fontSize: 12.5, fontWeight: 700, color: "#FFFFFF" }}>{f(p, "Pôles")}</span>
+                <span style={{ fontSize: 11.5, color: "#D7CEC2" }}>· {list.length}</span>
               </div>
               {list.map((x) => <div key={x.id} className="card lift" style={{ padding: "9px 13px", marginBottom: 6, display: "flex", alignItems: "center", gap: 8 }}>
                 <span style={{ fontSize: 13.5, color: TEXT, flex: 1 }}>{f(x, "Titre")}</span>
@@ -406,7 +406,7 @@ function TasksView({ me, data, isAdmin, reload, openNewTask }) {
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 9, cursor: "pointer" }} onClick={() => setShowSocle((v) => !v)}>
             <span className="cond" style={{ fontSize: 13, fontWeight: 700, color: TEXT, background: "rgba(255,255,255,.93)", borderRadius: 8, padding: "4px 11px" }}>Socle officiel</span>
             <span className="chip" style={{ background: "#EDE7F6", color: "#5E35B1" }}>{socle.length}</span>
-            <span style={{ marginLeft: "auto", color: MUT, fontSize: 12 }}>{showSocle ? "masquer" : "afficher"}</span>
+            <span style={{ marginLeft: "auto", color: "#E4DCD2", fontSize: 12 }}>{showSocle ? "masquer" : "afficher"}</span>
           </div>
           {showSocle && (socle.length === 0 ? <Empty t="Aucune tâche socle." /> :
             socle.map((t) => <TaskCard key={t.id} t={t} me={me} uById={uById} pById={pById} users={users} isAdmin={isAdmin} reload={reload} commentaires={data.commentaires || []} />))}
@@ -645,7 +645,7 @@ function Annuaire({ data }) {
       {order.filter((pid) => byPole[pid]).map((pid) => {
         const p = pById[pid]; const id = p ? f(p, "Identifiant") : null;
         return <div key={pid} style={{ marginBottom: 18 }}>
-          <div className="cond" style={{ fontSize: 13, fontWeight: 600, marginBottom: 9, display: "flex", alignItems: "center", gap: 8 }}>
+          <div className="cond" style={{ fontSize: 13, fontWeight: 600, color: "#FFFFFF", marginBottom: 9, display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ width: 11, height: 11, borderRadius: "50%", background: POLE_COLORS[id] || MUT, display: "inline-block" }} />
             {p ? f(p, "Pôles") : "Sans pôle"}
           </div>
@@ -685,7 +685,7 @@ function AdminUsers({ me, data, reload }) {
   return (
     <div className="fade">
       <div style={{ fontSize: 20, fontWeight: 700, color: TEXT, marginBottom: 10, background: "rgba(255,255,255,.93)", borderRadius: 12, padding: "8px 16px", display: "inline-block", boxShadow: "0 1px 2px rgba(20,22,30,.07)" }}>Utilisateurs</div>
-      <div style={{ fontSize: 13, color: MUT, marginBottom: 16 }}>Crée un accès par email. La personne complètera son profil à sa première connexion.</div>
+      <div style={{ fontSize: 13, color: "#EBE2D6", marginBottom: 16 }}>Crée un accès par email. La personne complètera son profil à sa première connexion.</div>
       <div className="card" style={{ marginBottom: 18, display: "flex", gap: 9, alignItems: "flex-end", flexWrap: "wrap" }}>
         <div style={{ flex: 2, minWidth: 180 }}><label className="lbl">Email du nouvel utilisateur</label><input className="inp" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="prenom@exemple.com" /></div>
         <div style={{ flex: 1, minWidth: 120 }}><label className="lbl">Rôle</label><select className="sel" value={role} onChange={(e) => setRole(e.target.value)}><option>Équipier</option><option>Admin</option></select></div>
@@ -747,7 +747,7 @@ function CAView({ me, data, isAdmin, reload, openNewSujet, openNewMeeting, openM
             actifs.map((x) => <SujetCard key={x.id} s={x} me={me} uById={uById} pById={pById} reload={reload} />)}
           {traites.length > 0 && (
             <div style={{ marginTop: 22 }}>
-              <div className="cond" style={{ fontSize: 12.5, color: MUT, fontWeight: 700, marginBottom: 9 }}>Sujets traités ({traites.length})</div>
+              <div className="cond" style={{ fontSize: 12.5, color: "#FFFFFF", fontWeight: 700, marginBottom: 9 }}>Sujets traités ({traites.length})</div>
               {traites.map((x) => <SujetCard key={x.id} s={x} me={me} uById={uById} pById={pById} reload={reload} done />)}
             </div>
           )}
@@ -758,9 +758,9 @@ function CAView({ me, data, isAdmin, reload, openNewSujet, openNewMeeting, openM
         <div>
           {isAdmin && <button className="btn btn-red" style={{ marginBottom: 14 }} onClick={openNewMeeting}><i className="ti ti-calendar-plus" />Planifier un CA</button>}
           {aVenir.length === 0 && passees.length === 0 && <Empty t="Aucune réunion programmée." />}
-          {aVenir.length > 0 && <div className="cond" style={{ fontSize: 12.5, color: MUT, fontWeight: 700, margin: "4px 0 9px" }}>À venir</div>}
+          {aVenir.length > 0 && <div className="cond" style={{ fontSize: 12.5, color: "#FFFFFF", fontWeight: 700, margin: "4px 0 9px" }}>À venir</div>}
           {aVenir.map((m) => <MeetingRow key={m.id} m={m} sujets={sujets} onClick={() => openMeeting(m.id)} />)}
-          {passees.length > 0 && <div className="cond" style={{ fontSize: 12.5, color: MUT, fontWeight: 700, margin: "18px 0 9px" }}>Réunions passées</div>}
+          {passees.length > 0 && <div className="cond" style={{ fontSize: 12.5, color: "#FFFFFF", fontWeight: 700, margin: "18px 0 9px" }}>Réunions passées</div>}
           {passees.map((m) => <MeetingRow key={m.id} m={m} sujets={sujets} onClick={() => openMeeting(m.id)} past />)}
         </div>
       )}
@@ -972,7 +972,7 @@ export default function App() {
   const isAdmin = f(me, "Rôle") === "Admin";
   const unread = (data.commentaires || []).filter((c) => (f(c, "Mentions") || []).includes(me.id) && !String(f(c, "Lu par") || "").includes(me.id)).length;
   return (
-    <div style={{ minHeight: "100vh", backgroundColor: "#EDEAE6", backgroundImage: "linear-gradient(rgba(240,238,235,.66), rgba(240,238,235,.74)), url(/bandeau.jpg)", backgroundSize: "cover", backgroundAttachment: "fixed", backgroundPosition: "center", color: TEXT, fontFamily: "'Manrope',system-ui,sans-serif" }}>
+    <div style={{ minHeight: "100vh", backgroundColor: "#1a1413", backgroundImage: "url(/bandeau.jpg)", backgroundSize: "cover", backgroundAttachment: "fixed", backgroundPosition: "center", color: TEXT, fontFamily: "'Manrope',system-ui,sans-serif" }}>
       <style>{CSS}</style>
       <Header me={me} view={view} setView={setView} isAdmin={isAdmin} onLogout={logout} unread={unread} onBell={() => setModal({ type: "notifs" })} />
       <div style={{ maxWidth: 920, margin: "0 auto", padding: "22px 16px 60px" }}>
