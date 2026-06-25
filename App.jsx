@@ -48,14 +48,14 @@ html{overflow-x:clip;}body{margin:0;font-family:'Manrope',system-ui,sans-serif;o
 @media(min-width:1000px){.dash-grid{grid-template-columns:1.7fr 1fr;gap:24px;}.cardgrid{grid-template-columns:1fr 1fr;column-gap:12px;}}
 .detail-grid{display:grid;grid-template-columns:1fr;gap:18px;align-items:start;}
 @media(min-width:1000px){.detail-grid{grid-template-columns:1.65fr 1fr;gap:22px;}}
-@media(max-width:760px){.wrap{padding:14px 12px 76px;}}
+@media(max-width:760px){.wrap{padding:14px 12px 104px;}}
 .appheader{padding:12px 20px;display:flex;flex-direction:column;gap:10px;}
 .appheader-top{display:flex;align-items:center;gap:12px;}
 .appnav{display:inline-flex;gap:2px;background:rgba(255,255,255,.08);border-radius:30px;padding:4px;max-width:100%;overflow-x:auto;align-self:flex-start;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
 .appnav::-webkit-scrollbar{display:none;}
-.bottomnav{display:none;position:fixed;left:0;right:0;bottom:0;z-index:40;background:#fff;border-top:1px solid #E6E8EC;padding:6px 6px calc(6px + env(safe-area-inset-bottom));justify-content:space-around;box-shadow:0 -2px 14px rgba(20,22,30,.06);}
-.bottomnav button{flex:1;background:none;border:none;display:flex;flex-direction:column;align-items:center;gap:2px;color:#8A9098;font-family:inherit;font-size:10.5px;font-weight:600;cursor:pointer;padding:4px 0;}
-.bottomnav button.on{color:#D62828;}
+.bottomnav{display:none;position:fixed;left:0;right:0;bottom:0;z-index:40;background-color:#16110f;background-image:linear-gradient(rgba(16,11,12,.62),rgba(16,11,12,.80)),url(/bandeau.jpg);background-size:cover;background-position:center;padding:8px 6px calc(8px + env(safe-area-inset-bottom));justify-content:space-around;box-shadow:0 -4px 18px rgba(0,0,0,.30);}
+.bottomnav button{flex:1;background:none;border:none;display:flex;flex-direction:column;align-items:center;gap:3px;color:#C7CACF;font-family:inherit;font-size:10.5px;font-weight:600;cursor:pointer;padding:4px 0;}
+.bottomnav button.on{color:#F5C518;}
 .bottomnav button i{font-size:21px;}
 @keyframes pulsevhb{0%,100%{transform:scale(1);opacity:.82}50%{transform:scale(1.06);opacity:1}}
 .pulse{animation:pulsevhb 1.6s ease-in-out infinite;}
@@ -835,9 +835,12 @@ function CAView({ me, data, isAdmin, reload, openNewSujet, openNewMeeting, openM
         <div>
           <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
             <button className="btn btn-red" onClick={() => openNewSujet()}><i className="ti ti-plus" />Proposer un sujet</button>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginLeft: "auto" }}>
-              <button className="chip" style={chipF(!theme)} onClick={() => setTheme("")}>Tous</button>
-              {themes.map((t) => <button key={t} className="chip" style={chipF(theme === t)} onClick={() => setTheme(theme === t ? "" : t)}>{t}</button>)}
+            <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 12.5, color: MUT }}>Filtrer</span>
+              <select className="sel" style={{ width: "auto", padding: "8px 12px" }} value={theme} onChange={(e) => setTheme(e.target.value)}>
+                <option value="">Tous les thèmes</option>
+                {themes.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
             </div>
           </div>
           {actifs.length === 0 ? <Empty t="Aucun sujet en attente — propose-en un !" /> :
