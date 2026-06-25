@@ -973,6 +973,13 @@ function TaskDetailPage({ taskId, me, data, isAdmin, onClose, reload }) {
             {assignes.map((id) => uById[id]).filter(Boolean).map((u, i2) => <div key={u.id} title={fullName(u)} style={{ marginLeft: i2 ? -8 : 0 }}><Avatar u={u} size={28} /></div>)}
           </div>
         </div>
+        <div className="lbl">Affecté à</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 16 }}>
+          {users.filter((u) => f(u, "Profil complété")).map((u) => {
+            const on = assignes.includes(u.id);
+            return <button key={u.id} disabled={busy} onClick={() => upd({ "Assignés": on ? assignes.filter((id) => id !== u.id) : Array.from(new Set([...assignes, u.id])) })} className="chip" style={{ cursor: "pointer", border: "1px solid " + (on ? RED : BORDER), background: on ? "#FBE9E9" : "#fff", color: on ? RED : TEXT, padding: "5px 10px" }}><Avatar u={u} size={18} />{f(u, "Prénom")}</button>;
+          })}
+        </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
           <span className="lbl" style={{ margin: 0 }}>Échéance</span>
           <input className="inp" type="date" style={{ width: "auto" }} value={f(t, "Échéance") || ""} onChange={(e) => upd({ "Échéance": e.target.value || null })} />
