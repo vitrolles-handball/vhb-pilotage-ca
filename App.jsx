@@ -742,13 +742,15 @@ function Annuaire({ data }) {
             <span style={{ width: 26, height: 26, borderRadius: 8, background: POLE_COLORS[id] || MUT, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}><i className={"ti " + (POLE_ICONS[id] || "ti-folder")} style={{ fontSize: 15 }} aria-hidden="true" /></span>
             {p ? f(p, "Pôles") : "Sans pôle"}
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))", gap: 10 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(250px,1fr))", gap: 10 }}>
             {byPole[pid].sort((a, b) => (f(a, "Fonction") === "Responsable" ? -1 : 1)).map((u) => (
-              <div key={u.id} className="card" style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 11 }}>
-                <Avatar u={u} size={42} />
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 500, color: TEXT }}>{fullName(u)}</div>
-                  <div style={{ fontSize: 12, color: f(u, "Fonction") === "Responsable" ? RED : MUT }}>{f(u, "Fonction") || "Membre"}{f(u, "Rôle") === "Admin" ? " · admin" : ""}</div>
+              <div key={u.id} className="card" style={{ padding: "13px 15px", display: "flex", alignItems: "center", gap: 12, position: "relative", overflow: "hidden" }}>
+                <i className={"ti " + (POLE_ICONS[id] || "ti-folder")} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", fontSize: 54, color: POLE_COLORS[id] || MUT, opacity: 0.10, pointerEvents: "none" }} aria-hidden="true" />
+                <Avatar u={u} size={46} />
+                <div style={{ minWidth: 0, flex: 1, position: "relative" }}>
+                  <div style={{ fontSize: 14.5, fontWeight: 700, color: TEXT }}>{fullName(u)}</div>
+                  <div style={{ fontSize: 12, color: f(u, "Fonction") === "Responsable" ? RED : MUT, fontWeight: f(u, "Fonction") === "Responsable" ? 600 : 400 }}>{f(u, "Fonction") || "Membre"}{f(u, "Rôle") === "Admin" ? " · admin" : ""}{p ? " · " + f(p, "Pôles") : ""}</div>
+                  {f(u, "Email") && <div style={{ fontSize: 11.5, color: "#1B5E9B", marginTop: 2, wordBreak: "break-word" }}>{f(u, "Email")}</div>}
                   {f(u, "Téléphone") && <div style={{ fontSize: 11.5, color: MUT }}>{f(u, "Téléphone")}</div>}
                 </div>
               </div>
