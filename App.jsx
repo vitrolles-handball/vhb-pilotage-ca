@@ -71,6 +71,12 @@ const esc = (s) => String(s || "").replace(/'/g, "\\'");
 const f = (rec, name) => (rec && rec.fields ? rec.fields[name] : undefined);
 const initials = (u) => ((f(u, "Prénom") || "")[0] || "") + ((f(u, "Nom") || "")[0] || (f(u, "Email") || "?")[0] || "");
 const fullName = (u) => [f(u, "Prénom"), f(u, "Nom")].filter(Boolean).join(" ") || f(u, "Email") || "?";
+function sendMail(payload) {
+  return fetch("/api/sendmail", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }).then(async (r) => { const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || ("Erreur " + r.status)); return j; });
+}
+const APP_URL = (typeof window !== "undefined" && window.location && window.location.origin) || "https://vhb-pilotage-ca.vercel.app";
+const escapeHtml = (s) => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const mailWrap = (title, body, cta) => `<div style="font-family:Arial,Helvetica,sans-serif;max-width:520px;margin:auto;border:1px solid #eee;border-radius:14px;overflow:hidden"><div style="background:#16171B;padding:18px 22px;color:#fff"><span style="font-weight:800;font-size:17px">VHB Pilotage</span> <span style="color:#F5C518;font-size:12px">Tous Hand'semble</span></div><div style="padding:22px">${title ? `<h2 style="margin:0 0 12px;color:#16171B;font-size:18px">${title}</h2>` : ""}${body}${cta ? `<div style="margin-top:18px"><a href="${cta.url}" style="background:#D62828;color:#fff;text-decoration:none;padding:11px 18px;border-radius:10px;font-weight:700;display:inline-block">${cta.label}</a></div>` : ""}</div><div style="padding:14px 22px;color:#9aa0a6;font-size:11px;background:#F7F8FA">Vitrolles Handball Jeunes · email automatique, ne pas répondre</div></div>`;
 
 function dueInfo(dateStr) {
   if (!dateStr) return null;
@@ -573,9 +579,11 @@ function CommentBox({ task, me, users, reload }) {
   };
   const send = async () => {
     if (!text.trim()) return; setBusy(true);
+    const body = text.trim(); const mIds = mentions;
     try {
-      await db({ action: "create", table: "Commentaires", fields: { "Texte": text.trim(), "Tâche": [task.id], "Auteur": [me.id], "Mentions": mentions, "Date": new Date().toISOString(), "Lu par": me.id } });
+      await db({ action: "create", table: "Commentaires", fields: { "Texte": body, "Tâche": [task.id], "Auteur": [me.id], "Mentions": mIds, "Date": new Date().toISOString(), "Lu par": me.id } });
       setText(""); setMentions([]); await reload();
+      users.filter((u) => mIds.includes(u.id) && f(u, "Email")).forEach((u) => sendMail({ to: f(u, "Email"), subject: fullName(me) + " t'a mentionné — VHB Pilotage", html: mailWrap(fullName(me) + " t'a mentionné sur une tâche", '<p style="color:#16171B;font-weight:700;margin:0 0 6px">' + escapeHtml(f(task, "Titre") || "Tâche") + '</p><p style="color:#444;line-height:1.55;margin:0">' + escapeHtml(body) + '</p>', { url: APP_URL, label: "Voir la tâche" }) }).catch(() => {}));
     } catch (e) { alert("Erreur : " + e.message); }
     setBusy(false);
   };
@@ -768,12 +776,13 @@ function AdminUsers({ me, data, reload }) {
     const mail = email.trim().toLowerCase(); if (!mail) return;
     if (users.some((u) => String(f(u, "Email") || "").toLowerCase() === mail)) { alert("Cet email existe déjà."); return; }
     setBusy(true);
-    try { await db({ action: "create", table: "Utilisateurs", fields: { "Email": mail, "Rôle": role, "Actif": true, "Profil complété": false } }); setEmail(""); await reload(); } catch (e) { alert("Erreur : " + e.message); }
+    try { await db({ action: "create", table: "Utilisateurs", fields: { "Email": mail, "Rôle": role, "Actif": true, "Profil complété": false } }); setEmail(""); await reload(); sendMail({ to: mail, subject: "Bienvenue sur VHB Pilotage — Tous Hand'semble", html: mailWrap("Tu rejoins le CA du club 🤾", '<p style="color:#444;line-height:1.55">Un accès vient de t\'être créé sur <b>VHB Pilotage</b>, l\'outil de pilotage du club. Connecte-toi avec <b>' + escapeHtml(mail) + '</b> pour compléter ton profil et rejoindre ton pôle.</p>', { url: APP_URL, label: "Ouvrir l'outil" }) }).catch(() => {}); } catch (e) { alert("Erreur : " + e.message); }
     setBusy(false);
   };
   const toggleRole = async (u) => { await db({ action: "update", table: "Utilisateurs", recordId: u.id, fields: { "Rôle": f(u, "Rôle") === "Admin" ? "Équipier" : "Admin" } }); reload(); };
   const toggleActif = async (u) => { await db({ action: "update", table: "Utilisateurs", recordId: u.id, fields: { "Actif": !(f(u, "Actif") !== false) } }); reload(); };
   const del = async (u) => { if (!confirm("Supprimer définitivement " + fullName(u) + " ?")) return; await db({ action: "delete", table: "Utilisateurs", recordId: u.id }); reload(); };
+  const invite = async (u) => { try { await sendMail({ to: f(u, "Email"), subject: "Ton accès VHB Pilotage — Tous Hand'semble", html: mailWrap("Rejoins le CA du club 🤾", '<p style="color:#444;line-height:1.55">Connecte-toi avec <b>' + escapeHtml(f(u, "Email")) + '</b> pour compléter ton profil sur l\'outil du club.</p>', { url: APP_URL, label: "Ouvrir l'outil" }) }); alert("Invitation envoyée à " + f(u, "Email")); } catch (e) { alert("Envoi impossible : " + e.message); } };
   return (
     <div className="fade">
       <div style={{ fontSize: 20, fontWeight: 700, color: TEXT, marginBottom: 10 }}>Utilisateurs</div>
@@ -792,6 +801,7 @@ function AdminUsers({ me, data, reload }) {
             <div style={{ fontSize: 12, color: MUT }}>{f(u, "Email")}</div>
           </div>
           <button className="chip" style={{ cursor: "pointer", border: "1px solid " + BORDER, background: f(u, "Rôle") === "Admin" ? BLACK : "#fff", color: f(u, "Rôle") === "Admin" ? YELLOW : TEXT, padding: "5px 11px" }} onClick={() => toggleRole(u)}>{f(u, "Rôle") || "Équipier"}</button>
+          {!f(u, "Profil complété") && <button className="btn btn-ghost" style={{ fontSize: 12, padding: "6px 10px" }} onClick={() => invite(u)}><i className="ti ti-mail" />Inviter</button>}
           {u.id !== me.id && <>
             <button className="btn btn-ghost" style={{ fontSize: 12, padding: "6px 10px" }} onClick={() => toggleActif(u)}>{actif ? "Désactiver" : "Réactiver"}</button>
             <button className="btn btn-ghost" style={{ fontSize: 12, padding: "6px 10px", color: RED, borderColor: "#F0C7C3" }} onClick={() => del(u)}>Suppr.</button>
