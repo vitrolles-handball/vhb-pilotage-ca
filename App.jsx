@@ -7,8 +7,8 @@ const HALO = "radial-gradient(620px circle at 96% -8%, rgba(214,40,40,.10), tran
 const OK = "#3B8A4E";
 
 const POLE_COLORS = {
-  gestion: "#C0392B", secretariat: "#C0562A", developpement: "#C9A227",
-  communication: "#9C2B2F", sportif: "#A83328", benevoles: "#B8472B",
+  gestion: "#7C3AED", secretariat: "#EA580C", developpement: "#059669",
+  communication: "#DC2626", sportif: "#2563EB", benevoles: "#DB2777",
 };
 const POLE_ICONS = { gestion: "ti-coins", secretariat: "ti-mail", developpement: "ti-trending-up", communication: "ti-speakerphone", sportif: "ti-ball-basketball", benevoles: "ti-heart-handshake" };
 const THEME_ICONS = { "Finances": "ti-coin", "Sportif": "ti-ball-basketball", "Événements": "ti-confetti", "Bénévoles": "ti-heart-handshake", "Communication": "ti-speakerphone", "Administratif": "ti-file-text", "Partenariats": "ti-businessplan", "Divers": "ti-dots" };
