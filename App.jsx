@@ -979,9 +979,10 @@ function NewMeeting({ onClose, reload, data }) {
   const save = async () => {
     if (!date) return; setBusy(true);
     try {
-      await db({ action: "create", table: "Réunions", fields: { "Titre": titre.trim() || "Réunion du CA", "Date": date, "Heure": heure.trim(), "Lieu": lieu.trim(), "Statut": "À venir" } });
+      const jr = await db({ action: "create", table: "Réunions", fields: { "Titre": titre.trim() || "Réunion du CA", "Date": date, "Heure": heure.trim(), "Lieu": lieu.trim(), "Statut": "À venir" } });
+      const recId = ((jr.records || [])[0] || {}).id;
       await reload();
-      ((data && data.users) || []).filter((u) => f(u, "Actif") !== false && f(u, "Email")).forEach((u) => sendMail({ to: f(u, "Email"), subject: "Nouveau CA programmé — VHB Pilotage", html: mailWrap("Un CA est programmé", '<p style="color:#444;line-height:1.55">Une réunion du CA est prévue le <b>' + escapeHtml(fmtDate(date)) + (heure.trim() ? " à " + escapeHtml(heure.trim()) : "") + "</b>" + (lieu.trim() ? " · " + escapeHtml(lieu.trim()) : "") + '.</p><p style="color:#444;line-height:1.55">Prépare les sujets de ton pôle directement dans l\'outil, on avance ensemble !</p>', { url: APP_URL, label: "Préparer le CA" }) }).catch(() => {}));
+      ((data && data.users) || []).filter((u) => f(u, "Actif") !== false && f(u, "Email")).forEach((u) => sendMail({ to: f(u, "Email"), subject: "Nouveau CA programmé — VHB Pilotage", html: mailWrap("Un CA est programmé", '<p style="color:#444;line-height:1.55">Une réunion du CA est prévue le <b>' + escapeHtml(fmtDate(date)) + (heure.trim() ? " à " + escapeHtml(heure.trim()) : "") + "</b>" + (lieu.trim() ? " · " + escapeHtml(lieu.trim()) : "") + '.</p><p style="color:#444;line-height:1.55">Merci de répondre à l\'invitation :</p><div style="text-align:center;margin:14px 0"><a href="' + APP_URL + '/?rsvp=' + recId + '&r=present" style="background:#2E8B57;color:#fff;text-decoration:none;padding:11px 18px;border-radius:10px;font-weight:700;display:inline-block;margin:4px">Je serai présent</a> <a href="' + APP_URL + '/?rsvp=' + recId + '&r=absent" style="background:#D62828;color:#fff;text-decoration:none;padding:11px 18px;border-radius:10px;font-weight:700;display:inline-block;margin:4px">Je serai absent</a></div>', { url: APP_URL, label: "Préparer le CA" }) }).catch(() => {}));
       onClose();
     } catch (e) { alert("Erreur : " + e.message); setBusy(false); }
   };
@@ -1017,6 +1018,11 @@ function MeetingDetail({ meetingId, me, data, isAdmin, onClose, reload, onStart,
   const linked = sujets.filter((s) => (f(s, "Réunion") || []).includes(m.id));
   const dispo = sujets.filter((s) => f(s, "Statut") !== "Traité" && !(f(s, "Réunion") || []).includes(m.id));
   const updM = async (fields) => { setBusy(true); try { await db({ action: "update", table: "Réunions", recordId: m.id, fields }); await reload(); } catch (e) { alert("Erreur : " + e.message); } setBusy(false); };
+  const rPres = f(m, "Répondu présent") || [];
+  const rAbs = f(m, "Répondu absent") || [];
+  const enAtt = data.users.filter((u) => f(u, "Actif") !== false && !rPres.includes(u.id) && !rAbs.includes(u.id));
+  const myRSVP = rPres.includes(me.id) ? "present" : rAbs.includes(me.id) ? "absent" : null;
+  const setRSVP = (r) => updM({ "Répondu présent": r === "present" ? Array.from(new Set([...rPres, me.id])) : rPres.filter((id) => id !== me.id), "Répondu absent": r === "absent" ? Array.from(new Set([...rAbs, me.id])) : rAbs.filter((id) => id !== me.id) });
   const signCR = async (statut) => { setBusy(true); try { await db({ action: "update", table: "Réunions", recordId: m.id, fields: { "Validation CR": statut } }); await reload(); } catch (e) { alert("Erreur : " + e.message); } setBusy(false); };
   const sendSign = async () => {
     const targets = data.users.filter((u) => (f(u, "Bureau") === "Président" || f(u, "Bureau") === "Secrétaire") && f(u, "Email"));
@@ -1059,6 +1065,20 @@ function MeetingDetail({ meetingId, me, data, isAdmin, onClose, reload, onStart,
           {isAdmin && !past && <button className="btn btn-ghost" style={{ fontSize: 12, padding: "6px 11px" }} onClick={() => setEdit(true)}><i className="ti ti-pencil" />Modifier</button>}
         </div>
       )}
+      <div className="card" style={{ marginBottom: 14, padding: "14px 16px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: myRSVP || !past ? 10 : 0 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 700, color: TEXT, marginRight: 4 }}>Présences</div>
+          <span className="chip" style={{ background: "#E4F6E9", color: OK }}><i className="ti ti-circle-check" aria-hidden="true" />{rPres.length} présent{rPres.length > 1 ? "s" : ""}</span>
+          <span className="chip" style={{ background: "#FBEDEC", color: RED }}><i className="ti ti-circle-x" aria-hidden="true" />{rAbs.length} absent{rAbs.length > 1 ? "s" : ""}</span>
+          <span className="chip" style={{ background: "#EEF0F3", color: "#5A6066" }}><i className="ti ti-clock" aria-hidden="true" />{enAtt.length} en attente</span>
+        </div>
+        {!past && <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 12.5, color: MUT }}>Ta réponse :</span>
+          <button className="btn btn-ghost" style={{ fontSize: 12.5, padding: "6px 12px", borderColor: myRSVP === "present" ? OK : "#E6E8EC", color: myRSVP === "present" ? OK : MUT, fontWeight: myRSVP === "present" ? 700 : 500 }} disabled={busy} onClick={() => setRSVP("present")}>Présent</button>
+          <button className="btn btn-ghost" style={{ fontSize: 12.5, padding: "6px 12px", borderColor: myRSVP === "absent" ? RED : "#E6E8EC", color: myRSVP === "absent" ? RED : MUT, fontWeight: myRSVP === "absent" ? 700 : 500 }} disabled={busy} onClick={() => setRSVP("absent")}>Absent</button>
+        </div>}
+        {enAtt.length > 0 && <div style={{ fontSize: 11.5, color: MUT, marginTop: 8 }}>En attente : {enAtt.map((u) => fullName(u)).join(", ")}</div>}
+      </div>
       {!past && <button className="btn btn-red" style={{ width: "100%", justifyContent: "center", marginBottom: 14 }} onClick={onStart}><i className="ti ti-player-play" />Commencer la réunion</button>}
       <div className="cond" style={{ fontSize: 12.5, color: MUT, fontWeight: 700, marginBottom: 8 }}>Ordre du jour ({linked.length})</div>
       {linked.length === 0 ? <Empty t="Aucun sujet rattaché pour l'instant." /> :
@@ -1389,7 +1409,7 @@ function MeetingLive({ meetingId, me, data, isAdmin, onClose, reload }) {
   const m = meetings.find((x) => x.id === meetingId);
   const uById = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users]);
   const pById = useMemo(() => Object.fromEntries(poles.map((p) => [p.id, p])), [poles]);
-  const [presents, setPresents] = useState(m ? (f(m, "Présents") || []) : []);
+  const [presents, setPresents] = useState(m ? ((f(m, "Présents") || []).length ? (f(m, "Présents") || []) : (f(m, "Répondu présent") || [])) : []);
   const [newSujet, setNewSujet] = useState("");
   const [busy, setBusy] = useState(false);
   const [cr, setCr] = useState(null);
@@ -1610,6 +1630,38 @@ function CRView({ meetingId, data, onClose }) {
     </Modal>
   );
 }
+function RSVPView({ meetingId, me, data, onClose, reload }) {
+  const m = data.meetings.find((x) => x.id === meetingId);
+  const [busy, setBusy] = useState(false);
+  const respond = async (r) => {
+    if (!m) return; setBusy(true);
+    const cp = f(m, "Répondu présent") || []; const ca = f(m, "Répondu absent") || [];
+    const np = r === "present" ? Array.from(new Set([...cp, me.id])) : cp.filter((id) => id !== me.id);
+    const na = r === "absent" ? Array.from(new Set([...ca, me.id])) : ca.filter((id) => id !== me.id);
+    try { await db({ action: "update", table: "Réunions", recordId: m.id, fields: { "Répondu présent": np, "Répondu absent": na } }); await reload(); } catch (e) { alert("Erreur : " + e.message); }
+    setBusy(false);
+  };
+  useEffect(() => { try { const r = new URLSearchParams(window.location.search).get("r"); if (m && (r === "present" || r === "absent")) respond(r); } catch (e) {} }, []);
+  if (!m) return <div className="fade"><button className="btn btn-ghost" onClick={onClose}><i className="ti ti-arrow-left" />Retour</button><Empty t="Réunion introuvable." /></div>;
+  const pres = f(m, "Répondu présent") || []; const abs = f(m, "Répondu absent") || [];
+  const my = pres.includes(me.id) ? "present" : abs.includes(me.id) ? "absent" : null;
+  return (
+    <div className="fade">
+      <button className="btn btn-ghost" style={{ marginBottom: 16 }} onClick={onClose}><i className="ti ti-arrow-left" />Retour</button>
+      <div style={{ fontSize: 24, fontWeight: 800, color: TEXT, marginBottom: 3 }}>Réponds à l'invitation</div>
+      <div style={{ fontSize: 13.5, color: MUT, marginBottom: 18 }}>{f(m, "Titre") || "Réunion du CA"} · {fmtDate(f(m, "Date"))}{f(m, "Heure") ? " à " + f(m, "Heure") : ""}{f(m, "Lieu") ? " · " + f(m, "Lieu") : ""}</div>
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+        <button disabled={busy} onClick={() => respond("present")} style={{ flex: 1, minWidth: 180, cursor: "pointer", border: "2px solid " + (my === "present" ? OK : BORDER), background: my === "present" ? "#E9F7EE" : "#fff", borderRadius: 16, padding: "22px", fontFamily: "inherit" }}>
+          <i className="ti ti-circle-check" style={{ fontSize: 34, color: OK }} aria-hidden="true" /><div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginTop: 6 }}>Je serai présent</div>
+        </button>
+        <button disabled={busy} onClick={() => respond("absent")} style={{ flex: 1, minWidth: 180, cursor: "pointer", border: "2px solid " + (my === "absent" ? RED : BORDER), background: my === "absent" ? "#FBEDEC" : "#fff", borderRadius: 16, padding: "22px", fontFamily: "inherit" }}>
+          <i className="ti ti-circle-x" style={{ fontSize: 34, color: RED }} aria-hidden="true" /><div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginTop: 6 }}>Je serai absent</div>
+        </button>
+      </div>
+      {my && <div style={{ marginTop: 16, fontSize: 13.5, color: OK, fontWeight: 600 }}><i className="ti ti-check" />Réponse enregistrée : {my === "present" ? "présent" : "absent"}. Tu peux la modifier à tout moment.</div>}
+    </div>
+  );
+}
 function BottomNav({ view, setView }) {
   const tabs = [["dash", "Accueil", "ti-home"], ["taches", "Tâches", "ti-checklist"], ["sujets", "Sujets", "ti-clipboard-list"], ["ca", "Réunions", "ti-calendar"], ["annuaire", "Annuaire", "ti-users"]];
   return (
@@ -1627,6 +1679,7 @@ export default function App() {
   const [taskOpen, setTaskOpen] = useState(null);
   const [liveOpen, setLiveOpen] = useState(null);
   const [signOpen, setSignOpen] = useState(null);
+  const [rsvpOpen, setRsvpOpen] = useState(null);
 
   const loadData = useCallback(async () => {
     const [poles, users, tasks, meetings, sujets, commentaires] = await Promise.all([
@@ -1655,6 +1708,7 @@ export default function App() {
     })();
   }, [loadData]);
   useEffect(() => { try { const sid = new URLSearchParams(window.location.search).get("sign"); if (sid) setSignOpen(sid); } catch (e) {} }, []);
+  useEffect(() => { try { const rid = new URLSearchParams(window.location.search).get("rsvp"); if (rid) setRsvpOpen(rid); } catch (e) {} }, []);
 
   const onLogin = async (u) => { setMe(u); await loadData(); setStatus(f(u, "Profil complété") ? "app" : "profile"); };
   const onProfileSaved = async (u) => { setMe(u); await loadData(); setStatus("app"); };
@@ -1675,17 +1729,18 @@ export default function App() {
   return (
     <div style={{ minHeight: "100vh", backgroundColor: "#F4F5F8", backgroundImage: "radial-gradient(720px circle at 100% -6%, rgba(214,40,40,.06), transparent 58%), radial-gradient(620px circle at -6% 112%, rgba(245,197,24,.07), transparent 58%)", backgroundAttachment: "fixed", color: TEXT, fontFamily: "'Manrope',system-ui,sans-serif" }}>
       <style>{CSS}</style>
-      <Header me={me} view={view} setView={(v) => { setTaskOpen(null); setLiveOpen(null); setView(v); }} isAdmin={isAdmin} onLogout={logout} unread={unread} onBell={() => setModal({ type: "notifs" })} onProfile={() => setModal({ type: "profile" })} />
+      <Header me={me} view={view} setView={(v) => { setTaskOpen(null); setLiveOpen(null); setSignOpen(null); setRsvpOpen(null); setView(v); }} isAdmin={isAdmin} onLogout={logout} unread={unread} onBell={() => setModal({ type: "notifs" })} onProfile={() => setModal({ type: "profile" })} />
       <div className="wrap">
-        {signOpen && <SignatureView meetingId={signOpen} me={me} data={data} onClose={() => { setSignOpen(null); try { window.history.replaceState({}, "", window.location.pathname); } catch (e) {} }} reload={reload} />}
-        {!signOpen && taskOpen && <TaskDetailPage taskId={taskOpen} me={me} data={data} isAdmin={isAdmin} onClose={() => setTaskOpen(null)} reload={reload} />}
-        {!signOpen && !taskOpen && liveOpen && <MeetingLive meetingId={liveOpen} me={me} data={data} isAdmin={isAdmin} onClose={() => setLiveOpen(null)} reload={reload} />}
-        {!signOpen && !taskOpen && !liveOpen && view === "dash" && <Dashboard me={me} data={data} setView={setView} openNewTask={() => setModal({ type: "task", pole: (f(me, "Pôle") || [])[0] || "" })} openNewSujet={(opts) => setModal({ type: "sujet", ...(opts || {}) })} openTask={(id) => setTaskOpen(id)} reload={reload} openMeeting={(id) => setModal({ type: "meetingDetail", id })} />}
-        {!signOpen && !taskOpen && !liveOpen && view === "taches" && <TasksView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewTask={(pole) => setModal({ type: "task", pole })} openTask={(id) => setTaskOpen(id)} />}
-        {!signOpen && !taskOpen && !liveOpen && view === "sujets" && <SujetsView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewSujet={(opts) => setModal({ type: "sujet", ...(opts || {}) })} />}
-        {!signOpen && !taskOpen && !liveOpen && view === "ca" && <ReunionsView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewMeeting={() => setModal({ type: "meeting" })} openMeeting={(id) => setModal({ type: "meetingDetail", id })} openLive={(id) => setLiveOpen(id)} openCR={(id) => setModal({ type: "cr", id })} />}
-        {!signOpen && !taskOpen && !liveOpen && view === "annuaire" && <Annuaire data={data} me={me} isAdmin={isAdmin} reload={reload} />}
-        {!signOpen && !taskOpen && !liveOpen && view === "admin" && isAdmin && <AdminUsers me={me} data={data} reload={reload} />}
+        {rsvpOpen && <RSVPView meetingId={rsvpOpen} me={me} data={data} onClose={() => { setRsvpOpen(null); try { window.history.replaceState({}, "", window.location.pathname); } catch (e) {} }} reload={reload} />}
+        {!rsvpOpen && signOpen && <SignatureView meetingId={signOpen} me={me} data={data} onClose={() => { setSignOpen(null); try { window.history.replaceState({}, "", window.location.pathname); } catch (e) {} }} reload={reload} />}
+        {!rsvpOpen && !signOpen && taskOpen && <TaskDetailPage taskId={taskOpen} me={me} data={data} isAdmin={isAdmin} onClose={() => setTaskOpen(null)} reload={reload} />}
+        {!rsvpOpen && !signOpen && !taskOpen && liveOpen && <MeetingLive meetingId={liveOpen} me={me} data={data} isAdmin={isAdmin} onClose={() => setLiveOpen(null)} reload={reload} />}
+        {!rsvpOpen && !signOpen && !taskOpen && !liveOpen && view === "dash" && <Dashboard me={me} data={data} setView={setView} openNewTask={() => setModal({ type: "task", pole: (f(me, "Pôle") || [])[0] || "" })} openNewSujet={(opts) => setModal({ type: "sujet", ...(opts || {}) })} openTask={(id) => setTaskOpen(id)} reload={reload} openMeeting={(id) => setModal({ type: "meetingDetail", id })} />}
+        {!rsvpOpen && !signOpen && !taskOpen && !liveOpen && view === "taches" && <TasksView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewTask={(pole) => setModal({ type: "task", pole })} openTask={(id) => setTaskOpen(id)} />}
+        {!rsvpOpen && !signOpen && !taskOpen && !liveOpen && view === "sujets" && <SujetsView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewSujet={(opts) => setModal({ type: "sujet", ...(opts || {}) })} />}
+        {!rsvpOpen && !signOpen && !taskOpen && !liveOpen && view === "ca" && <ReunionsView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewMeeting={() => setModal({ type: "meeting" })} openMeeting={(id) => setModal({ type: "meetingDetail", id })} openLive={(id) => setLiveOpen(id)} openCR={(id) => setModal({ type: "cr", id })} />}
+        {!rsvpOpen && !signOpen && !taskOpen && !liveOpen && view === "annuaire" && <Annuaire data={data} me={me} isAdmin={isAdmin} reload={reload} />}
+        {!rsvpOpen && !signOpen && !taskOpen && !liveOpen && view === "admin" && isAdmin && <AdminUsers me={me} data={data} reload={reload} />}
       </div>
       {modal && modal.type === "task" && <NewTask me={me} data={data} isAdmin={isAdmin} initialPole={modal.pole} onClose={() => setModal(null)} reload={reload} />}
       {modal && modal.type === "sujet" && <NewSujet me={me} data={data} meetingId={modal.meetingId} initialPole={modal.pole} onClose={() => setModal(null)} reload={reload} />}
@@ -1694,7 +1749,7 @@ export default function App() {
       {modal && modal.type === "meetingDetail" && <MeetingDetail meetingId={modal.id} me={me} data={data} isAdmin={isAdmin} onClose={() => setModal(null)} reload={reload} onStart={() => { setModal(null); setLiveOpen(modal.id); }} onSign={() => { setModal(null); setSignOpen(modal.id); }} />}
       {modal && modal.type === "profile" && <MonCompte me={me} data={data} onClose={() => setModal(null)} reload={reload} onLogout={logout} onUsers={() => { setModal(null); setView("admin"); }} />}
       {modal && modal.type === "cr" && <CRView meetingId={modal.id} data={data} onClose={() => setModal(null)} />}
-      <BottomNav view={view} setView={(v) => { setTaskOpen(null); setLiveOpen(null); setView(v); }} />
+      <BottomNav view={view} setView={(v) => { setTaskOpen(null); setLiveOpen(null); setSignOpen(null); setRsvpOpen(null); setView(v); }} />
     </div>
   );
 }
