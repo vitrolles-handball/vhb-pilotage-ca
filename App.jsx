@@ -1354,19 +1354,28 @@ function MeetingDetail({ meetingId, me, data, isAdmin, onClose, reload, onStart,
       )}
       <div className="cond" style={{ fontSize: 12.5, color: MUT, fontWeight: 700, margin: "16px 0 8px", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>Compte-rendu <button className="btn btn-ghost" style={{ fontSize: 11.5, padding: "4px 9px" }} onClick={buildCR}>Générer depuis les sujets</button></div>
       <textarea className="ta" style={{ minHeight: 120 }} value={cr} onChange={(e) => setCr(e.target.value)} />
-      <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap", alignItems: "center" }}>
-        {f(m, "Validation CR") && <span className="chip" style={{ background: f(m, "Validation CR") === "Signé" ? "#E4F6E9" : "#FEF3D6", color: f(m, "Validation CR") === "Signé" ? OK : "#8A6D00" }}><i className={"ti " + (f(m, "Validation CR") === "Signé" ? "ti-checks" : "ti-clock")} />{f(m, "Validation CR")}</span>}
-        <button className="btn btn-ghost" style={{ fontSize: 12.5 }} onClick={() => printCRdoc(m, data, f(m, "Présents") || [], f(m, "Compte-rendu") || "")}><i className="ti ti-printer" />Imprimer / PDF</button>
-        {(f(me, "Bureau") === "Président" || f(me, "Bureau") === "Secrétaire") && <button className="btn btn-red" style={{ fontSize: 12.5 }} onClick={onSign}><i className="ti ti-signature" />Signer</button>}
-        <button className="btn btn-dark" style={{ fontSize: 12.5 }} disabled={busy} onClick={sendSign}><i className="ti ti-mail" />Envoyer pour signature</button>
-        {f(m, "Validation CR") !== "Signé" && <button className="btn btn-ghost" style={{ fontSize: 12.5, color: OK, borderColor: "#BFE6CD" }} disabled={busy} onClick={() => signCR("Signé")}><i className="ti ti-checks" />Marquer comme signé</button>}
-      </div>
-      <div style={{ display: "flex", gap: 9, marginTop: 14, flexWrap: "wrap", alignItems: "center" }}>
-        <button className="btn btn-ghost" onClick={onClose}>Fermer</button>
-        <button className="btn btn-dark" disabled={busy} onClick={() => updM({ "Compte-rendu": cr })}>Enregistrer le CR</button>
-        {isAdmin && !past && <button className="btn btn-yellow" disabled={busy} onClick={() => { if (confirm("Clôturer cette réunion ?")) updM({ "Statut": "Passée", "Compte-rendu": cr }); }}>Clôturer</button>}
-        {isAdmin && past && <button className="btn btn-ghost" disabled={busy} onClick={() => updM({ "Statut": "À venir" })}>Rouvrir</button>}
-        {isAdmin && <button className="btn btn-ghost" style={{ marginLeft: "auto", color: RED, borderColor: "#F0C7C3" }} disabled={busy} onClick={cancelMeeting}><i className="ti ti-trash" />Annuler la réunion</button>}
+      <div style={{ marginTop: 14, border: "1px solid " + BORDER, borderRadius: 14, overflow: "hidden", background: "#fff" }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", padding: "12px 14px" }}>
+          <span style={{ fontSize: 10.5, fontWeight: 800, color: MUT, letterSpacing: ".06em", textTransform: "uppercase", minWidth: 74 }}>Document</span>
+          <button className="btn btn-dark" style={{ fontSize: 12.5 }} disabled={busy} onClick={() => updM({ "Compte-rendu": cr })}><i className="ti ti-device-floppy" />Enregistrer le CR</button>
+          <button className="btn btn-ghost" style={{ fontSize: 12.5 }} onClick={() => printCRdoc(m, data, f(m, "Présents") || [], f(m, "Compte-rendu") || "")}><i className="ti ti-printer" />Imprimer / PDF</button>
+        </div>
+        <div style={{ height: 1, background: BORDER }} />
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", padding: "12px 14px", background: "#FAFBFC" }}>
+          <span style={{ fontSize: 10.5, fontWeight: 800, color: MUT, letterSpacing: ".06em", textTransform: "uppercase", minWidth: 74 }}>Signature</span>
+          {f(m, "Validation CR") && <span className="chip" style={{ background: f(m, "Validation CR") === "Signé" ? "#E4F6E9" : "#FEF3D6", color: f(m, "Validation CR") === "Signé" ? OK : "#8A6D00" }}><i className={"ti " + (f(m, "Validation CR") === "Signé" ? "ti-checks" : "ti-clock")} />{f(m, "Validation CR")}</span>}
+          {(f(me, "Bureau") === "Président" || f(me, "Bureau") === "Secrétaire") && <button className="btn btn-red" style={{ fontSize: 12.5 }} onClick={onSign}><i className="ti ti-signature" />Signer</button>}
+          <button className="btn btn-dark" style={{ fontSize: 12.5 }} disabled={busy} onClick={sendSign}><i className="ti ti-mail" />Envoyer pour signature</button>
+          {f(m, "Validation CR") !== "Signé" && <button className="btn btn-ghost" style={{ fontSize: 12.5, color: OK, borderColor: "#BFE6CD" }} disabled={busy} onClick={() => signCR("Signé")}><i className="ti ti-checks" />Marquer comme signé</button>}
+        </div>
+        <div style={{ height: 1, background: BORDER }} />
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", padding: "12px 14px" }}>
+          <span style={{ fontSize: 10.5, fontWeight: 800, color: MUT, letterSpacing: ".06em", textTransform: "uppercase", minWidth: 74 }}>Réunion</span>
+          <button className="btn btn-ghost" style={{ fontSize: 12.5 }} onClick={onClose}>Fermer</button>
+          {isAdmin && !past && <button className="btn btn-yellow" style={{ fontSize: 12.5 }} disabled={busy} onClick={() => { if (confirm("Clôturer cette réunion ?")) updM({ "Statut": "Passée", "Compte-rendu": cr }); }}><i className="ti ti-lock" />Clôturer</button>}
+          {isAdmin && past && <button className="btn btn-ghost" style={{ fontSize: 12.5 }} disabled={busy} onClick={() => updM({ "Statut": "À venir" })}><i className="ti ti-lock-open" />Rouvrir</button>}
+          {isAdmin && <button className="btn btn-ghost" style={{ fontSize: 12.5, marginLeft: "auto", color: RED, borderColor: "#F0C7C3" }} disabled={busy} onClick={cancelMeeting}><i className="ti ti-trash" />Annuler la réunion</button>}
+        </div>
       </div>
     </Modal>
   );
