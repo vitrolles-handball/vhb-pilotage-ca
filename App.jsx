@@ -1395,9 +1395,13 @@ function MeetingLive({ meetingId, me, data, isAdmin, onClose, reload }) {
   const [cr, setCr] = useState(null);
   const [showCR, setShowCR] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [showOthers, setShowOthers] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [newPole, setNewPole] = useState((f(me, "Pôle") || [])[0] || "");
   if (!m) return <div className="fade"><button className="btn btn-ghost" onClick={onClose}><i className="ti ti-arrow-left" />Retour</button></div>;
   const linked = sujets.filter((s) => (f(s, "Réunion") || []).includes(m.id));
   const activeUsers = users.filter((u) => f(u, "Actif") !== false);
+  const dispo = sujets.filter((x) => f(x, "Statut") !== "Traité" && !(f(x, "Réunion") || []).includes(m.id));
   const doneCount = linked.filter((s) => f(s, "Statut") === "Traité").length;
   const togglePresent = async (uid) => {
     const next = presents.includes(uid) ? presents.filter((x) => x !== uid) : [...presents, uid];
@@ -1406,9 +1410,10 @@ function MeetingLive({ meetingId, me, data, isAdmin, onClose, reload }) {
   };
   const addSujet = async () => {
     if (!newSujet.trim()) return; setBusy(true);
-    try { await db({ action: "create", table: "Sujets CA", fields: { "Titre": newSujet.trim(), "Statut": "En cours", "Réunion": [m.id], "Proposé par": [me.id] } }); setNewSujet(""); await reload(); } catch (e) { alert("Erreur : " + e.message); }
+    try { const fields = { "Titre": newSujet.trim(), "Statut": "En cours", "Réunion": [m.id], "Proposé par": [me.id] }; if (newPole) fields["Pôle"] = [newPole]; await db({ action: "create", table: "Sujets CA", fields }); setNewSujet(""); setShowNew(false); await reload(); } catch (e) { alert("Erreur : " + e.message); }
     setBusy(false);
   };
+  const attach = async (sj) => { setBusy(true); try { await db({ action: "update", table: "Sujets CA", recordId: sj.id, fields: { "Réunion": Array.from(new Set([...(f(sj, "Réunion") || []), m.id])), "Statut": "En cours" } }); await reload(); } catch (e) { alert("Erreur : " + e.message); } setBusy(false); };
   const buildCRBody = () => linked.map((s, i) => {
     const pole = pById[(f(s, "Pôle") || [])[0]];
     const head = (i + 1) + ". " + (pole ? "[" + f(pole, "Pôles") + "] " : "") + f(s, "Titre");
@@ -1463,11 +1468,42 @@ function MeetingLive({ meetingId, me, data, isAdmin, onClose, reload }) {
   return (
     <div className="fade">
       <button className="btn btn-ghost" style={{ marginBottom: 16 }} onClick={onClose}><i className="ti ti-arrow-left" />Retour aux réunions</button>
-      <div style={{ marginBottom: 18 }}>
-        <span className="chip" style={{ background: RED, color: "#fff" }}><i className="ti ti-player-play" />Réunion en cours</span>
-        <div style={{ fontSize: 28, fontWeight: 800, color: TEXT, letterSpacing: "-.02em", lineHeight: 1.2, marginTop: 8 }}>{f(m, "Titre") || "Réunion du CA"}</div>
-        <div style={{ fontSize: 13.5, color: MUT, marginTop: 3 }}>{fmtDate(f(m, "Date"))}{f(m, "Heure") ? " à " + f(m, "Heure") : ""}{f(m, "Lieu") ? " · " + f(m, "Lieu") : ""}</div>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 18, flexWrap: "wrap" }}>
+        <div style={{ flex: 1, minWidth: 200 }}>
+          <span className="chip" style={{ background: RED, color: "#fff" }}><i className="ti ti-player-play" />Réunion en cours</span>
+          <div style={{ fontSize: 28, fontWeight: 800, color: TEXT, letterSpacing: "-.02em", lineHeight: 1.2, marginTop: 8 }}>{f(m, "Titre") || "Réunion du CA"}</div>
+          <div style={{ fontSize: 13.5, color: MUT, marginTop: 3 }}>{fmtDate(f(m, "Date"))}{f(m, "Heure") ? " à " + f(m, "Heure") : ""}{f(m, "Lieu") ? " · " + f(m, "Lieu") : ""}</div>
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button className="btn btn-ghost" onClick={() => setShowOthers(true)}><i className="ti ti-list-check" />Autres sujets</button>
+          <button className="btn btn-red" onClick={() => { setNewSujet(""); setNewPole((f(me, "Pôle") || [])[0] || ""); setShowNew(true); }}><i className="ti ti-plus" />Nouveau sujet</button>
+        </div>
       </div>
+      {showOthers && <Modal onClose={() => setShowOthers(false)}>
+        <div style={{ fontSize: 17, fontWeight: 800, marginBottom: 4 }}>Autres sujets en attente</div>
+        <div style={{ fontSize: 13, color: MUT, marginBottom: 14 }}>Ajoute à l'ordre du jour un sujet déjà proposé.</div>
+        {dispo.length === 0 ? <Empty t="Aucun sujet en attente." /> :
+          dispo.map((sj) => { const pole = pById[(f(sj, "Pôle") || [])[0]]; return <div key={sj.id} style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 0", borderBottom: "1px solid " + BORDER }}>
+            {pole && <span className="tag" style={{ background: POLE_COLORS[f(pole, "Identifiant")] || BLACK, flex: "0 0 auto" }}>{f(pole, "Pôles")}</span>}
+            <span style={{ fontSize: 13.5, flex: 1 }}>{f(sj, "Titre")}</span>
+            <button className="btn btn-red" style={{ fontSize: 12, padding: "6px 12px", flex: "0 0 auto" }} disabled={busy} onClick={() => attach(sj)}><i className="ti ti-plus" />Ajouter</button>
+          </div>; })}
+      </Modal>}
+      {showNew && <Modal onClose={() => setShowNew(false)}>
+        <div style={{ fontSize: 17, fontWeight: 800, marginBottom: 14 }}>Nouveau sujet</div>
+        <label className="lbl">Titre du sujet</label>
+        <input className="inp" value={newSujet} onChange={(e) => setNewSujet(e.target.value)} autoFocus placeholder="Ex. Organisation du loto de Noël" />
+        <div style={{ marginTop: 12 }}><label className="lbl">Pôle</label>
+          <select className="sel" value={newPole} onChange={(e) => setNewPole(e.target.value)}>
+            <option value="">— Aucun —</option>
+            {poles.map((p) => <option key={p.id} value={p.id}>{f(p, "Pôles")}</option>)}
+          </select>
+        </div>
+        <div style={{ display: "flex", gap: 9, marginTop: 18 }}>
+          <button className="btn btn-ghost" style={{ flex: 1, justifyContent: "center" }} onClick={() => setShowNew(false)}>Annuler</button>
+          <button className="btn btn-red" style={{ flex: 2, justifyContent: "center" }} disabled={busy} onClick={addSujet}>{busy ? "…" : "Créer le sujet"}</button>
+        </div>
+      </Modal>}
       <div className="detail-grid">
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
@@ -1476,13 +1512,6 @@ function MeetingLive({ meetingId, me, data, isAdmin, onClose, reload }) {
           </div>
           {linked.length === 0 ? <Empty t="Aucun sujet à l'ordre du jour — ajoutes-en un ci-dessous." /> :
             linked.map((s, i) => <LiveSujet key={s.id} s={s} me={me} pById={pById} reload={reload} index={i + 1} meetingId={m.id} />)}
-          <div className="card" style={{ padding: "16px 18px", marginTop: 4, border: "1px dashed " + BORDER }}>
-            <div className="lbl" style={{ marginTop: 0 }}>Ajouter un sujet en séance</div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <input className="inp" value={newSujet} onChange={(e) => setNewSujet(e.target.value)} placeholder="Sujet abordé hors ordre du jour…" onKeyDown={(e) => { if (e.key === "Enter") addSujet(); }} />
-              <button className="btn btn-red" style={{ flex: "0 0 auto" }} disabled={busy} onClick={addSujet}><i className="ti ti-plus" />Ajouter</button>
-            </div>
-          </div>
         </div>
         <div>
           <div className="card" style={{ padding: "18px 20px", marginBottom: 16 }}>
