@@ -873,7 +873,7 @@ function ReunionsView({ me, data, isAdmin, reload, openNewMeeting, openMeeting, 
     const pending = targets.filter((u) => { const slot = f(u, "Bureau") === "Président" ? "Signature Président" : "Signature Secrétaire"; return !f(m, slot); });
     if (!pending.length) { alert("Tous les signataires ont déjà signé (ou aucun signataire défini dans l'Annuaire)."); return; }
     if (!confirm("Renvoyer la demande de signature à : " + pending.map((u) => fullName(u)).join(", ") + " ?")) return;
-    const body = crDocHtml(m, data, f(m, "Présents") || [], APP_URL + "/logo.png");
+    const body = crDocHtml(m, data, f(m, "Présents") || [], APP_URL + "/logo.png", f(m, "Compte-rendu") || "");
     try {
       for (const u of pending) { await sendMail({ to: f(u, "Email"), subject: "Rappel : compte-rendu à signer — " + (f(m, "Titre") || "Réunion du CA"), html: '<div style="font-family:Arial;color:#333;max-width:720px;margin:0 auto 14px">Bonjour ' + escapeHtml(f(u, "Prénom") || "") + ', merci de signer le compte-rendu ci-dessous.</div><div style="text-align:center;margin:0 auto 18px;max-width:720px"><a href="' + APP_URL + '/?sign=' + m.id + '" style="background:#D62828;color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:700;display:inline-block">Signer le compte-rendu en ligne</a></div>' + body }); }
       alert("Relance envoyée à : " + pending.map((u) => fullName(u)).join(", "));
@@ -1013,7 +1013,7 @@ function MeetingDetail({ meetingId, me, data, isAdmin, onClose, reload, onStart,
     const targets = data.users.filter((u) => (f(u, "Bureau") === "Président" || f(u, "Bureau") === "Secrétaire") && f(u, "Email"));
     if (!targets.length) { alert("Aucun Président ou Secrétaire défini — désigne-les dans l'Annuaire."); return; }
     if (!confirm("Envoyer le compte-rendu pour signature à : " + targets.map((u) => fullName(u)).join(", ") + " ?")) return;
-    const body = crDocHtml(m, data, f(m, "Présents") || [], APP_URL + "/logo.png");
+    const body = crDocHtml(m, data, f(m, "Présents") || [], APP_URL + "/logo.png", f(m, "Compte-rendu") || "");
     setBusy(true);
     try { for (const u of targets) { await sendMail({ to: f(u, "Email"), subject: "Compte-rendu à signer — " + (f(m, "Titre") || "Réunion du CA"), html: '<div style="font-family:Arial;color:#333;max-width:720px;margin:0 auto 14px">Bonjour ' + escapeHtml(f(u, "Prénom") || "") + ', merci de relire et signer le compte-rendu.</div><div style="text-align:center;margin:0 auto 18px;max-width:720px"><a href="' + APP_URL + '/?sign=' + m.id + '" style="background:#D62828;color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:700;display:inline-block">Signer le compte-rendu en ligne</a></div>' + body }); } await db({ action: "update", table: "Réunions", recordId: m.id, fields: { "Validation CR": "En attente de signature" } }); await reload(); alert("Compte-rendu envoyé à : " + targets.map((u) => fullName(u)).join(", ")); } catch (e) { alert("Erreur : " + e.message); } setBusy(false);
   };
@@ -1073,7 +1073,7 @@ function MeetingDetail({ meetingId, me, data, isAdmin, onClose, reload, onStart,
       <textarea className="ta" style={{ minHeight: 120 }} value={cr} onChange={(e) => setCr(e.target.value)} />
       <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap", alignItems: "center" }}>
         {f(m, "Validation CR") && <span className="chip" style={{ background: f(m, "Validation CR") === "Signé" ? "#E4F6E9" : "#FEF3D6", color: f(m, "Validation CR") === "Signé" ? OK : "#8A6D00" }}><i className={"ti " + (f(m, "Validation CR") === "Signé" ? "ti-checks" : "ti-clock")} />{f(m, "Validation CR")}</span>}
-        <button className="btn btn-ghost" style={{ fontSize: 12.5 }} onClick={() => printCRdoc(m, data, f(m, "Présents") || [])}><i className="ti ti-printer" />Imprimer / PDF</button>
+        <button className="btn btn-ghost" style={{ fontSize: 12.5 }} onClick={() => printCRdoc(m, data, f(m, "Présents") || [], f(m, "Compte-rendu") || "")}><i className="ti ti-printer" />Imprimer / PDF</button>
         {(f(me, "Bureau") === "Président" || f(me, "Bureau") === "Secrétaire") && <button className="btn btn-red" style={{ fontSize: 12.5 }} onClick={onSign}><i className="ti ti-signature" />Signer</button>}
         <button className="btn btn-dark" style={{ fontSize: 12.5 }} disabled={busy} onClick={sendSign}><i className="ti ti-mail" />Envoyer pour signature</button>
         {f(m, "Validation CR") !== "Signé" && <button className="btn btn-ghost" style={{ fontSize: 12.5, color: OK, borderColor: "#BFE6CD" }} disabled={busy} onClick={() => signCR("Signé")}><i className="ti ti-checks" />Marquer comme signé</button>}
@@ -1291,7 +1291,7 @@ function MonCompte({ me, data, onClose, reload, onLogout, onUsers }) {
     </Modal>
   );
 }
-function crDocHtml(m, data, presents, logoSrc) {
+function crDocHtml(m, data, presents, logoSrc, bodyText) {
   const { sujets, users, poles } = data;
   const uById = Object.fromEntries(users.map((u) => [u.id, u]));
   const pById = Object.fromEntries(poles.map((p) => [p.id, p]));
@@ -1324,13 +1324,13 @@ function crDocHtml(m, data, presents, logoSrc) {
     + '<div style="background:#f6f7f9;border:1px solid #e6e8ec;border-radius:8px;padding:11px 15px;margin-bottom:16px;font-size:12.5px"><b>Date :</b> ' + escapeHtml(fmtDate(f(m, "Date"))) + (f(m, "Heure") ? ' &nbsp;&nbsp; <b>Heure :</b> ' + escapeHtml(f(m, "Heure")) : '') + (f(m, "Lieu") ? ' &nbsp;&nbsp; <b>Lieu :</b> ' + escapeHtml(f(m, "Lieu")) : '') + '</div>'
     + sec('Membres présents (' + pres.length + ')') + '<div style="font-size:12.5px;color:#222">' + (pres.length ? escapeHtml(pres.join(", ")) : "—") + '</div>'
     + sec('Excusés / Absents (' + absents.length + ')') + '<div style="font-size:12.5px;color:#666">' + (absents.length ? escapeHtml(absents.join(", ")) : "Aucun") + '</div>'
-    + sec('Ordre du jour &amp; décisions') + rows
+    + sec('Ordre du jour &amp; décisions') + ((bodyText && bodyText.trim()) ? '<div style="white-space:pre-wrap;font-size:12.5px;color:#333;line-height:1.6">' + escapeHtml(bodyText) + '</div>' : rows)
     + '<div style="margin-top:36px;display:flex;justify-content:space-between;gap:40px">' + sigBlock('Le Président', 'Signature Président') + sigBlock('Le / La Secrétaire', 'Signature Secrétaire') + '</div>'
     + '<div style="margin-top:24px;text-align:center;color:#9aa0a6;font-size:10px;border-top:1px solid #eee;padding-top:8px">Fait à Vitrolles, le ' + escapeHtml(fmtDate(new Date().toISOString())) + ' — Document généré via VHB Pilotage · Tous Hand\'semble.</div>'
     + '</div>';
 }
-function printCRdoc(m, data, presents) {
-  const html = '<!doctype html><html><head><meta charset="utf-8"><title>Compte-rendu — CA Vitrolles Handball</title><style>@page{size:A4;margin:15mm 14mm;}body{margin:0;}</style></head><body>' + crDocHtml(m, data, presents, LOGO) + '</body></html>';
+function printCRdoc(m, data, presents, bodyText) {
+  const html = '<!doctype html><html><head><meta charset="utf-8"><title>Compte-rendu — CA Vitrolles Handball</title><style>@page{size:A4;margin:15mm 14mm;}body{margin:0;}</style></head><body>' + crDocHtml(m, data, presents, LOGO, bodyText) + '</body></html>';
   const w = window.open("", "_blank");
   if (w) { w.document.write(html); w.document.close(); w.focus(); setTimeout(() => { w.print(); }, 500); }
   else { alert("Autorise les fenêtres pop-up pour imprimer le compte-rendu."); }
@@ -1398,55 +1398,28 @@ function MeetingLive({ meetingId, me, data, isAdmin, onClose, reload }) {
     try { await db({ action: "create", table: "Sujets CA", fields: { "Titre": newSujet.trim(), "Statut": "En cours", "Réunion": [m.id], "Proposé par": [me.id] } }); setNewSujet(""); await reload(); } catch (e) { alert("Erreur : " + e.message); }
     setBusy(false);
   };
-  const buildCRtext = () => {
-    const pres = presents.map((id) => uById[id]).filter(Boolean).map(fullName);
-    const L = [];
-    L.push("COMPTE-RENDU — " + (f(m, "Titre") || "Réunion du CA"));
-    L.push("Vitrolles Handball Jeunes — Tous Hand'semble");
-    L.push("Date : " + fmtDate(f(m, "Date")) + (f(m, "Heure") ? " à " + f(m, "Heure") : "") + (f(m, "Lieu") ? " · " + f(m, "Lieu") : ""));
-    L.push("");
-    L.push("Présents (" + pres.length + ") : " + (pres.join(", ") || "—"));
-    const absents = activeUsers.filter((u) => !presents.includes(u.id)).map(fullName);
-    L.push("Excusés / Absents (" + absents.length + ") : " + (absents.join(", ") || "Aucun"));
-    L.push("");
-    L.push("ORDRE DU JOUR");
-    linked.forEach((s, i) => {
-      const pole = pById[(f(s, "Pôle") || [])[0]];
-      L.push("");
-      L.push((i + 1) + ". " + (pole ? "[" + f(pole, "Pôles") + "] " : "") + f(s, "Titre"));
-      const n = f(s, "Décision / notes");
-      if (n) String(n).split("\n").forEach((ln) => L.push("   " + ln));
-      else L.push("   —");
-    });
-    L.push("");
-    L.push("——");
-    L.push("Compte-rendu généré le " + fmtDate(new Date().toISOString()) + " via VHB Pilotage.");
-    return L.join("\n");
-  };
-  const cloturer = async () => {
-    if (!confirm("Clôturer la réunion et générer le compte-rendu ? La réunion passera en « clôturée ».")) return;
-    setBusy(true);
-    const text = buildCRtext();
-    try { await db({ action: "update", table: "Réunions", recordId: m.id, fields: { "Compte-rendu": text, "Statut": "Passée", "Présents": presents } }); await reload(); setCr(text); } catch (e) { alert("Erreur : " + e.message); }
-    setBusy(false);
-  };
-  const copyCR = () => { try { navigator.clipboard.writeText(cr || buildCRtext()); alert("Compte-rendu copié !"); } catch (e) { alert("Copie impossible sur cet appareil — utilise Imprimer / PDF."); } };
-  const crHtml = (logoSrc) => crDocHtml(m, data, presents, logoSrc);
-  const printCR = () => printCRdoc(m, data, presents);
-  const sendForSignature = async () => {
+  const buildCRBody = () => linked.map((s, i) => {
+    const pole = pById[(f(s, "Pôle") || [])[0]];
+    const head = (i + 1) + ". " + (pole ? "[" + f(pole, "Pôles") + "] " : "") + f(s, "Titre");
+    const n = f(s, "Décision / notes");
+    return head + (n ? "\n   " + String(n).split("\n").join("\n   ") : "\n   —");
+  }).join("\n\n");
+  const genererCR = () => { setCr(buildCRBody()); };
+  const copyCR = () => { try { navigator.clipboard.writeText(cr || buildCRBody()); alert("Compte-rendu copié !"); } catch (e) { alert("Copie impossible sur cet appareil — utilise Imprimer / PDF."); } };
+  const crHtml = (logoSrc) => crDocHtml(m, data, presents, logoSrc, cr);
+  const printCR = () => printCRdoc(m, data, presents, cr);
+  const envoyerSignature = async () => {
     const targets = users.filter((u) => (f(u, "Bureau") === "Président" || f(u, "Bureau") === "Secrétaire") && f(u, "Email"));
-    if (!targets.length) { alert("Aucun Président ou Secrétaire défini. Un admin peut les désigner dans l'Annuaire."); return; }
-    if (!confirm("Envoyer le compte-rendu pour signature à : " + targets.map((u) => fullName(u)).join(", ") + " ?")) return;
+    if (!confirm("Clôturer la réunion et envoyer le compte-rendu pour signature" + (targets.length ? " à " + targets.map((u) => fullName(u)).join(", ") : " (aucun signataire défini)") + " ?")) return;
     setBusy(true);
-    const body = crHtml(APP_URL + "/logo.png");
     try {
-      for (const u of targets) {
-        await sendMail({ to: f(u, "Email"), subject: "Compte-rendu à signer — " + (f(m, "Titre") || "Réunion du CA"), html: '<div style="font-family:Arial;color:#333;max-width:720px;margin:0 auto 14px">Bonjour ' + escapeHtml(f(u, "Prénom") || "") + ', voici le compte-rendu de la réunion du CA à relire et signer.</div><div style="text-align:center;margin:0 auto 18px;max-width:720px"><a href="' + APP_URL + '/?sign=' + m.id + '" style="background:#D62828;color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:700;display:inline-block">Signer le compte-rendu en ligne</a></div>' + body });
-      }
-      await db({ action: "update", table: "Réunions", recordId: m.id, fields: { "Validation CR": "En attente de signature" } }); await reload();
-      alert("Compte-rendu envoyé à : " + targets.map((u) => fullName(u)).join(", "));
-    } catch (e) { alert("Envoi impossible : " + e.message); }
-    setBusy(false);
+      await db({ action: "update", table: "Réunions", recordId: m.id, fields: { "Compte-rendu": cr, "Statut": "Passée", "Présents": presents, "Validation CR": targets.length ? "En attente de signature" : null } });
+      const body = crDocHtml(m, data, presents, APP_URL + "/logo.png", cr);
+      for (const u of targets) { await sendMail({ to: f(u, "Email"), subject: "Compte-rendu à signer — " + (f(m, "Titre") || "Réunion du CA"), html: '<div style="font-family:Arial;color:#333;max-width:720px;margin:0 auto 14px">Bonjour ' + escapeHtml(f(u, "Prénom") || "") + ', merci de relire et signer le compte-rendu.</div><div style="text-align:center;margin:0 auto 18px;max-width:720px"><a href="' + APP_URL + '/?sign=' + m.id + '" style="background:#D62828;color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:700;display:inline-block">Signer le compte-rendu en ligne</a></div>' + body }); }
+      await reload();
+      alert(targets.length ? ("Réunion clôturée. Compte-rendu envoyé pour signature à : " + targets.map((u) => fullName(u)).join(", ")) : "Réunion clôturée. Aucun signataire défini — désigne un Président/Secrétaire dans l'Annuaire.");
+      onClose();
+    } catch (e) { alert("Erreur : " + e.message); setBusy(false); }
   };
   return (
     <div className="fade">
@@ -1483,22 +1456,24 @@ function MeetingLive({ meetingId, me, data, isAdmin, onClose, reload }) {
             </div>
           </div>
           <div className="card" style={{ padding: "18px 20px" }}>
-            <div style={{ fontSize: 13.5, color: MUT, marginBottom: 12 }}>Quand la réunion est terminée, génère le compte-rendu (il sera archivé sur la réunion).</div>
-            <button className="btn btn-dark" style={{ width: "100%", justifyContent: "center" }} disabled={busy} onClick={cloturer}><i className="ti ti-file-check" />Clôturer & générer le CR</button>
+            <div style={{ fontSize: 13.5, color: MUT, marginBottom: 12 }}>Quand la réunion est terminée, génère le compte-rendu pour le relire, le corriger, puis l'envoyer à la signature.</div>
+            <button className="btn btn-dark" style={{ width: "100%", justifyContent: "center" }} disabled={busy} onClick={genererCR}><i className="ti ti-file-text" />Générer le compte-rendu</button>
           </div>
         </div>
       </div>
-      {cr && (
-        <div className="card rise" style={{ marginTop: 18, padding: "22px 24px", borderTop: "4px solid " + OK }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
-            <div style={{ fontSize: 17, fontWeight: 800, color: TEXT }}>Compte-rendu généré ✓</div>
-            <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button className="btn btn-ghost" onClick={copyCR}><i className="ti ti-copy" />Copier</button>
-              <button className="btn btn-dark" disabled={busy} onClick={sendForSignature}><i className="ti ti-mail" />Envoyer pour signature</button>
-              <button className="btn btn-red" onClick={printCR}><i className="ti ti-printer" />Imprimer / PDF</button>
-            </div>
+      {cr !== null && (
+        <div className="card rise" style={{ marginTop: 18, padding: "22px 24px", borderTop: "4px solid " + RED }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6, flexWrap: "wrap" }}>
+            <div style={{ fontSize: 17, fontWeight: 800, color: TEXT }}>Compte-rendu — relis et corrige</div>
+            <button className="btn btn-ghost" style={{ marginLeft: "auto", fontSize: 12.5 }} onClick={() => setCr(buildCRBody())}><i className="ti ti-refresh" />Régénérer depuis les sujets</button>
           </div>
-          <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", fontSize: 13.5, color: TEXT, lineHeight: 1.6, background: "#F7F8FA", borderRadius: 12, padding: "16px 18px", margin: 0 }}>{cr}</pre>
+          <div style={{ fontSize: 12.5, color: MUT, marginBottom: 10 }}>Corrige les fautes ou ajoute des précisions. L'en-tête (logo, date, présents/absents) et les signatures sont ajoutés automatiquement dans le PDF.</div>
+          <textarea className="ta" style={{ minHeight: 260, fontSize: 13.5, lineHeight: 1.6 }} value={cr} onChange={(e) => setCr(e.target.value)} />
+          <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
+            <button className="btn btn-ghost" onClick={copyCR}><i className="ti ti-copy" />Copier</button>
+            <button className="btn btn-ghost" onClick={printCR}><i className="ti ti-eye" />Aperçu / PDF</button>
+            <button className="btn btn-red" style={{ marginLeft: "auto" }} disabled={busy} onClick={envoyerSignature}><i className="ti ti-mail" />Envoyer pour signature &amp; clôturer</button>
+          </div>
         </div>
       )}
     </div>
@@ -1554,7 +1529,7 @@ function SignatureView({ meetingId, me, data, onClose, reload }) {
       <div style={{ marginBottom: 14 }}>
         <button className="btn btn-ghost" onClick={() => setShowDoc((v) => !v)}><i className="ti ti-file-text" />{showDoc ? "Masquer le compte-rendu" : "Relire le compte-rendu"}</button>
       </div>
-      {showDoc && <div className="card" style={{ padding: "18px 20px", marginBottom: 16, maxHeight: 460, overflowY: "auto" }} dangerouslySetInnerHTML={{ __html: crDocHtml(m, data, f(m, "Présents") || [], LOGO) }} />}
+      {showDoc && <div className="card" style={{ padding: "18px 20px", marginBottom: 16, maxHeight: 460, overflowY: "auto" }} dangerouslySetInnerHTML={{ __html: crDocHtml(m, data, f(m, "Présents") || [], LOGO, f(m, "Compte-rendu") || "") }} />}
       {!slot ? <div className="card" style={{ padding: "18px 20px" }}><Empty t="Seuls le Président et le Secrétaire peuvent signer. Demande à un admin de te désigner dans l'Annuaire." /></div>
         : already ? <div className="card" style={{ padding: "20px", borderLeft: "4px solid " + OK }}>
             <div style={{ fontWeight: 700, color: OK, marginBottom: 10 }}><i className="ti ti-checks" /> Tu as déjà signé ce compte-rendu.</div>
