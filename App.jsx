@@ -1096,6 +1096,13 @@ function MeetingDetail({ meetingId, me, data, isAdmin, onClose, reload, onStart,
   const enAtt = data.users.filter((u) => f(u, "Actif") !== false && !rPres.includes(u.id) && !rAbs.includes(u.id));
   const myRSVP = rPres.includes(me.id) ? "present" : rAbs.includes(me.id) ? "absent" : null;
   const setRSVP = (r) => updM({ "Répondu présent": r === "present" ? Array.from(new Set([...rPres, me.id])) : rPres.filter((id) => id !== me.id), "Répondu absent": r === "absent" ? Array.from(new Set([...rAbs, me.id])) : rAbs.filter((id) => id !== me.id) });
+  const uById = Object.fromEntries(data.users.map((u) => [u.id, u]));
+  const presenceGroup = (label, ids, color, bg) => ids.length ? <div style={{ marginTop: 10 }}>
+    <div style={{ fontSize: 11, fontWeight: 700, color: color, marginBottom: 6, textTransform: "uppercase", letterSpacing: ".03em" }}>{label} ({ids.length})</div>
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+      {ids.map((id) => uById[id]).filter(Boolean).map((u) => <span key={u.id} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: bg, borderRadius: 30, padding: "3px 11px 3px 3px" }}><Avatar u={u} size={22} /><span style={{ fontSize: 12.5, color: TEXT, fontWeight: 500 }}>{fullName(u)}</span></span>)}
+    </div>
+  </div> : null;
   const signCR = async (statut) => { setBusy(true); try { await db({ action: "update", table: "Réunions", recordId: m.id, fields: { "Validation CR": statut } }); await reload(); } catch (e) { alert("Erreur : " + e.message); } setBusy(false); };
   const sendSign = async () => {
     const targets = data.users.filter((u) => (f(u, "Bureau") === "Président" || f(u, "Bureau") === "Secrétaire") && f(u, "Email"));
@@ -1138,19 +1145,19 @@ function MeetingDetail({ meetingId, me, data, isAdmin, onClose, reload, onStart,
           {isAdmin && !past && <button className="btn btn-ghost" style={{ fontSize: 12, padding: "6px 11px" }} onClick={() => setEdit(true)}><i className="ti ti-pencil" />Modifier</button>}
         </div>
       )}
-      <div className="card" style={{ marginBottom: 14, padding: "14px 16px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: myRSVP || !past ? 10 : 0 }}>
-          <div style={{ fontSize: 13.5, fontWeight: 700, color: TEXT, marginRight: 4 }}>Présences</div>
-          <span className="chip" style={{ background: "#E4F6E9", color: OK }}><i className="ti ti-circle-check" aria-hidden="true" />{rPres.length} présent{rPres.length > 1 ? "s" : ""}</span>
-          <span className="chip" style={{ background: "#FBEDEC", color: RED }}><i className="ti ti-circle-x" aria-hidden="true" />{rAbs.length} absent{rAbs.length > 1 ? "s" : ""}</span>
-          <span className="chip" style={{ background: "#EEF0F3", color: "#5A6066" }}><i className="ti ti-clock" aria-hidden="true" />{enAtt.length} en attente</span>
+      <div className="card" style={{ marginBottom: 14, padding: "16px 18px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: TEXT, marginRight: "auto" }}>Présences</div>
+          {!past && <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 12.5, color: MUT }}>Ta réponse :</span>
+            <button className="btn btn-ghost" style={{ fontSize: 12.5, padding: "6px 12px", borderColor: myRSVP === "present" ? OK : "#E6E8EC", color: myRSVP === "present" ? OK : MUT, fontWeight: myRSVP === "present" ? 700 : 500 }} disabled={busy} onClick={() => setRSVP("present")}>Présent</button>
+            <button className="btn btn-ghost" style={{ fontSize: 12.5, padding: "6px 12px", borderColor: myRSVP === "absent" ? RED : "#E6E8EC", color: myRSVP === "absent" ? RED : MUT, fontWeight: myRSVP === "absent" ? 700 : 500 }} disabled={busy} onClick={() => setRSVP("absent")}>Absent</button>
+          </div>}
         </div>
-        {!past && <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 12.5, color: MUT }}>Ta réponse :</span>
-          <button className="btn btn-ghost" style={{ fontSize: 12.5, padding: "6px 12px", borderColor: myRSVP === "present" ? OK : "#E6E8EC", color: myRSVP === "present" ? OK : MUT, fontWeight: myRSVP === "present" ? 700 : 500 }} disabled={busy} onClick={() => setRSVP("present")}>Présent</button>
-          <button className="btn btn-ghost" style={{ fontSize: 12.5, padding: "6px 12px", borderColor: myRSVP === "absent" ? RED : "#E6E8EC", color: myRSVP === "absent" ? RED : MUT, fontWeight: myRSVP === "absent" ? 700 : 500 }} disabled={busy} onClick={() => setRSVP("absent")}>Absent</button>
-        </div>}
-        {enAtt.length > 0 && <div style={{ fontSize: 11.5, color: MUT, marginTop: 8 }}>En attente : {enAtt.map((u) => fullName(u)).join(", ")}</div>}
+        {presenceGroup("Présents", rPres, "#1E874B", "#E9F7EE")}
+        {presenceGroup("Absents", rAbs, RED, "#FBEDEC")}
+        {presenceGroup("En attente", enAtt.map((u) => u.id), "#8A6D00", "#FEF3D6")}
+        {rPres.length + rAbs.length + enAtt.length === 0 && <div style={{ fontSize: 12.5, color: MUT, marginTop: 8 }}>Aucun membre.</div>}
       </div>
       {!past && <button className="btn btn-red" style={{ width: "100%", justifyContent: "center", marginBottom: 14 }} onClick={onStart}><i className="ti ti-player-play" />Commencer la réunion</button>}
       <div className="cond" style={{ fontSize: 12.5, color: MUT, fontWeight: 700, marginBottom: 8 }}>Ordre du jour ({linked.length})</div>
