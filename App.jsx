@@ -1393,6 +1393,8 @@ function MeetingLive({ meetingId, me, data, isAdmin, onClose, reload }) {
   const [newSujet, setNewSujet] = useState("");
   const [busy, setBusy] = useState(false);
   const [cr, setCr] = useState(null);
+  const [showCR, setShowCR] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
   if (!m) return <div className="fade"><button className="btn btn-ghost" onClick={onClose}><i className="ti ti-arrow-left" />Retour</button></div>;
   const linked = sujets.filter((s) => (f(s, "Réunion") || []).includes(m.id));
   const activeUsers = users.filter((u) => f(u, "Actif") !== false);
@@ -1413,7 +1415,7 @@ function MeetingLive({ meetingId, me, data, isAdmin, onClose, reload }) {
     const n = f(s, "Décision / notes");
     return head + (n ? "\n   " + String(n).split("\n").join("\n   ") : "\n   —");
   }).join("\n\n");
-  const genererCR = () => { setCr(buildCRBody()); };
+  const genererCR = () => { setCr(buildCRBody()); setShowPreview(false); setShowCR(true); };
   const copyCR = () => { try { navigator.clipboard.writeText(cr || buildCRBody()); alert("Compte-rendu copié !"); } catch (e) { alert("Copie impossible sur cet appareil — utilise Imprimer / PDF."); } };
   const crHtml = (logoSrc) => crDocHtml(m, data, presents, logoSrc, cr);
   const printCR = () => printCRdoc(m, data, presents, cr);
@@ -1430,6 +1432,34 @@ function MeetingLive({ meetingId, me, data, isAdmin, onClose, reload }) {
       onClose();
     } catch (e) { alert("Erreur : " + e.message); setBusy(false); }
   };
+  if (showCR) return (
+    <div className="fade">
+      <button className="btn btn-ghost" style={{ marginBottom: 16 }} onClick={() => setShowCR(false)}><i className="ti ti-arrow-left" />Retour à la réunion</button>
+      <div style={{ marginBottom: 16 }}>
+        <span className="chip" style={{ background: RED, color: "#fff" }}><i className="ti ti-file-text" />Compte-rendu</span>
+        <div style={{ fontSize: 26, fontWeight: 800, color: TEXT, marginTop: 8, letterSpacing: "-.02em" }}>{f(m, "Titre") || "Réunion du CA"}</div>
+        <div style={{ fontSize: 13.5, color: MUT, marginTop: 3 }}>{fmtDate(f(m, "Date"))}{f(m, "Heure") ? " à " + f(m, "Heure") : ""}{f(m, "Lieu") ? " · " + f(m, "Lieu") : ""}</div>
+      </div>
+      <div className="card" style={{ padding: "22px 24px", marginBottom: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6, flexWrap: "wrap" }}>
+          <div style={{ fontSize: 16, fontWeight: 800, color: TEXT }}>Relis et corrige</div>
+          <button className="btn btn-ghost" style={{ marginLeft: "auto", fontSize: 12.5 }} onClick={() => setCr(buildCRBody())}><i className="ti ti-refresh" />Régénérer depuis les sujets</button>
+        </div>
+        <div style={{ fontSize: 12.5, color: MUT, marginBottom: 12 }}>Corrige les fautes ou ajoute des précisions. L'en-tête (logo, date, présents/absents) et les signatures sont ajoutés automatiquement.</div>
+        <textarea className="ta" style={{ minHeight: 300, fontSize: 13.5, lineHeight: 1.6 }} value={cr || ""} onChange={(e) => setCr(e.target.value)} />
+        <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap", alignItems: "center" }}>
+          <button className="btn btn-ghost" onClick={copyCR}><i className="ti ti-copy" />Copier</button>
+          <button className="btn btn-ghost" onClick={() => setShowPreview((v) => !v)}><i className="ti ti-eye" />{showPreview ? "Masquer l'aperçu" : "Aperçu"}</button>
+          <button className="btn btn-ghost" onClick={printCR}><i className="ti ti-printer" />Imprimer / PDF</button>
+          <button className="btn btn-red" style={{ marginLeft: "auto" }} disabled={busy} onClick={envoyerSignature}><i className="ti ti-mail" />Envoyer pour signature &amp; clôturer</button>
+        </div>
+      </div>
+      {showPreview && <div className="card" style={{ padding: "20px 22px" }}>
+        <div style={{ fontSize: 12, color: MUT, fontWeight: 700, marginBottom: 12, textTransform: "uppercase", letterSpacing: ".04em" }}>Aperçu du document officiel</div>
+        <div style={{ border: "1px solid " + BORDER, borderRadius: 12, padding: "18px 20px", background: "#fff" }} dangerouslySetInnerHTML={{ __html: crDocHtml(m, data, presents, LOGO, cr) }} />
+      </div>}
+    </div>
+  );
   return (
     <div className="fade">
       <button className="btn btn-ghost" style={{ marginBottom: 16 }} onClick={onClose}><i className="ti ti-arrow-left" />Retour aux réunions</button>
@@ -1470,21 +1500,6 @@ function MeetingLive({ meetingId, me, data, isAdmin, onClose, reload }) {
           </div>
         </div>
       </div>
-      {cr !== null && (
-        <div className="card rise" style={{ marginTop: 18, padding: "22px 24px", borderTop: "4px solid " + RED }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6, flexWrap: "wrap" }}>
-            <div style={{ fontSize: 17, fontWeight: 800, color: TEXT }}>Compte-rendu — relis et corrige</div>
-            <button className="btn btn-ghost" style={{ marginLeft: "auto", fontSize: 12.5 }} onClick={() => setCr(buildCRBody())}><i className="ti ti-refresh" />Régénérer depuis les sujets</button>
-          </div>
-          <div style={{ fontSize: 12.5, color: MUT, marginBottom: 10 }}>Corrige les fautes ou ajoute des précisions. L'en-tête (logo, date, présents/absents) et les signatures sont ajoutés automatiquement dans le PDF.</div>
-          <textarea className="ta" style={{ minHeight: 260, fontSize: 13.5, lineHeight: 1.6 }} value={cr} onChange={(e) => setCr(e.target.value)} />
-          <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
-            <button className="btn btn-ghost" onClick={copyCR}><i className="ti ti-copy" />Copier</button>
-            <button className="btn btn-ghost" onClick={printCR}><i className="ti ti-eye" />Aperçu / PDF</button>
-            <button className="btn btn-red" style={{ marginLeft: "auto" }} disabled={busy} onClick={envoyerSignature}><i className="ti ti-mail" />Envoyer pour signature &amp; clôturer</button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
