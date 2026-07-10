@@ -360,6 +360,7 @@ function Dashboard({ me, data, setView, openNewTask, openNewSujet, openTask, rel
     } catch (e) { alert("Erreur : " + e.message); }
   };
   const poleTag = (t) => { const p = pById[(f(t, "Pôle") || [])[0]]; if (!p) return null; const id = f(p, "Identifiant"); return <span className="tag" style={{ background: POLE_COLORS[id] || BLACK, display: "inline-flex", alignItems: "center", gap: 5 }}><i className={"ti " + (POLE_ICONS[id] || "ti-folder")} style={{ fontSize: 13 }} aria-hidden="true" />{f(p, "Pôles")}</span>; };
+  const poleColorOf = (t) => { const p = pById[(f(t, "Pôle") || [])[0]]; return p ? (POLE_COLORS[f(p, "Identifiant")] || BLACK) : BLACK; };
   const R = 32, CIRC = 2 * Math.PI * R;
 
   return (
@@ -397,7 +398,7 @@ function Dashboard({ me, data, setView, openNewTask, openNewSujet, openTask, rel
           </div>
           <Section title="Mes tâches">
             {mine.length === 0 ? <Empty t="Rien ne t'est assigné — prends une tâche pour donner un coup de main !" /> :
-              mine.slice(0, 8).map((t) => <RowTask key={t.id} t={t} uById={uById} poleTag={poleTag} onClick={() => openTask(t.id)} />)}
+              mine.slice(0, 8).map((t) => <RowTask key={t.id} t={t} uById={uById} poleTag={poleTag} accent={poleColorOf(t)} onClick={() => openTask(t.id)} />)}
           </Section>
           {aides.length > 0 && (
             <Section title="On demande un coup de main">
@@ -418,7 +419,7 @@ function Dashboard({ me, data, setView, openNewTask, openNewSujet, openTask, rel
                     <span style={{ fontSize: 12.5, fontWeight: 700, color: TEXT }}>{f(p, "Pôles")}</span>
                     <span style={{ fontSize: 11.5, color: MUT }}>· {list.length}</span>
                   </div>
-                  {list.map((x) => { const inCA = nextCA && (f(x, "Réunion") || []).includes(nextCA.id); const flagged = f(x, "À l'ordre du prochain CA"); const on = inCA || flagged; return <div key={x.id} onClick={() => openSujet && openSujet(x.id)} className="card lift" style={{ padding: "9px 13px", marginBottom: 6, display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                  {list.map((x) => { const inCA = nextCA && (f(x, "Réunion") || []).includes(nextCA.id); const flagged = f(x, "À l'ordre du prochain CA"); const on = inCA || flagged; return <div key={x.id} onClick={() => openSujet && openSujet(x.id)} className="card lift" style={{ padding: "9px 13px", marginBottom: 6, display: "flex", alignItems: "center", gap: 8, cursor: "pointer", borderLeft: "5px solid " + (POLE_COLORS[id] || BLACK) }}>
                     <span style={{ fontSize: 13.5, color: TEXT, flex: 1, minWidth: 0 }}>{f(x, "Titre")}</span>
                     <button onClick={(e) => { e.stopPropagation(); toggleODJ(x); }} className="chip" style={{ cursor: "pointer", border: "none", fontFamily: "inherit", background: on ? "#E6F0FB" : "#EEF0F3", color: on ? "#1B5E9B" : "#6E747D", flex: "0 0 auto" }} title={on ? "Retirer du CA" : "Ajouter à l'ordre du jour du CA"}><i className={"ti " + (on ? "ti-calendar-check" : "ti-calendar-plus")} aria-hidden="true" />{inCA ? "À l'ordre du jour" : flagged ? "En file" : "Ajouter au CA"}</button>
                   </div>; })}
@@ -465,11 +466,11 @@ function Section({ title, children }) {
   </div>;
 }
 function Empty({ t }) { return <div style={{ fontSize: 13, color: MUT, fontStyle: "italic", padding: "8px 2px" }}>{t}</div>; }
-function RowTask({ t, uById, poleTag, help, onClick }) {
+function RowTask({ t, uById, poleTag, help, onClick, accent }) {
   const due = dueInfo(f(t, "Échéance"));
   const assignes = (f(t, "Assignés") || []).map((id) => uById[id]).filter(Boolean);
   return (
-    <div onClick={onClick} className="card" style={{ padding: "11px 14px", marginBottom: 7, cursor: "pointer", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", borderColor: help ? "#F0C7C3" : BORDER, background: help ? "#FBEDEC" : CARD }}>
+    <div onClick={onClick} className="card" style={{ padding: "11px 14px", marginBottom: 7, cursor: "pointer", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", borderColor: help ? "#F0C7C3" : BORDER, background: help ? "#FBEDEC" : CARD, borderLeft: "5px solid " + (accent || BLACK) }}>
       {poleTag(t)}
       <span style={{ fontSize: 14, color: TEXT, flex: 1, minWidth: 140 }}>{f(t, "Titre")}</span>
       {due && <span className="chip" style={{ background: due.color + "1f", color: due.color }}>{due.label}</span>}
@@ -640,7 +641,7 @@ function TaskCard({ t, me, uById, pById, users, isAdmin, reload, commentaires, o
   const update = async (fields) => { setBusy(true); try { await db({ action: "update", table: "Tâches", recordId: t.id, fields }); await reload(); } catch (e) { alert("Erreur : " + e.message); } setBusy(false); };
   const seg = (v) => (v === "Fait" ? OK : v === "En cours" ? "#B8860B" : "#6E747D");
   return (
-    <div className="card lift" style={{ marginBottom: 10, padding: "15px 17px", position: "relative", overflow: "hidden" }}>
+    <div className="card lift" style={{ marginBottom: 10, padding: "15px 17px", position: "relative", overflow: "hidden", borderLeft: "5px solid " + (POLE_COLORS[poleId] || BLACK) }}>
       <i className={"ti " + (POLE_ICONS[poleId] || "ti-folder")} style={{ position: "absolute", right: 14, top: 13, fontSize: 58, color: POLE_COLORS[poleId] || BLACK, opacity: 0.15, pointerEvents: "none" }} aria-hidden="true" />
       <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap", marginBottom: 8, position: "relative" }}>
         {pole && <span className="tag" style={{ background: POLE_COLORS[poleId] || BLACK }}>{f(pole, "Pôles")}</span>}
@@ -852,12 +853,12 @@ function AnnuaireCard({ u, pole, poleId, isAdmin, poles, reload }) {
   const bureau = f(u, "Bureau");
   const updU = async (fields) => { setBusy(true); try { await db({ action: "update", table: "Utilisateurs", recordId: u.id, fields }); await reload(); } catch (err) { alert("Erreur : " + err.message); } setBusy(false); };
   return (
-    <div className="card lift" style={{ padding: 0, overflow: "hidden", position: "relative", borderTop: "3px solid " + color }}>
+    <div className="card lift" style={{ padding: 0, overflow: "hidden", position: "relative", borderLeft: "5px solid " + color }}>
       <i className={"ti " + (POLE_ICONS[poleId] || "ti-folder")} style={{ position: "absolute", right: -8, bottom: -12, fontSize: 96, color: color, opacity: 0.06, pointerEvents: "none" }} aria-hidden="true" />
       <div style={{ padding: "18px 20px", display: "flex", gap: 15, position: "relative" }}>
         <div style={{ position: "relative", flex: "0 0 auto" }}>
           <Avatar u={u} size={62} />
-          {isResp && <span title="Responsable du pôle" style={{ position: "absolute", bottom: -3, right: -3, width: 24, height: 24, borderRadius: "50%", background: color, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", border: "2.5px solid #fff", boxShadow: "0 1px 4px rgba(0,0,0,.2)" }}><i className="ti ti-star-filled" style={{ fontSize: 12 }} aria-hidden="true" /></span>}
+          {isResp && <span title="Responsable du pôle" style={{ position: "absolute", bottom: -3, right: -3, width: 24, height: 24, borderRadius: "50%", background: color, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", border: "2.5px solid #fff", boxShadow: "0 1px 4px rgba(0,0,0,.2)" }}><i className="ti ti-star" style={{ fontSize: 12 }} aria-hidden="true" /></span>}
         </div>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
@@ -1115,7 +1116,7 @@ function SujetCard({ s, me, uById, pById, reload, done, onODJ, openSujet, commen
   const upd = async (fields) => { setBusy(true); try { await db({ action: "update", table: "Sujets CA", recordId: s.id, fields }); await reload(); } catch (e) { alert("Erreur : " + e.message); } setBusy(false); };
   const segColor = (v) => (v === "Traité" ? OK : v === "En cours" ? "#1B5E9B" : "#B5660A");
   return (
-    <div className={"card" + (openSujet ? " lift" : "")} onClick={() => openSujet && openSujet(s.id)} style={{ marginBottom: 11, padding: "16px 18px", opacity: done ? 0.72 : 1, position: "relative", overflow: "hidden", cursor: openSujet ? "pointer" : "default" }}>
+    <div className={"card" + (openSujet ? " lift" : "")} onClick={() => openSujet && openSujet(s.id)} style={{ marginBottom: 11, padding: "16px 18px", opacity: done ? 0.72 : 1, position: "relative", overflow: "hidden", cursor: openSujet ? "pointer" : "default", borderLeft: "5px solid " + (POLE_COLORS[pole ? f(pole, "Identifiant") : null] || BLACK) }}>
       {f(s, "Thème") && <i className={"ti " + (THEME_ICONS[f(s, "Thème")] || "ti-dots")} style={{ position: "absolute", right: 16, top: 14, fontSize: 64, color: THEME_COLORS[f(s, "Thème")] || MUT, opacity: 0.16, pointerEvents: "none" }} aria-hidden="true" />}
       <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 9, position: "relative" }}>
         {f(s, "Thème") && <span className="chip" style={{ background: "#EEF1F4", color: "#5A6066" }}>{f(s, "Thème")}</span>}
@@ -1159,7 +1160,7 @@ function SujetCard({ s, me, uById, pById, reload, done, onODJ, openSujet, commen
 function MeetingRow({ m, sujets, onClick, past, onStart, onResend, onView }) {
   const linked = sujets.filter((s) => (f(s, "Réunion") || []).includes(m.id));
   return (
-    <div className="card lift" onClick={onClick} style={{ marginBottom: 9, padding: "14px 16px", cursor: "pointer", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+    <div className="card lift" onClick={onClick} style={{ marginBottom: 9, padding: "14px 16px", cursor: "pointer", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", borderLeft: "5px solid " + (past ? "#B0B6BE" : "#16171B") }}>
       <div style={{ width: 42, height: 42, borderRadius: 12, background: past ? "#EEF0F3" : "#16171B", color: past ? MUT : YELLOW, display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}>
         <i className="ti ti-calendar" style={{ fontSize: 18 }} />
       </div>
