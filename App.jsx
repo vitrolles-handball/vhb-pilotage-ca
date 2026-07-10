@@ -1898,6 +1898,7 @@ function HelpView({ onClose }) {
   const [open, setOpen] = useState({});
   const ql = q.trim().toLowerCase();
   const shown = S.map((sec, i) => [sec, i]).filter(([sec]) => !ql || (sec[2] + " " + sec[3].map((it) => it[0] + " " + it[1]).join(" ")).toLowerCase().includes(ql));
+  const pages = [2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 14, 15, 16, 16, 17, 17, 18];
   return (
     <Modal onClose={onClose} wide>
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10, flexWrap: "wrap" }}>
@@ -1916,7 +1917,9 @@ function HelpView({ onClose }) {
         {isOpen && <div style={{ padding: "0 15px 14px" }}>{items.map(([h, b], j) => <div key={j} style={{ marginBottom: 8 }}>
           <div style={{ fontSize: 13.5, fontWeight: 700, color: TEXT }}>{h}</div>
           <div style={{ fontSize: 13, color: MUT, lineHeight: 1.55 }}>{b}</div>
-        </div>)}</div>}
+        </div>)}
+          <a href={"/Livret_Formation_VHB_Pilotage.pdf#page=" + pages[i]} target="_blank" rel="noreferrer" className="btn btn-ghost" style={{ fontSize: 12, marginTop: 4, textDecoration: "none", padding: "6px 11px" }}><i className="ti ti-file-text" aria-hidden="true" />Voir cette page du livret</a>
+        </div>}
       </div>; })}
     </Modal>
   );
