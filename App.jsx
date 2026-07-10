@@ -250,7 +250,7 @@ function ProfileForm({ me, poles, onSaved }) {
 }
 
 function Header({ me, view, setView, isAdmin, onLogout, unread, onBell, onProfile }) {
-  const tabs = [["dash", "Accueil"], ["taches", "Tâches"], ["ca", "Réunions"], ["annuaire", "Annuaire"]];
+  const tabs = [["dash", "Accueil"], ["taches", "Tâches"], ["sujets", "Sujets"], ["ca", "Réunions"], ["annuaire", "Annuaire"]];
   return (
     <header className="appheader" style={{ backgroundColor: "#E8590C", backgroundImage: "linear-gradient(rgba(28,10,0,.22), rgba(28,10,0,.36)), url(/accent.jpg)", backgroundSize: "cover", backgroundPosition: "center", position: "sticky", top: 0, zIndex: 30, boxShadow: "0 2px 18px rgba(0,0,0,.22)" }}>
       <div className="appbrand">
@@ -820,72 +820,65 @@ function AdminUsers({ me, data, reload }) {
 
 function chipF(on) { return { cursor: "pointer", border: "1px solid " + (on ? RED : "#E6E8EC"), background: on ? "#FBE9E9" : "#fff", color: on ? RED : MUT, fontWeight: on ? 600 : 500, padding: "6px 13px" }; }
 
-function CAView({ me, data, isAdmin, reload, openNewSujet, openNewMeeting, openMeeting, openLive }) {
-  const { sujets, meetings, users, poles } = data;
-  const [tab, setTab] = useState("sujets");
+function SujetsView({ me, data, isAdmin, reload, openNewSujet }) {
+  const { sujets, users, poles } = data;
   const [theme, setTheme] = useState("");
   const uById = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users]);
   const pById = useMemo(() => Object.fromEntries(poles.map((p) => [p.id, p])), [poles]);
   const themes = ["Finances", "Sportif", "Événements", "Bénévoles", "Communication", "Administratif", "Partenariats", "Divers"];
   const actifs = sujets.filter((x) => f(x, "Statut") !== "Traité").filter((x) => !theme || f(x, "Thème") === theme);
   const traites = sujets.filter((x) => f(x, "Statut") === "Traité");
+  return (
+    <div className="fade">
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
+        <div className="display" style={{ fontSize: 22, color: TEXT, marginRight: "auto" }}>Sujets à aborder</div>
+        <button className="btn btn-red" onClick={() => openNewSujet()}><i className="ti ti-plus" />Proposer un sujet</button>
+      </div>
+      <div style={{ display: "flex", marginBottom: 16, alignItems: "center", gap: 8, justifyContent: "flex-end" }}>
+        <span style={{ fontSize: 12.5, color: MUT }}>Filtrer</span>
+        <select className="sel" style={{ width: "auto", padding: "8px 12px" }} value={theme} onChange={(e) => setTheme(e.target.value)}>
+          <option value="">Tous les thèmes</option>
+          {themes.map((t) => <option key={t} value={t}>{t}</option>)}
+        </select>
+      </div>
+      {actifs.length === 0 ? <Empty t="Aucun sujet en attente — propose-en un !" /> :
+        [...poles.map((p) => p.id), "_"].map((pid) => {
+          const items = actifs.filter((x) => ((f(x, "Pôle") || [])[0] || "_") === pid).sort((a, b) => themes.indexOf(f(a, "Thème")) - themes.indexOf(f(b, "Thème")));
+          if (!items.length) return null;
+          const p = pById[pid]; const pId = p ? f(p, "Identifiant") : null;
+          return <div key={pid} style={{ marginBottom: 20 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 11 }}>
+              <span style={{ width: 28, height: 28, borderRadius: 8, background: POLE_COLORS[pId] || MUT, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}><i className={"ti " + (POLE_ICONS[pId] || "ti-folder")} style={{ fontSize: 16 }} aria-hidden="true" /></span>
+              <span style={{ fontSize: 15, fontWeight: 700, color: TEXT }}>{p ? f(p, "Pôles") : "Sans pôle"}</span>
+              <span style={{ fontSize: 12, color: MUT }}>· {items.length}</span>
+            </div>
+            {items.map((x) => <SujetCard key={x.id} s={x} me={me} uById={uById} pById={pById} reload={reload} />)}
+          </div>;
+        })}
+      {traites.length > 0 && (
+        <div style={{ marginTop: 22 }}>
+          <div className="cond" style={{ fontSize: 12.5, color: MUT, fontWeight: 700, marginBottom: 9 }}>Sujets traités ({traites.length})</div>
+          {traites.map((x) => <SujetCard key={x.id} s={x} me={me} uById={uById} pById={pById} reload={reload} done />)}
+        </div>
+      )}
+    </div>
+  );
+}
+function ReunionsView({ me, data, isAdmin, reload, openNewMeeting, openMeeting, openLive }) {
+  const { sujets, meetings } = data;
   const aVenir = meetings.filter((m) => f(m, "Statut") !== "Passée").sort((a, b) => String(f(a, "Date")).localeCompare(String(f(b, "Date"))));
   const passees = meetings.filter((m) => f(m, "Statut") === "Passée").sort((a, b) => String(f(b, "Date")).localeCompare(String(f(a, "Date"))));
-  const subTab = (id, label) => <button className="navb" style={{ color: tab === id ? "#16171B" : "#9aa0a6", background: tab === id ? "#fff" : "none" }} onClick={() => setTab(id)}>{label}</button>;
   return (
     <div className="fade">
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
         <div className="display" style={{ fontSize: 22, color: TEXT, marginRight: "auto" }}>Réunions du CA</div>
-        <nav style={{ display: "flex", gap: 4, background: "#EEF0F3", borderRadius: 30, padding: 4 }}>
-          {subTab("sujets", "Sujets à aborder")}{subTab("reunions", "Réunions")}
-        </nav>
+        {isAdmin && <button className="btn btn-red" onClick={openNewMeeting}><i className="ti ti-calendar-plus" />Planifier un CA</button>}
       </div>
-
-      {tab === "sujets" && (
-        <div>
-          <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
-            <button className="btn btn-red" onClick={() => openNewSujet()}><i className="ti ti-plus" />Proposer un sujet</button>
-            <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontSize: 12.5, color: MUT }}>Filtrer</span>
-              <select className="sel" style={{ width: "auto", padding: "8px 12px" }} value={theme} onChange={(e) => setTheme(e.target.value)}>
-                <option value="">Tous les thèmes</option>
-                {themes.map((t) => <option key={t} value={t}>{t}</option>)}
-              </select>
-            </div>
-          </div>
-          {actifs.length === 0 ? <Empty t="Aucun sujet en attente — propose-en un !" /> :
-            [...poles.map((p) => p.id), "_"].map((pid) => {
-              const items = actifs.filter((x) => ((f(x, "Pôle") || [])[0] || "_") === pid).sort((a, b) => themes.indexOf(f(a, "Thème")) - themes.indexOf(f(b, "Thème")));
-              if (!items.length) return null;
-              const p = pById[pid]; const pId = p ? f(p, "Identifiant") : null;
-              return <div key={pid} style={{ marginBottom: 20 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 11 }}>
-                  <span style={{ width: 28, height: 28, borderRadius: 8, background: POLE_COLORS[pId] || MUT, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}><i className={"ti " + (POLE_ICONS[pId] || "ti-folder")} style={{ fontSize: 16 }} aria-hidden="true" /></span>
-                  <span style={{ fontSize: 15, fontWeight: 700, color: TEXT }}>{p ? f(p, "Pôles") : "Sans pôle"}</span>
-                  <span style={{ fontSize: 12, color: MUT }}>· {items.length}</span>
-                </div>
-                {items.map((x) => <SujetCard key={x.id} s={x} me={me} uById={uById} pById={pById} reload={reload} />)}
-              </div>;
-            })}
-          {traites.length > 0 && (
-            <div style={{ marginTop: 22 }}>
-              <div className="cond" style={{ fontSize: 12.5, color: MUT, fontWeight: 700, marginBottom: 9 }}>Sujets traités ({traites.length})</div>
-              {traites.map((x) => <SujetCard key={x.id} s={x} me={me} uById={uById} pById={pById} reload={reload} done />)}
-            </div>
-          )}
-        </div>
-      )}
-
-      {tab === "reunions" && (
-        <div>
-          {isAdmin && <button className="btn btn-red" style={{ marginBottom: 14 }} onClick={openNewMeeting}><i className="ti ti-calendar-plus" />Planifier un CA</button>}
-          {aVenir.length === 0 && passees.length === 0 && <Empty t="Aucune réunion programmée." />}
-          {aVenir.length > 0 && <div className="cond" style={{ fontSize: 12.5, color: MUT, fontWeight: 700, margin: "4px 0 9px" }}>À venir</div>}
-          {aVenir.map((m) => <MeetingRow key={m.id} m={m} sujets={sujets} onClick={() => openMeeting(m.id)} onStart={openLive} />)}
-          {passees.length > 0 && <div className="cond" style={{ fontSize: 12.5, color: MUT, fontWeight: 700, margin: "18px 0 9px" }}>Réunions passées</div>}
-          {passees.map((m) => <MeetingRow key={m.id} m={m} sujets={sujets} onClick={() => openMeeting(m.id)} past />)}
-        </div>
-      )}
+      {aVenir.length === 0 && passees.length === 0 && <Empty t="Aucune réunion programmée." />}
+      {aVenir.length > 0 && <div className="cond" style={{ fontSize: 12.5, color: MUT, fontWeight: 700, margin: "4px 0 9px" }}>À venir</div>}
+      {aVenir.map((m) => <MeetingRow key={m.id} m={m} sujets={sujets} onClick={() => openMeeting(m.id)} onStart={openLive} />)}
+      {passees.length > 0 && <div className="cond" style={{ fontSize: 12.5, color: MUT, fontWeight: 700, margin: "18px 0 9px" }}>Réunions passées</div>}
+      {passees.map((m) => <MeetingRow key={m.id} m={m} sujets={sujets} onClick={() => openMeeting(m.id)} past />)}
     </div>
   );
 }
@@ -1471,7 +1464,7 @@ function MeetingLive({ meetingId, me, data, isAdmin, onClose, reload }) {
   );
 }
 function BottomNav({ view, setView }) {
-  const tabs = [["dash", "Accueil", "ti-home"], ["taches", "Tâches", "ti-checklist"], ["ca", "Réunions", "ti-calendar"], ["annuaire", "Annuaire", "ti-users"]];
+  const tabs = [["dash", "Accueil", "ti-home"], ["taches", "Tâches", "ti-checklist"], ["sujets", "Sujets", "ti-clipboard-list"], ["ca", "Réunions", "ti-calendar"], ["annuaire", "Annuaire", "ti-users"]];
   return (
     <nav className="bottomnav">
       {tabs.map(([v, l, ic]) => <button key={v} className={view === v ? "on" : ""} onClick={() => setView(v)}><i className={"ti " + ic} aria-hidden="true" /><span>{l}</span></button>)}
@@ -1539,7 +1532,8 @@ export default function App() {
         {!taskOpen && liveOpen && <MeetingLive meetingId={liveOpen} me={me} data={data} isAdmin={isAdmin} onClose={() => setLiveOpen(null)} reload={reload} />}
         {!taskOpen && !liveOpen && view === "dash" && <Dashboard me={me} data={data} setView={setView} openNewTask={() => setModal({ type: "task", pole: (f(me, "Pôle") || [])[0] || "" })} openNewSujet={(opts) => setModal({ type: "sujet", ...(opts || {}) })} openTask={(id) => setTaskOpen(id)} reload={reload} openMeeting={(id) => setModal({ type: "meetingDetail", id })} />}
         {!taskOpen && !liveOpen && view === "taches" && <TasksView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewTask={(pole) => setModal({ type: "task", pole })} openTask={(id) => setTaskOpen(id)} />}
-        {!taskOpen && !liveOpen && view === "ca" && <CAView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewSujet={(opts) => setModal({ type: "sujet", ...(opts || {}) })} openNewMeeting={() => setModal({ type: "meeting" })} openMeeting={(id) => setModal({ type: "meetingDetail", id })} openLive={(id) => setLiveOpen(id)} />}
+        {!taskOpen && !liveOpen && view === "sujets" && <SujetsView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewSujet={(opts) => setModal({ type: "sujet", ...(opts || {}) })} />}
+        {!taskOpen && !liveOpen && view === "ca" && <ReunionsView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewMeeting={() => setModal({ type: "meeting" })} openMeeting={(id) => setModal({ type: "meetingDetail", id })} openLive={(id) => setLiveOpen(id)} />}
         {!taskOpen && !liveOpen && view === "annuaire" && <Annuaire data={data} me={me} isAdmin={isAdmin} reload={reload} />}
         {!taskOpen && !liveOpen && view === "admin" && isAdmin && <AdminUsers me={me} data={data} reload={reload} />}
       </div>
