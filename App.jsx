@@ -20,7 +20,7 @@ const CSS = `
 html{overflow-x:clip;}body{margin:0;font-family:'Manrope',system-ui,sans-serif;overflow-x:clip;overflow-wrap:break-word;word-break:break-word;}
 .cond{font-weight:700;letter-spacing:-.01em;}
 .display{font-weight:800;letter-spacing:-.02em;}
-.card{background:#fff;border:1px solid #ECEEF1;border-radius:20px;padding:16px 18px;box-shadow:0 1px 2px rgba(20,22,30,.04);}
+.card{background:#fff;border:1px solid #ECEEF1;border-radius:20px;padding:16px 18px;box-shadow:0 1px 3px rgba(20,22,30,.05),0 1px 2px rgba(20,22,30,.03);}
 .lift{transition:transform .22s ease,box-shadow .22s ease;}
 .lift:hover{transform:translateY(-4px);box-shadow:0 16px 34px rgba(20,22,30,.12);}
 .rise{animation:vrise .55s cubic-bezier(.2,.7,.2,1) both;}
@@ -251,7 +251,7 @@ function ProfileForm({ me, poles, onSaved }) {
 }
 
 function Header({ me, view, setView, isAdmin, onLogout, unread, onBell, onProfile }) {
-  const tabs = [["dash", "Accueil"], ["taches", "Tâches"], ["sujets", "Sujets"], ["ca", "Réunions"], ["annuaire", "Annuaire"]];
+  const tabs = [["dash", "Accueil"], ["taches", "Tâches"], ["sujets", "Sujets"], ["ca", "Réunions"], ["cal", "Agenda"], ["annuaire", "Annuaire"]];
   return (
     <header className="appheader" style={{ backgroundColor: "#E8590C", backgroundImage: "linear-gradient(rgba(28,10,0,.22), rgba(28,10,0,.36)), url(/accent.jpg)", backgroundSize: "cover", backgroundPosition: "center", position: "sticky", top: 0, zIndex: 30, boxShadow: "0 2px 18px rgba(0,0,0,.22)" }}>
       <div className="appbrand">
@@ -318,6 +318,7 @@ function Dashboard({ me, data, setView, openNewTask, openNewSujet, openTask, rel
   const tById = Object.fromEntries(tasks.map((t) => [t.id, t]));
   const sById = Object.fromEntries((data.sujets || []).map((x) => [x.id, x]));
   const activite = (data.commentaires || []).slice().sort((a, b) => String(f(b, "Date")).localeCompare(String(f(a, "Date")))).slice(0, 6);
+  const poleStats = poles.map((p) => { const ts = tasks.filter((t) => (f(t, "Pôle") || [])[0] === p.id); const dn = ts.filter((t) => f(t, "Statut") === "Fait").length; return { p: p, total: ts.length, done: dn, pct: ts.length ? Math.round(dn / ts.length * 100) : 0 }; });
   const poleTag = (t) => { const p = pById[(f(t, "Pôle") || [])[0]]; if (!p) return null; const id = f(p, "Identifiant"); return <span className="tag" style={{ background: POLE_COLORS[id] || BLACK, display: "inline-flex", alignItems: "center", gap: 5 }}><i className={"ti " + (POLE_ICONS[id] || "ti-folder")} style={{ fontSize: 13 }} aria-hidden="true" />{f(p, "Pôles")}</span>; };
   const R = 32, CIRC = 2 * Math.PI * R;
 
@@ -353,6 +354,17 @@ function Dashboard({ me, data, setView, openNewTask, openNewSujet, openTask, rel
               <div style={{ fontSize: 13.5, color: MUT, marginTop: 3 }}>{pct}% des tâches sont à jour. Chaque tâche cochée fait avancer le club.</div>
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><button className="btn btn-red" onClick={openNewTask}><i className="ti ti-plus" />Nouvelle tâche</button><button className="btn btn-dark" onClick={() => openNewSujet()}><i className="ti ti-clipboard-plus" />Proposer un sujet CA</button></div>
+          </div>
+          <div className="card rise" style={{ padding: "18px 20px", marginBottom: 22 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: TEXT, marginBottom: 14 }}>Progression des pôles</div>
+            {poleStats.map(({ p, total, done, pct }) => { const id = f(p, "Identifiant"); const col = POLE_COLORS[id] || BLACK; return <div key={p.id} style={{ marginBottom: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
+                <span style={{ width: 20, height: 20, borderRadius: 6, background: col, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}><i className={"ti " + (POLE_ICONS[id] || "ti-folder")} style={{ fontSize: 12 }} aria-hidden="true" /></span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: TEXT, flex: 1 }}>{f(p, "Pôles")}</span>
+                <span style={{ fontSize: 12, color: MUT }}>{done}/{total}</span>
+              </div>
+              <div style={{ height: 8, background: "#EEF0F3", borderRadius: 20, overflow: "hidden" }}><div style={{ width: pct + "%", height: "100%", background: col, borderRadius: 20, transition: "width .5s ease" }} /></div>
+            </div>; })}
           </div>
           <Section title="Mes tâches">
             {mine.length === 0 ? <Empty t="Rien ne t'est assigné — prends une tâche pour donner un coup de main !" /> :
@@ -418,8 +430,8 @@ function Stat({ n, label, color = TEXT, bg = "#F1F3F5" }) {
   </div>;
 }
 function Section({ title, children }) {
-  return <div style={{ marginBottom: 18 }}>
-    <div className="cond" style={{ fontSize: 12.5, color: MUT, marginBottom: 8, fontWeight: 700 }}>{title}</div>
+  return <div style={{ marginBottom: 24 }}>
+    <div className="cond" style={{ fontSize: 13, color: "#4A4F57", marginBottom: 11, fontWeight: 700, letterSpacing: ".01em" }}>{title}</div>
     {children}
   </div>;
 }
@@ -1196,29 +1208,41 @@ function MeetingDetail({ meetingId, me, data, isAdmin, onClose, reload, onStart,
   );
 }
 
-function NotifsModal({ me, data, setView, onClose, reload, openTask }) {
-  const { commentaires, tasks, users } = data;
+function NotifsModal({ me, data, onClose, reload, openTask, openSujet, openRSVP, openSign }) {
+  const { commentaires, tasks, users, meetings } = data;
   const uById = Object.fromEntries(users.map((u) => [u.id, u]));
-  const tById = Object.fromEntries(tasks.map((t) => [t.id, t]));
-  const unread = commentaires.filter((c) => (f(c, "Mentions") || []).includes(me.id) && !String(f(c, "Lu par") || "").includes(me.id)).sort((a, b) => String(f(b, "Date")).localeCompare(String(f(a, "Date"))));
-  const goTo = async (c) => { const lu = String(f(c, "Lu par") || ""); try { await db({ action: "update", table: "Commentaires", recordId: c.id, fields: { "Lu par": lu ? lu + "," + me.id : me.id } }); } catch (e) {} reload(); openTask((f(c, "Tâche") || [])[0]); };
+  const mentions = commentaires.filter((c) => (f(c, "Mentions") || []).includes(me.id) && !String(f(c, "Lu par") || "").includes(me.id)).sort((a, b) => String(f(b, "Date")).localeCompare(String(f(a, "Date"))));
+  const upcoming = (meetings || []).filter((m) => f(m, "Statut") !== "Passée");
+  const rsvpPending = upcoming.filter((m) => !((f(m, "Répondu présent") || []).includes(me.id) || (f(m, "Répondu absent") || []).includes(me.id)));
+  const role = f(me, "Bureau"); const signSlot = role === "Président" ? "Signature Président" : role === "Secrétaire" ? "Signature Secrétaire" : null;
+  const toSign = signSlot ? (meetings || []).filter((m) => f(m, "Validation CR") === "En attente de signature" && !f(m, signSlot)) : [];
+  const deadlines = tasks.filter((t) => (f(t, "Assignés") || []).includes(me.id) && f(t, "Statut") !== "Fait" && (() => { const d = dueInfo(f(t, "Échéance")); return d && d.urg >= 2; })());
+  const helps = tasks.filter((t) => f(t, "Besoin d'aide"));
+  const readMention = async (c) => { const lu = String(f(c, "Lu par") || ""); try { await db({ action: "update", table: "Commentaires", recordId: c.id, fields: { "Lu par": lu ? lu + "," + me.id : me.id } }); } catch (e) {} await reload(); const tid = (f(c, "Tâche") || [])[0]; const sid = (f(c, "Sujet") || [])[0]; if (tid) openTask(tid); else if (sid) openSujet(sid); };
+  const Row = ({ icon, color, bg, title, sub, onClick }) => <div onClick={onClick} className="card lift" style={{ padding: "10px 13px", marginBottom: 7, display: "flex", alignItems: "center", gap: 11, cursor: "pointer" }}>
+    <span style={{ width: 34, height: 34, borderRadius: 10, background: bg, color: color, display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}><i className={"ti " + icon} style={{ fontSize: 18 }} aria-hidden="true" /></span>
+    <div style={{ minWidth: 0, flex: 1 }}><div style={{ fontSize: 13.5, fontWeight: 600, color: TEXT }}>{title}</div>{sub && <div style={{ fontSize: 12, color: MUT, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sub}</div>}</div>
+    <i className="ti ti-chevron-right" style={{ color: "#C9CCD2", fontSize: 16 }} aria-hidden="true" />
+  </div>;
+  const empty = mentions.length + rsvpPending.length + toSign.length + deadlines.length + helps.length === 0;
+  const head = (t) => <div className="cond" style={{ fontSize: 11.5, color: MUT, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em", margin: "16px 0 8px" }}>{t}</div>;
   return (
     <Modal onClose={onClose}>
-      <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 12 }}>Mes notifications</div>
-      {unread.length === 0 ? <Empty t="Aucune nouvelle mention." /> :
-        unread.map((c) => {
-          const au = uById[(f(c, "Auteur") || [])[0]];
-          const tk = tById[(f(c, "Tâche") || [])[0]];
-          return <div key={c.id} className="card" style={{ marginBottom: 8, padding: "11px 13px" }}>
-            <div style={{ fontSize: 12, color: MUT, marginBottom: 3 }}>{au ? fullName(au) : "?"} t'a mentionné{tk ? " · " + f(tk, "Titre") : ""}</div>
-            <div style={{ fontSize: 13.5, color: TEXT, marginBottom: 8, whiteSpace: "pre-wrap" }}>{renderMentions(f(c, "Texte"))}</div>
-            <button className="btn btn-ghost" style={{ fontSize: 12, padding: "6px 11px" }} onClick={() => goTo(c)}>Voir la tâche</button>
-          </div>;
-        })}
+      <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 4 }}>Notifications</div>
+      {empty && <Empty t="Tout est à jour — rien à signaler. 🎉" />}
+      {mentions.length > 0 && head("Mentions")}
+      {mentions.map((c) => { const au = uById[(f(c, "Auteur") || [])[0]]; return <Row key={c.id} icon="ti-at" color="#D62828" bg="#FBEDEC" title={(au ? fullName(au) : "?") + " t'a mentionné"} sub={f(c, "Texte")} onClick={() => readMention(c)} />; })}
+      {toSign.length > 0 && head("À signer")}
+      {toSign.map((m) => <Row key={m.id} icon="ti-signature" color="#7C3AED" bg="#EDE7F6" title="Compte-rendu à signer" sub={(f(m, "Titre") || "Réunion") + " · " + fmtDate(f(m, "Date"))} onClick={() => openSign(m.id)} />)}
+      {rsvpPending.length > 0 && head("Réponse attendue")}
+      {rsvpPending.map((m) => <Row key={m.id} icon="ti-calendar-question" color="#EA580C" bg="#FEF0E6" title="Réponds à l'invitation" sub={(f(m, "Titre") || "Réunion") + " · " + fmtDate(f(m, "Date"))} onClick={() => openRSVP(m.id)} />)}
+      {deadlines.length > 0 && head("Échéances proches")}
+      {deadlines.map((t) => { const d = dueInfo(f(t, "Échéance")); return <Row key={t.id} icon="ti-flame" color="#C99700" bg="#FCF3D6" title={f(t, "Titre")} sub={d ? d.label : ""} onClick={() => openTask(t.id)} />; })}
+      {helps.length > 0 && head("Coups de main demandés")}
+      {helps.map((t) => <Row key={t.id} icon="ti-urgent" color="#DC2626" bg="#FBEDEC" title={f(t, "Titre")} sub={f(t, "Message aide") || "Besoin d'aide"} onClick={() => openTask(t.id)} />)}
     </Modal>
   );
 }
-
 function TaskDetailPage({ taskId, me, data, isAdmin, onClose, reload }) {
   const { tasks, users, poles, commentaires } = data;
   const t = tasks.find((x) => x.id === taskId);
@@ -1794,8 +1818,56 @@ function SujetDetail({ sujetId, me, data, reload, onClose }) {
     </Modal>
   );
 }
+function CalendarView({ me, data, openTask, openMeeting }) {
+  const now0 = new Date();
+  const [ref, setRef] = useState({ y: now0.getFullYear(), m: now0.getMonth() });
+  const { meetings, tasks } = data;
+  const first = new Date(ref.y, ref.m, 1);
+  const startDow = (first.getDay() + 6) % 7;
+  const daysInMonth = new Date(ref.y, ref.m + 1, 0).getDate();
+  const cells = [];
+  for (let i = 0; i < startDow; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+  const iso = (d) => ref.y + "-" + String(ref.m + 1).padStart(2, "0") + "-" + String(d).padStart(2, "0");
+  const meetingsOn = (d) => meetings.filter((mm) => String(f(mm, "Date") || "").slice(0, 10) === iso(d));
+  const tasksOn = (d) => tasks.filter((t) => String(f(t, "Échéance") || "").slice(0, 10) === iso(d) && f(t, "Statut") !== "Fait");
+  const monthName = new Date(ref.y, ref.m, 1).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+  const td = new Date(); const todayIso = td.getFullYear() + "-" + String(td.getMonth() + 1).padStart(2, "0") + "-" + String(td.getDate()).padStart(2, "0");
+  const prev = () => setRef((r) => { const m = r.m - 1; return m < 0 ? { y: r.y - 1, m: 11 } : { y: r.y, m }; });
+  const next = () => setRef((r) => { const m = r.m + 1; return m > 11 ? { y: r.y + 1, m: 0 } : { y: r.y, m }; });
+  const dows = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
+  return (
+    <div className="fade">
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+        <div className="display" style={{ fontSize: 22, color: TEXT, marginRight: "auto", textTransform: "capitalize" }}>{monthName}</div>
+        <button className="btn btn-ghost" onClick={prev}><i className="ti ti-chevron-left" /></button>
+        <button className="btn btn-ghost" onClick={() => { const d = new Date(); setRef({ y: d.getFullYear(), m: d.getMonth() }); }}>Aujourd'hui</button>
+        <button className="btn btn-ghost" onClick={next}><i className="ti ti-chevron-right" /></button>
+      </div>
+      <div className="card" style={{ padding: "12px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 5 }}>
+          {dows.map((w) => <div key={w} style={{ fontSize: 11, fontWeight: 700, color: MUT, textAlign: "center", padding: "4px 0" }}>{w}</div>)}
+          {cells.map((d, i) => {
+            if (!d) return <div key={"e" + i} />;
+            const mm = meetingsOn(d); const tk = tasksOn(d); const isToday = iso(d) === todayIso;
+            return <div key={d} style={{ minHeight: 72, border: "1px solid " + (isToday ? RED : "#EEF0F3"), borderRadius: 10, padding: "5px 6px", background: isToday ? "#FEF6F5" : "#fff", overflow: "hidden" }}>
+              <div style={{ fontSize: 11.5, fontWeight: isToday ? 800 : 600, color: isToday ? RED : "#6E747D", marginBottom: 3 }}>{d}</div>
+              {mm.map((x) => <div key={x.id} onClick={() => openMeeting(x.id)} style={{ cursor: "pointer", fontSize: 10.5, fontWeight: 700, color: "#fff", background: "#16171B", borderRadius: 5, padding: "2px 5px", marginBottom: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>CA</div>)}
+              {tk.slice(0, 3).map((t) => { const pole = (data.poles || []).find((p) => p.id === (f(t, "Pôle") || [])[0]); const col = pole ? (POLE_COLORS[f(pole, "Identifiant")] || "#6E747D") : "#6E747D"; return <div key={t.id} onClick={() => openTask(t.id)} title={f(t, "Titre")} style={{ cursor: "pointer", fontSize: 10.5, color: TEXT, borderLeft: "3px solid " + col, background: "#F7F8FA", borderRadius: 4, padding: "2px 5px", marginBottom: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f(t, "Titre")}</div>; })}
+              {tk.length > 3 && <div style={{ fontSize: 10, color: MUT }}>+{tk.length - 3}</div>}
+            </div>;
+          })}
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 16, marginTop: 12, fontSize: 12, color: MUT, flexWrap: "wrap" }}>
+        <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 3, background: "#16171B", marginRight: 5, verticalAlign: "middle" }} />Réunion CA</span>
+        <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 3, background: "#F7F8FA", border: "1px solid #ddd", marginRight: 5, verticalAlign: "middle" }} />Échéance de tâche</span>
+      </div>
+    </div>
+  );
+}
 function BottomNav({ view, setView }) {
-  const tabs = [["dash", "Accueil", "ti-home"], ["taches", "Tâches", "ti-checklist"], ["sujets", "Sujets", "ti-clipboard-list"], ["ca", "Réunions", "ti-calendar"], ["annuaire", "Annuaire", "ti-users"]];
+  const tabs = [["dash", "Accueil", "ti-home"], ["taches", "Tâches", "ti-checklist"], ["sujets", "Sujets", "ti-clipboard-list"], ["ca", "Réunions", "ti-calendar"], ["cal", "Agenda", "ti-calendar-month"], ["annuaire", "Annuaire", "ti-users"]];
   return (
     <nav className="bottomnav">
       {tabs.map(([v, l, ic]) => <button key={v} className={view === v ? "on" : ""} onClick={() => setView(v)}><i className={"ti " + ic} aria-hidden="true" /><span>{l}</span></button>)}
@@ -1857,7 +1929,9 @@ export default function App() {
   if (status === "profile") return <ProfileForm me={me} poles={data.poles} onSaved={onProfileSaved} />;
 
   const isAdmin = f(me, "Rôle") === "Admin";
-  const unread = (data.commentaires || []).filter((c) => (f(c, "Mentions") || []).includes(me.id) && !String(f(c, "Lu par") || "").includes(me.id)).length;
+  const unread = (data.commentaires || []).filter((c) => (f(c, "Mentions") || []).includes(me.id) && !String(f(c, "Lu par") || "").includes(me.id)).length
+    + (data.meetings || []).filter((m) => f(m, "Statut") !== "Passée" && !((f(m, "Répondu présent") || []).includes(me.id) || (f(m, "Répondu absent") || []).includes(me.id))).length
+    + (() => { const role = f(me, "Bureau"); const slot = role === "Président" ? "Signature Président" : role === "Secrétaire" ? "Signature Secrétaire" : null; return slot ? (data.meetings || []).filter((m) => f(m, "Validation CR") === "En attente de signature" && !f(m, slot)).length : 0; })();
   return (
     <div style={{ minHeight: "100vh", backgroundColor: "#F4F5F8", backgroundImage: "radial-gradient(720px circle at 100% -6%, rgba(214,40,40,.06), transparent 58%), radial-gradient(620px circle at -6% 112%, rgba(245,197,24,.07), transparent 58%)", backgroundAttachment: "fixed", color: TEXT, fontFamily: "'Manrope',system-ui,sans-serif" }}>
       <style>{CSS}</style>
@@ -1871,12 +1945,13 @@ export default function App() {
         {!rsvpOpen && !signOpen && !taskOpen && !liveOpen && view === "taches" && <TasksView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewTask={(pole) => setModal({ type: "task", pole })} openTask={(id) => setTaskOpen(id)} />}
         {!rsvpOpen && !signOpen && !taskOpen && !liveOpen && view === "sujets" && <SujetsView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewSujet={(opts) => setModal({ type: "sujet", ...(opts || {}) })} openSujet={(id) => setModal({ type: "sujetDetail", id })} />}
         {!rsvpOpen && !signOpen && !taskOpen && !liveOpen && view === "ca" && <ReunionsView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewMeeting={() => setModal({ type: "meeting" })} openMeeting={(id) => setModal({ type: "meetingDetail", id })} openLive={(id) => setLiveOpen(id)} openCR={(id) => setModal({ type: "cr", id })} />}
+        {!rsvpOpen && !signOpen && !taskOpen && !liveOpen && view === "cal" && <CalendarView me={me} data={data} openTask={(id) => setTaskOpen(id)} openMeeting={(id) => setModal({ type: "meetingDetail", id })} />}
         {!rsvpOpen && !signOpen && !taskOpen && !liveOpen && view === "annuaire" && <Annuaire data={data} me={me} isAdmin={isAdmin} reload={reload} />}
         {!rsvpOpen && !signOpen && !taskOpen && !liveOpen && view === "admin" && isAdmin && <AdminUsers me={me} data={data} reload={reload} />}
       </div>
       {modal && modal.type === "task" && <NewTask me={me} data={data} isAdmin={isAdmin} initialPole={modal.pole} onClose={() => setModal(null)} reload={reload} />}
       {modal && modal.type === "sujet" && <NewSujet me={me} data={data} meetingId={modal.meetingId} initialPole={modal.pole} onClose={() => setModal(null)} reload={reload} />}
-      {modal && modal.type === "notifs" && <NotifsModal me={me} data={data} setView={setView} onClose={() => setModal(null)} reload={reload} openTask={(id) => { setModal(null); setTaskOpen(id); }} />}
+      {modal && modal.type === "notifs" && <NotifsModal me={me} data={data} onClose={() => setModal(null)} reload={reload} openTask={(id) => { setModal(null); setTaskOpen(id); }} openSujet={(id) => setModal({ type: "sujetDetail", id })} openRSVP={(id) => { setModal(null); setRsvpOpen(id); }} openSign={(id) => { setModal(null); setSignOpen(id); }} />}
       {modal && modal.type === "meeting" && <NewMeeting onClose={() => setModal(null)} reload={reload} data={data} />}
       {modal && modal.type === "meetingDetail" && <MeetingDetail meetingId={modal.id} me={me} data={data} isAdmin={isAdmin} onClose={() => setModal(null)} reload={reload} onStart={() => { setModal(null); setLiveOpen(modal.id); }} onSign={() => { setModal(null); setSignOpen(modal.id); }} />}
       {modal && modal.type === "profile" && <MonCompte me={me} data={data} onClose={() => setModal(null)} reload={reload} onLogout={logout} onUsers={() => { setModal(null); setView("admin"); }} />}
