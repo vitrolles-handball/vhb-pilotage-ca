@@ -864,7 +864,7 @@ function SujetsView({ me, data, isAdmin, reload, openNewSujet }) {
     </div>
   );
 }
-function ReunionsView({ me, data, isAdmin, reload, openNewMeeting, openMeeting, openLive }) {
+function ReunionsView({ me, data, isAdmin, reload, openNewMeeting, openMeeting, openLive, openCR }) {
   const { sujets, meetings } = data;
   const aVenir = meetings.filter((m) => f(m, "Statut") !== "Passée").sort((a, b) => String(f(a, "Date")).localeCompare(String(f(b, "Date"))));
   const passees = meetings.filter((m) => f(m, "Statut") === "Passée").sort((a, b) => String(f(b, "Date")).localeCompare(String(f(a, "Date"))));
@@ -879,6 +879,10 @@ function ReunionsView({ me, data, isAdmin, reload, openNewMeeting, openMeeting, 
       alert("Relance envoyée à : " + pending.map((u) => fullName(u)).join(", "));
     } catch (e) { alert("Erreur : " + e.message); }
   };
+  const enAttente = passees.filter((m) => f(m, "Validation CR") === "En attente de signature");
+  const valides = passees.filter((m) => f(m, "Validation CR") === "Signé");
+  const autres = passees.filter((m) => f(m, "Validation CR") !== "En attente de signature" && f(m, "Validation CR") !== "Signé");
+  const secHead = (label, color, icon, count) => <div style={{ display: "flex", alignItems: "center", gap: 9, margin: "28px 0 12px" }}><span style={{ width: 26, height: 26, borderRadius: 8, background: color, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}><i className={"ti " + icon} style={{ fontSize: 15 }} aria-hidden="true" /></span><span style={{ fontSize: 14, fontWeight: 800, color: TEXT, letterSpacing: ".03em" }}>{label}</span><span className="chip" style={{ background: "#EEF0F3", color: "#5A6066" }}>{count}</span><div style={{ flex: 1, height: 1, background: BORDER }} /></div>;
   return (
     <div className="fade">
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
@@ -888,8 +892,12 @@ function ReunionsView({ me, data, isAdmin, reload, openNewMeeting, openMeeting, 
       {aVenir.length === 0 && passees.length === 0 && <Empty t="Aucune réunion programmée." />}
       {aVenir.length > 0 && <div style={{ display: "flex", alignItems: "center", gap: 9, margin: "8px 0 12px" }}><span style={{ width: 26, height: 26, borderRadius: 8, background: RED, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}><i className="ti ti-calendar-up" style={{ fontSize: 15 }} aria-hidden="true" /></span><span style={{ fontSize: 14, fontWeight: 800, color: TEXT, letterSpacing: ".03em" }}>À VENIR</span><div style={{ flex: 1, height: 1, background: BORDER }} /></div>}
       {aVenir.map((m) => <MeetingRow key={m.id} m={m} sujets={sujets} onClick={() => openMeeting(m.id)} onStart={openLive} />)}
-      {passees.length > 0 && <div style={{ display: "flex", alignItems: "center", gap: 9, margin: "28px 0 12px" }}><span style={{ width: 26, height: 26, borderRadius: 8, background: "#8A9098", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}><i className="ti ti-history" style={{ fontSize: 15 }} aria-hidden="true" /></span><span style={{ fontSize: 14, fontWeight: 800, color: TEXT, letterSpacing: ".03em" }}>RÉUNIONS PASSÉES</span><span className="chip" style={{ background: "#EEF0F3", color: "#5A6066" }}>{passees.length}</span><div style={{ flex: 1, height: 1, background: BORDER }} /></div>}
-      {passees.map((m) => <MeetingRow key={m.id} m={m} sujets={sujets} onClick={() => openMeeting(m.id)} past onResend={resend} />)}
+      {enAttente.length > 0 && secHead("EN ATTENTE DE SIGNATURE", "#E8590C", "ti-clock", enAttente.length)}
+      {enAttente.map((m) => <MeetingRow key={m.id} m={m} sujets={sujets} onClick={() => openMeeting(m.id)} past onResend={resend} />)}
+      {valides.length > 0 && secHead("VALIDÉ", OK, "ti-checks", valides.length)}
+      {valides.map((m) => <MeetingRow key={m.id} m={m} sujets={sujets} onClick={() => openMeeting(m.id)} past onView={openCR} />)}
+      {autres.length > 0 && secHead("RÉUNIONS PASSÉES", "#8A9098", "ti-history", autres.length)}
+      {autres.map((m) => <MeetingRow key={m.id} m={m} sujets={sujets} onClick={() => openMeeting(m.id)} past onResend={resend} />)}
     </div>
   );
 }
@@ -942,7 +950,7 @@ function SujetCard({ s, me, uById, pById, reload, done }) {
     </div>
   );
 }
-function MeetingRow({ m, sujets, onClick, past, onStart, onResend }) {
+function MeetingRow({ m, sujets, onClick, past, onStart, onResend, onView }) {
   const linked = sujets.filter((s) => (f(s, "Réunion") || []).includes(m.id));
   return (
     <div className="card lift" onClick={onClick} style={{ marginBottom: 9, padding: "14px 16px", cursor: "pointer", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
@@ -955,6 +963,7 @@ function MeetingRow({ m, sujets, onClick, past, onStart, onResend }) {
       </div>
       {!past && onStart && <button className="btn btn-red" style={{ fontSize: 12.5, padding: "7px 12px", flex: "0 0 auto" }} onClick={(e) => { e.stopPropagation(); onStart(m.id); }}><i className="ti ti-player-play" />Commencer</button>}
       <span className="chip" style={{ background: past ? "#EEF0F3" : "#FEF6D8", color: past ? MUT : "#8A6D00" }}>{past ? "Passée" : "À venir"}{linked.length ? " · " + linked.length + " sujet" + (linked.length > 1 ? "s" : "") : ""}</span>
+      {past && f(m, "Validation CR") === "Signé" && onView && <button className="btn btn-ghost" style={{ fontSize: 12, padding: "6px 11px", flex: "0 0 auto" }} onClick={(e) => { e.stopPropagation(); onView(m.id); }}><i className="ti ti-eye" />Voir le CR</button>}
       {past && f(m, "Validation CR") === "En attente de signature" && onResend && <button className="btn btn-ghost" style={{ fontSize: 12, padding: "6px 11px", flex: "0 0 auto" }} onClick={(e) => { e.stopPropagation(); onResend(m); }}><i className="ti ti-send" />Renvoyer</button>}
       {past && f(m, "Validation CR") && <span className="chip" style={{ background: f(m, "Validation CR") === "Signé" ? "#E4F6E9" : "#FEF3D6", color: f(m, "Validation CR") === "Signé" ? OK : "#8A6D00" }}><i className={"ti " + (f(m, "Validation CR") === "Signé" ? "ti-checks" : "ti-clock")} aria-hidden="true" />{f(m, "Validation CR") === "Signé" ? "Signé" : "En attente de signature"}</span>}
     </div>
@@ -1544,6 +1553,19 @@ function SignatureView({ meetingId, me, data, onClose, reload }) {
     </div>
   );
 }
+function CRView({ meetingId, data, onClose }) {
+  const m = data.meetings.find((x) => x.id === meetingId);
+  if (!m) return <Modal onClose={onClose}><Empty t="Réunion introuvable." /></Modal>;
+  return (
+    <Modal onClose={onClose}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
+        <div style={{ fontSize: 17, fontWeight: 800 }}>Compte-rendu</div>
+        <button className="btn btn-red" style={{ marginLeft: "auto" }} onClick={() => printCRdoc(m, data, f(m, "Présents") || [], f(m, "Compte-rendu") || "")}><i className="ti ti-printer" />Imprimer / Télécharger</button>
+      </div>
+      <div style={{ border: "1px solid " + BORDER, borderRadius: 12, padding: "18px 20px", maxHeight: "64vh", overflowY: "auto", background: "#fff" }} dangerouslySetInnerHTML={{ __html: crDocHtml(m, data, f(m, "Présents") || [], LOGO, f(m, "Compte-rendu") || "") }} />
+    </Modal>
+  );
+}
 function BottomNav({ view, setView }) {
   const tabs = [["dash", "Accueil", "ti-home"], ["taches", "Tâches", "ti-checklist"], ["sujets", "Sujets", "ti-clipboard-list"], ["ca", "Réunions", "ti-calendar"], ["annuaire", "Annuaire", "ti-users"]];
   return (
@@ -1617,7 +1639,7 @@ export default function App() {
         {!signOpen && !taskOpen && !liveOpen && view === "dash" && <Dashboard me={me} data={data} setView={setView} openNewTask={() => setModal({ type: "task", pole: (f(me, "Pôle") || [])[0] || "" })} openNewSujet={(opts) => setModal({ type: "sujet", ...(opts || {}) })} openTask={(id) => setTaskOpen(id)} reload={reload} openMeeting={(id) => setModal({ type: "meetingDetail", id })} />}
         {!signOpen && !taskOpen && !liveOpen && view === "taches" && <TasksView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewTask={(pole) => setModal({ type: "task", pole })} openTask={(id) => setTaskOpen(id)} />}
         {!signOpen && !taskOpen && !liveOpen && view === "sujets" && <SujetsView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewSujet={(opts) => setModal({ type: "sujet", ...(opts || {}) })} />}
-        {!signOpen && !taskOpen && !liveOpen && view === "ca" && <ReunionsView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewMeeting={() => setModal({ type: "meeting" })} openMeeting={(id) => setModal({ type: "meetingDetail", id })} openLive={(id) => setLiveOpen(id)} />}
+        {!signOpen && !taskOpen && !liveOpen && view === "ca" && <ReunionsView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewMeeting={() => setModal({ type: "meeting" })} openMeeting={(id) => setModal({ type: "meetingDetail", id })} openLive={(id) => setLiveOpen(id)} openCR={(id) => setModal({ type: "cr", id })} />}
         {!signOpen && !taskOpen && !liveOpen && view === "annuaire" && <Annuaire data={data} me={me} isAdmin={isAdmin} reload={reload} />}
         {!signOpen && !taskOpen && !liveOpen && view === "admin" && isAdmin && <AdminUsers me={me} data={data} reload={reload} />}
       </div>
@@ -1627,6 +1649,7 @@ export default function App() {
       {modal && modal.type === "meeting" && <NewMeeting onClose={() => setModal(null)} reload={reload} data={data} />}
       {modal && modal.type === "meetingDetail" && <MeetingDetail meetingId={modal.id} me={me} data={data} isAdmin={isAdmin} onClose={() => setModal(null)} reload={reload} onStart={() => { setModal(null); setLiveOpen(modal.id); }} onSign={() => { setModal(null); setSignOpen(modal.id); }} />}
       {modal && modal.type === "profile" && <MonCompte me={me} data={data} onClose={() => setModal(null)} reload={reload} onLogout={logout} onUsers={() => { setModal(null); setView("admin"); }} />}
+      {modal && modal.type === "cr" && <CRView meetingId={modal.id} data={data} onClose={() => setModal(null)} />}
       <BottomNav view={view} setView={(v) => { setTaskOpen(null); setLiveOpen(null); setView(v); }} />
     </div>
   );
