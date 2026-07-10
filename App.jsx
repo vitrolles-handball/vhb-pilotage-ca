@@ -1654,7 +1654,7 @@ function CRView({ meetingId, data, onClose }) {
     </Modal>
   );
 }
-function RSVPView({ meetingId, me, data, onClose, reload }) {
+function RSVPView({ meetingId, me, data, onClose, reload, openNewSujet }) {
   const m = data.meetings.find((x) => x.id === meetingId);
   const [busy, setBusy] = useState(false);
   const respond = async (r) => {
@@ -1683,6 +1683,11 @@ function RSVPView({ meetingId, me, data, onClose, reload }) {
         </button>
       </div>
       {my && <div style={{ marginTop: 16, fontSize: 13.5, color: OK, fontWeight: 600 }}><i className="ti ti-check" />Réponse enregistrée : {my === "present" ? "présent" : "absent"}. Tu peux la modifier à tout moment.</div>}
+      <div className="card" style={{ marginTop: 22, padding: "18px 20px" }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: TEXT, marginBottom: 4 }}>Prépare la réunion</div>
+        <div style={{ fontSize: 13, color: MUT, marginBottom: 12 }}>Ajoute des sujets à l'ordre du jour de ce CA pour qu'on en discute.</div>
+        <button className="btn btn-red" onClick={() => openNewSujet && openNewSujet({ meetingId: m.id, pole: (f(me, "Pôle") || [])[0] || "" })}><i className="ti ti-plus" />Ajouter un sujet à l'ordre du jour</button>
+      </div>
     </div>
   );
 }
@@ -1755,7 +1760,7 @@ export default function App() {
       <style>{CSS}</style>
       <Header me={me} view={view} setView={(v) => { setTaskOpen(null); setLiveOpen(null); setSignOpen(null); setRsvpOpen(null); setView(v); }} isAdmin={isAdmin} onLogout={logout} unread={unread} onBell={() => setModal({ type: "notifs" })} onProfile={() => setModal({ type: "profile" })} />
       <div className="wrap">
-        {rsvpOpen && <RSVPView meetingId={rsvpOpen} me={me} data={data} onClose={() => { setRsvpOpen(null); try { window.history.replaceState({}, "", window.location.pathname); } catch (e) {} }} reload={reload} />}
+        {rsvpOpen && <RSVPView meetingId={rsvpOpen} me={me} data={data} onClose={() => { setRsvpOpen(null); try { window.history.replaceState({}, "", window.location.pathname); } catch (e) {} }} reload={reload} openNewSujet={(opts) => setModal({ type: "sujet", ...(opts || {}) })} />}
         {!rsvpOpen && signOpen && <SignatureView meetingId={signOpen} me={me} data={data} onClose={() => { setSignOpen(null); try { window.history.replaceState({}, "", window.location.pathname); } catch (e) {} }} reload={reload} />}
         {!rsvpOpen && !signOpen && taskOpen && <TaskDetailPage taskId={taskOpen} me={me} data={data} isAdmin={isAdmin} onClose={() => setTaskOpen(null)} reload={reload} />}
         {!rsvpOpen && !signOpen && !taskOpen && liveOpen && <MeetingLive meetingId={liveOpen} me={me} data={data} isAdmin={isAdmin} onClose={() => setLiveOpen(null)} reload={reload} />}
