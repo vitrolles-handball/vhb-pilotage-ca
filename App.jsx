@@ -868,6 +868,17 @@ function ReunionsView({ me, data, isAdmin, reload, openNewMeeting, openMeeting, 
   const { sujets, meetings } = data;
   const aVenir = meetings.filter((m) => f(m, "Statut") !== "Passée").sort((a, b) => String(f(a, "Date")).localeCompare(String(f(b, "Date"))));
   const passees = meetings.filter((m) => f(m, "Statut") === "Passée").sort((a, b) => String(f(b, "Date")).localeCompare(String(f(a, "Date"))));
+  const resend = async (m) => {
+    const targets = data.users.filter((u) => (f(u, "Bureau") === "Président" || f(u, "Bureau") === "Secrétaire") && f(u, "Email"));
+    const pending = targets.filter((u) => { const slot = f(u, "Bureau") === "Président" ? "Signature Président" : "Signature Secrétaire"; return !f(m, slot); });
+    if (!pending.length) { alert("Tous les signataires ont déjà signé (ou aucun signataire défini dans l'Annuaire)."); return; }
+    if (!confirm("Renvoyer la demande de signature à : " + pending.map((u) => fullName(u)).join(", ") + " ?")) return;
+    const body = crDocHtml(m, data, f(m, "Présents") || [], APP_URL + "/logo.png");
+    try {
+      for (const u of pending) { await sendMail({ to: f(u, "Email"), subject: "Rappel : compte-rendu à signer — " + (f(m, "Titre") || "Réunion du CA"), html: '<div style="font-family:Arial;color:#333;max-width:720px;margin:0 auto 14px">Bonjour ' + escapeHtml(f(u, "Prénom") || "") + ', merci de signer le compte-rendu ci-dessous.</div><div style="text-align:center;margin:0 auto 18px;max-width:720px"><a href="' + APP_URL + '/?sign=' + m.id + '" style="background:#D62828;color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:700;display:inline-block">Signer le compte-rendu en ligne</a></div>' + body }); }
+      alert("Relance envoyée à : " + pending.map((u) => fullName(u)).join(", "));
+    } catch (e) { alert("Erreur : " + e.message); }
+  };
   return (
     <div className="fade">
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
@@ -875,10 +886,10 @@ function ReunionsView({ me, data, isAdmin, reload, openNewMeeting, openMeeting, 
         {isAdmin && <button className="btn btn-red" onClick={openNewMeeting}><i className="ti ti-calendar-plus" />Planifier un CA</button>}
       </div>
       {aVenir.length === 0 && passees.length === 0 && <Empty t="Aucune réunion programmée." />}
-      {aVenir.length > 0 && <div className="cond" style={{ fontSize: 12.5, color: MUT, fontWeight: 700, margin: "4px 0 9px" }}>À venir</div>}
+      {aVenir.length > 0 && <div style={{ display: "flex", alignItems: "center", gap: 9, margin: "8px 0 12px" }}><span style={{ width: 26, height: 26, borderRadius: 8, background: RED, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}><i className="ti ti-calendar-up" style={{ fontSize: 15 }} aria-hidden="true" /></span><span style={{ fontSize: 14, fontWeight: 800, color: TEXT, letterSpacing: ".03em" }}>À VENIR</span><div style={{ flex: 1, height: 1, background: BORDER }} /></div>}
       {aVenir.map((m) => <MeetingRow key={m.id} m={m} sujets={sujets} onClick={() => openMeeting(m.id)} onStart={openLive} />)}
-      {passees.length > 0 && <div className="cond" style={{ fontSize: 12.5, color: MUT, fontWeight: 700, margin: "18px 0 9px" }}>Réunions passées</div>}
-      {passees.map((m) => <MeetingRow key={m.id} m={m} sujets={sujets} onClick={() => openMeeting(m.id)} past />)}
+      {passees.length > 0 && <div style={{ display: "flex", alignItems: "center", gap: 9, margin: "28px 0 12px" }}><span style={{ width: 26, height: 26, borderRadius: 8, background: "#8A9098", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}><i className="ti ti-history" style={{ fontSize: 15 }} aria-hidden="true" /></span><span style={{ fontSize: 14, fontWeight: 800, color: TEXT, letterSpacing: ".03em" }}>RÉUNIONS PASSÉES</span><span className="chip" style={{ background: "#EEF0F3", color: "#5A6066" }}>{passees.length}</span><div style={{ flex: 1, height: 1, background: BORDER }} /></div>}
+      {passees.map((m) => <MeetingRow key={m.id} m={m} sujets={sujets} onClick={() => openMeeting(m.id)} past onResend={resend} />)}
     </div>
   );
 }
@@ -931,7 +942,7 @@ function SujetCard({ s, me, uById, pById, reload, done }) {
     </div>
   );
 }
-function MeetingRow({ m, sujets, onClick, past, onStart }) {
+function MeetingRow({ m, sujets, onClick, past, onStart, onResend }) {
   const linked = sujets.filter((s) => (f(s, "Réunion") || []).includes(m.id));
   return (
     <div className="card lift" onClick={onClick} style={{ marginBottom: 9, padding: "14px 16px", cursor: "pointer", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
@@ -944,7 +955,8 @@ function MeetingRow({ m, sujets, onClick, past, onStart }) {
       </div>
       {!past && onStart && <button className="btn btn-red" style={{ fontSize: 12.5, padding: "7px 12px", flex: "0 0 auto" }} onClick={(e) => { e.stopPropagation(); onStart(m.id); }}><i className="ti ti-player-play" />Commencer</button>}
       <span className="chip" style={{ background: past ? "#EEF0F3" : "#FEF6D8", color: past ? MUT : "#8A6D00" }}>{past ? "Passée" : "À venir"}{linked.length ? " · " + linked.length + " sujet" + (linked.length > 1 ? "s" : "") : ""}</span>
-      {past && f(m, "Validation CR") && <span className="chip" style={{ background: f(m, "Validation CR") === "Signé" ? "#E4F6E9" : "#FEF3D6", color: f(m, "Validation CR") === "Signé" ? OK : "#8A6D00" }}>{f(m, "Validation CR") === "Signé" ? "Signé ✓" : "À signer"}</span>}
+      {past && f(m, "Validation CR") === "En attente de signature" && onResend && <button className="btn btn-ghost" style={{ fontSize: 12, padding: "6px 11px", flex: "0 0 auto" }} onClick={(e) => { e.stopPropagation(); onResend(m); }}><i className="ti ti-send" />Renvoyer</button>}
+      {past && f(m, "Validation CR") && <span className="chip" style={{ background: f(m, "Validation CR") === "Signé" ? "#E4F6E9" : "#FEF3D6", color: f(m, "Validation CR") === "Signé" ? OK : "#8A6D00" }}><i className={"ti " + (f(m, "Validation CR") === "Signé" ? "ti-checks" : "ti-clock")} aria-hidden="true" />{f(m, "Validation CR") === "Signé" ? "Signé" : "En attente de signature"}</span>}
     </div>
   );
 }
