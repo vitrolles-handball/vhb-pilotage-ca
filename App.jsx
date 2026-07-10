@@ -953,7 +953,7 @@ function MeetingRow({ m, sujets, onClick, past }) {
   );
 }
 
-function NewMeeting({ onClose, reload }) {
+function NewMeeting({ onClose, reload, data }) {
   const [titre, setTitre] = useState("Réunion du CA");
   const [date, setDate] = useState("");
   const [heure, setHeure] = useState("");
@@ -961,7 +961,12 @@ function NewMeeting({ onClose, reload }) {
   const [busy, setBusy] = useState(false);
   const save = async () => {
     if (!date) return; setBusy(true);
-    try { await db({ action: "create", table: "Réunions", fields: { "Titre": titre.trim() || "Réunion du CA", "Date": date, "Heure": heure.trim(), "Lieu": lieu.trim(), "Statut": "À venir" } }); await reload(); onClose(); } catch (e) { alert("Erreur : " + e.message); setBusy(false); }
+    try {
+      await db({ action: "create", table: "Réunions", fields: { "Titre": titre.trim() || "Réunion du CA", "Date": date, "Heure": heure.trim(), "Lieu": lieu.trim(), "Statut": "À venir" } });
+      await reload();
+      ((data && data.users) || []).filter((u) => f(u, "Actif") !== false && f(u, "Email")).forEach((u) => sendMail({ to: f(u, "Email"), subject: "Nouveau CA programmé — VHB Pilotage", html: mailWrap("Un CA est programmé", '<p style="color:#444;line-height:1.55">Une réunion du CA est prévue le <b>' + escapeHtml(fmtDate(date)) + (heure.trim() ? " à " + escapeHtml(heure.trim()) : "") + "</b>" + (lieu.trim() ? " · " + escapeHtml(lieu.trim()) : "") + '.</p><p style="color:#444;line-height:1.55">Prépare les sujets de ton pôle directement dans l\'outil, on avance ensemble !</p>', { url: APP_URL, label: "Préparer le CA" }) }).catch(() => {}));
+      onClose();
+    } catch (e) { alert("Erreur : " + e.message); setBusy(false); }
   };
   return (
     <Modal onClose={onClose}>
@@ -1335,7 +1340,7 @@ export default function App() {
       {modal && modal.type === "task" && <NewTask me={me} data={data} isAdmin={isAdmin} initialPole={modal.pole} onClose={() => setModal(null)} reload={reload} />}
       {modal && modal.type === "sujet" && <NewSujet me={me} data={data} meetingId={modal.meetingId} initialPole={modal.pole} onClose={() => setModal(null)} reload={reload} />}
       {modal && modal.type === "notifs" && <NotifsModal me={me} data={data} setView={setView} onClose={() => setModal(null)} reload={reload} openTask={(id) => { setModal(null); setTaskOpen(id); }} />}
-      {modal && modal.type === "meeting" && <NewMeeting onClose={() => setModal(null)} reload={reload} />}
+      {modal && modal.type === "meeting" && <NewMeeting onClose={() => setModal(null)} reload={reload} data={data} />}
       {modal && modal.type === "meetingDetail" && <MeetingDetail meetingId={modal.id} me={me} data={data} isAdmin={isAdmin} onClose={() => setModal(null)} reload={reload} />}
       {modal && modal.type === "profile" && <MonCompte me={me} data={data} onClose={() => setModal(null)} reload={reload} onLogout={logout} onUsers={() => { setModal(null); setView("admin"); }} />}
       <BottomNav view={view} setView={(v) => { setTaskOpen(null); setView(v); }} />
