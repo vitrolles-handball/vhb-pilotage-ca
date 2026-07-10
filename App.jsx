@@ -735,7 +735,7 @@ function NewSujet({ me, data, onClose, reload, meetingId, initialPole }) {
   );
 }
 
-function Annuaire({ data }) {
+function Annuaire({ data, me, isAdmin, reload }) {
   const { users, poles } = data;
   const pById = Object.fromEntries(poles.map((p) => [p.id, p]));
   const byPole = {};
@@ -757,10 +757,11 @@ function Annuaire({ data }) {
                 <i className={"ti " + (POLE_ICONS[id] || "ti-folder")} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", fontSize: 54, color: POLE_COLORS[id] || MUT, opacity: 0.10, pointerEvents: "none" }} aria-hidden="true" />
                 <Avatar u={u} size={46} />
                 <div style={{ minWidth: 0, flex: 1, position: "relative" }}>
-                  <div style={{ fontSize: 14.5, fontWeight: 700, color: TEXT }}>{fullName(u)}</div>
+                  <div style={{ fontSize: 14.5, fontWeight: 700, color: TEXT }}>{fullName(u)}{f(u, "Bureau") && <span className="chip" style={{ background: "#16171B", color: YELLOW, marginLeft: 6, fontSize: 10 }}>{f(u, "Bureau")}</span>}</div>
                   <div style={{ fontSize: 12, color: f(u, "Fonction") === "Responsable" ? RED : MUT, fontWeight: f(u, "Fonction") === "Responsable" ? 600 : 400 }}>{f(u, "Fonction") || "Membre"}{f(u, "Rôle") === "Admin" ? " · admin" : ""}{p ? " · " + f(p, "Pôles") : ""}</div>
                   {f(u, "Email") && <div style={{ fontSize: 11.5, color: "#1B5E9B", marginTop: 2, wordBreak: "break-word" }}>{f(u, "Email")}</div>}
                   {f(u, "Téléphone") && <div style={{ fontSize: 11.5, color: MUT }}>{f(u, "Téléphone")}</div>}
+                  {isAdmin && <select className="sel" style={{ width: "auto", padding: "4px 8px", fontSize: 11.5, marginTop: 6 }} value={f(u, "Bureau") || ""} onChange={async (e) => { try { await db({ action: "update", table: "Utilisateurs", recordId: u.id, fields: { "Bureau": e.target.value || null } }); await reload(); } catch (err) { alert("Erreur : " + err.message); } }}><option value="">Bureau : —</option><option value="Président">Président</option><option value="Secrétaire">Secrétaire</option><option value="Trésorier">Trésorier</option></select>}
                 </div>
               </div>
             ))}
@@ -1339,6 +1340,8 @@ function MeetingLive({ meetingId, me, data, isAdmin, onClose, reload }) {
     L.push("Date : " + fmtDate(f(m, "Date")) + (f(m, "Heure") ? " à " + f(m, "Heure") : "") + (f(m, "Lieu") ? " · " + f(m, "Lieu") : ""));
     L.push("");
     L.push("Présents (" + pres.length + ") : " + (pres.join(", ") || "—"));
+    const absents = activeUsers.filter((u) => !presents.includes(u.id)).map(fullName);
+    L.push("Excusés / Absents (" + absents.length + ") : " + (absents.join(", ") || "Aucun"));
     L.push("");
     L.push("ORDRE DU JOUR");
     linked.forEach((s, i) => {
@@ -1362,58 +1365,54 @@ function MeetingLive({ meetingId, me, data, isAdmin, onClose, reload }) {
     setBusy(false);
   };
   const copyCR = () => { try { navigator.clipboard.writeText(cr || buildCRtext()); alert("Compte-rendu copié !"); } catch (e) { alert("Copie impossible sur cet appareil — utilise Imprimer / PDF."); } };
-  const printCR = () => {
+  const crHtml = (logoSrc) => {
     const pres = presents.map((id) => uById[id]).filter(Boolean).map(fullName);
+    const absents = activeUsers.filter((u) => !presents.includes(u.id)).map(fullName);
     var rows = "";
     linked.forEach((s, i) => {
       const pole = pById[(f(s, "Pôle") || [])[0]];
       const pc = pole ? (POLE_COLORS[f(pole, "Identifiant")] || "#16171B") : "#16171B";
       const n = escapeHtml(f(s, "Décision / notes") || "").replace(/\n/g, "<br>");
-      rows += '<div class="subj" style="border-left-color:' + pc + '">'
-        + '<div class="t">' + (i + 1) + '. ' + (pole ? '<span class="tag" style="background:' + pc + '">' + escapeHtml(f(pole, "Pôles")) + '</span>' : '') + escapeHtml(f(s, "Titre")) + '</div>'
-        + (n ? '<div class="n">' + n + '</div>' : '<div class="no">Aucune note consignée.</div>')
+      rows += '<div style="margin:0 0 11px;padding:11px 13px;border:1px solid #eceef1;border-left:4px solid ' + pc + ';border-radius:8px">'
+        + '<div style="font-weight:700;font-size:13.5px;color:#16171B">' + (i + 1) + '. ' + (pole ? '<span style="display:inline-block;color:#fff;font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:5px;margin-right:6px;background:' + pc + '">' + escapeHtml(f(pole, "Pôles")) + '</span>' : '') + escapeHtml(f(s, "Titre")) + '</div>'
+        + (n ? '<div style="margin-top:6px;color:#333;white-space:pre-wrap">' + n + '</div>' : '<div style="margin-top:6px;color:#9aa0a6;font-style:italic">Aucune note consignée.</div>')
         + '</div>';
     });
-    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Compte-rendu — CA Vitrolles Handball</title>
-<style>
-@page{size:A4;margin:16mm 15mm;}
-*{box-sizing:border-box;}
-body{font-family:'Helvetica Neue',Arial,sans-serif;color:#1a1c22;margin:0;font-size:13px;line-height:1.5;}
-.head{display:flex;align-items:center;gap:16px;border-bottom:3px solid #D62828;padding-bottom:14px;}
-.head img{width:66px;height:66px;object-fit:contain;}
-.club{font-size:20px;font-weight:800;letter-spacing:-.01em;line-height:1.15;}
-.club small{display:block;font-weight:700;color:#D62828;font-size:11.5px;letter-spacing:.03em;margin-top:3px;}
-.doctitle{text-align:center;margin:24px 0 3px;font-size:16.5px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;}
-.docsub{text-align:center;color:#666;font-size:13px;margin-bottom:18px;}
-.meta{display:flex;gap:22px;flex-wrap:wrap;background:#f6f7f9;border:1px solid #e6e8ec;border-radius:8px;padding:11px 15px;margin-bottom:18px;font-size:12.5px;}
-.meta b{color:#111;}
-.sec{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#16171B;border-bottom:1.5px solid #16171B;padding-bottom:4px;margin:22px 0 10px;}
-.present{font-size:12.5px;color:#222;}
-.subj{margin:0 0 11px;padding:11px 13px;border:1px solid #eceef1;border-left:4px solid #16171B;border-radius:8px;page-break-inside:avoid;}
-.subj .t{font-weight:700;font-size:13.5px;color:#16171B;}
-.subj .tag{display:inline-block;color:#fff;font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:5px;margin-right:6px;vertical-align:middle;letter-spacing:.02em;}
-.subj .n{margin-top:6px;color:#333;white-space:pre-wrap;}
-.subj .no{margin-top:6px;color:#9aa0a6;font-style:italic;}
-.sign{margin-top:38px;display:flex;justify-content:space-between;gap:40px;page-break-inside:avoid;}
-.sign>div{flex:1;}
-.sign .lbl{font-weight:700;font-size:12.5px;margin-bottom:42px;}
-.sign .line{border-top:1px solid #999;padding-top:4px;font-size:10.5px;color:#777;}
-.foot{margin-top:24px;text-align:center;color:#9aa0a6;font-size:10px;border-top:1px solid #eee;padding-top:8px;}
-</style></head><body>
-<div class="head"><img src="${LOGO}" alt="VHB"><div class="club">Vitrolles Handball Jeunes<small>Conseil d'Administration · Tous Hand'semble</small></div></div>
-<div class="doctitle">Compte-rendu de réunion du Conseil d'Administration</div>
-<div class="docsub">${escapeHtml(f(m, "Titre") || "Réunion du CA")}</div>
-<div class="meta"><div><b>Date :</b> ${escapeHtml(fmtDate(f(m, "Date")))}</div>${f(m, "Heure") ? '<div><b>Heure :</b> ' + escapeHtml(f(m, "Heure")) + '</div>' : ''}${f(m, "Lieu") ? '<div><b>Lieu :</b> ' + escapeHtml(f(m, "Lieu")) + '</div>' : ''}</div>
-<div class="sec">Membres présents (${pres.length})</div>
-<div class="present">${pres.length ? escapeHtml(pres.join(", ")) : "—"}</div>
-<div class="sec">Ordre du jour &amp; décisions</div>
-${rows}
-<div class="sign"><div><div class="lbl">Le Président</div><div class="line">Nom &amp; signature</div></div><div><div class="lbl">Le / La Secrétaire</div><div class="line">Nom &amp; signature</div></div></div>
-<div class="foot">Fait à Vitrolles, le ${escapeHtml(fmtDate(new Date().toISOString()))} — Document généré via VHB Pilotage · Tous Hand'semble.</div>
-</body></html>`;
+    const sec = (t) => '<div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#16171B;border-bottom:1.5px solid #16171B;padding-bottom:4px;margin:20px 0 8px">' + t + '</div>';
+    return '<div style="font-family:Arial,Helvetica,sans-serif;color:#1a1c22;max-width:720px;margin:0 auto;font-size:13px;line-height:1.5">'
+      + '<div style="display:flex;align-items:center;gap:16px;border-bottom:3px solid #D62828;padding-bottom:14px">'
+      + '<img src="' + logoSrc + '" alt="VHB" width="64" height="64" style="width:64px;height:64px;object-fit:contain">'
+      + '<div style="font-size:20px;font-weight:800;line-height:1.15">Vitrolles Handball Jeunes<span style="display:block;font-weight:700;color:#D62828;font-size:11.5px;letter-spacing:.03em;margin-top:3px">Conseil d\'Administration · Tous Hand\'semble</span></div>'
+      + '</div>'
+      + '<div style="text-align:center;margin:24px 0 3px;font-size:16px;font-weight:800;text-transform:uppercase;letter-spacing:.04em">Compte-rendu de réunion du Conseil d\'Administration</div>'
+      + '<div style="text-align:center;color:#666;font-size:13px;margin-bottom:18px">' + escapeHtml(f(m, "Titre") || "Réunion du CA") + '</div>'
+      + '<div style="background:#f6f7f9;border:1px solid #e6e8ec;border-radius:8px;padding:11px 15px;margin-bottom:16px;font-size:12.5px"><b>Date :</b> ' + escapeHtml(fmtDate(f(m, "Date"))) + (f(m, "Heure") ? ' &nbsp;&nbsp; <b>Heure :</b> ' + escapeHtml(f(m, "Heure")) : '') + (f(m, "Lieu") ? ' &nbsp;&nbsp; <b>Lieu :</b> ' + escapeHtml(f(m, "Lieu")) : '') + '</div>'
+      + sec('Membres présents (' + pres.length + ')') + '<div style="font-size:12.5px;color:#222">' + (pres.length ? escapeHtml(pres.join(", ")) : "—") + '</div>'
+      + sec('Excusés / Absents (' + absents.length + ')') + '<div style="font-size:12.5px;color:#666">' + (absents.length ? escapeHtml(absents.join(", ")) : "Aucun") + '</div>'
+      + sec('Ordre du jour &amp; décisions') + rows
+      + '<div style="margin-top:36px;display:flex;justify-content:space-between;gap:40px"><div style="flex:1"><div style="font-weight:700;font-size:12.5px;margin-bottom:42px">Le Président</div><div style="border-top:1px solid #999;padding-top:4px;font-size:10.5px;color:#777">Nom &amp; signature</div></div><div style="flex:1"><div style="font-weight:700;font-size:12.5px;margin-bottom:42px">Le / La Secrétaire</div><div style="border-top:1px solid #999;padding-top:4px;font-size:10.5px;color:#777">Nom &amp; signature</div></div></div>'
+      + '<div style="margin-top:24px;text-align:center;color:#9aa0a6;font-size:10px;border-top:1px solid #eee;padding-top:8px">Fait à Vitrolles, le ' + escapeHtml(fmtDate(new Date().toISOString())) + ' — Document généré via VHB Pilotage · Tous Hand\'semble.</div>'
+      + '</div>';
+  };
+  const printCR = () => {
+    const html = '<!doctype html><html><head><meta charset="utf-8"><title>Compte-rendu — CA Vitrolles Handball</title><style>@page{size:A4;margin:15mm 14mm;}body{margin:0;}</style></head><body>' + crHtml(LOGO) + '</body></html>';
     const w = window.open("", "_blank");
-    if (w) { w.document.write(html); w.document.close(); w.focus(); setTimeout(() => { w.print(); }, 450); }
+    if (w) { w.document.write(html); w.document.close(); w.focus(); setTimeout(() => { w.print(); }, 500); }
     else { alert("Autorise les fenêtres pop-up pour imprimer le compte-rendu."); }
+  };
+  const sendForSignature = async () => {
+    const targets = users.filter((u) => (f(u, "Bureau") === "Président" || f(u, "Bureau") === "Secrétaire") && f(u, "Email"));
+    if (!targets.length) { alert("Aucun Président ou Secrétaire défini. Un admin peut les désigner dans l'Annuaire."); return; }
+    if (!confirm("Envoyer le compte-rendu pour signature à : " + targets.map((u) => fullName(u)).join(", ") + " ?")) return;
+    setBusy(true);
+    const body = crHtml(APP_URL + "/logo.png");
+    try {
+      for (const u of targets) {
+        await sendMail({ to: f(u, "Email"), subject: "Compte-rendu à signer — " + (f(m, "Titre") || "Réunion du CA"), html: '<div style="font-family:Arial;color:#333;max-width:720px;margin:0 auto 14px">Bonjour ' + escapeHtml(f(u, "Prénom") || "") + ', voici le compte-rendu de la réunion du CA à relire et signer. Tu peux l\'imprimer pour signature.</div>' + body });
+      }
+      alert("Compte-rendu envoyé à : " + targets.map((u) => fullName(u)).join(", "));
+    } catch (e) { alert("Envoi impossible : " + e.message); }
+    setBusy(false);
   };
   return (
     <div className="fade">
@@ -1461,6 +1460,7 @@ ${rows}
             <div style={{ fontSize: 17, fontWeight: 800, color: TEXT }}>Compte-rendu généré ✓</div>
             <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
               <button className="btn btn-ghost" onClick={copyCR}><i className="ti ti-copy" />Copier</button>
+              <button className="btn btn-dark" disabled={busy} onClick={sendForSignature}><i className="ti ti-mail" />Envoyer pour signature</button>
               <button className="btn btn-red" onClick={printCR}><i className="ti ti-printer" />Imprimer / PDF</button>
             </div>
           </div>
@@ -1540,7 +1540,7 @@ export default function App() {
         {!taskOpen && !liveOpen && view === "dash" && <Dashboard me={me} data={data} setView={setView} openNewTask={() => setModal({ type: "task", pole: (f(me, "Pôle") || [])[0] || "" })} openNewSujet={(opts) => setModal({ type: "sujet", ...(opts || {}) })} openTask={(id) => setTaskOpen(id)} reload={reload} openMeeting={(id) => setModal({ type: "meetingDetail", id })} />}
         {!taskOpen && !liveOpen && view === "taches" && <TasksView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewTask={(pole) => setModal({ type: "task", pole })} openTask={(id) => setTaskOpen(id)} />}
         {!taskOpen && !liveOpen && view === "ca" && <CAView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewSujet={(opts) => setModal({ type: "sujet", ...(opts || {}) })} openNewMeeting={() => setModal({ type: "meeting" })} openMeeting={(id) => setModal({ type: "meetingDetail", id })} openLive={(id) => setLiveOpen(id)} />}
-        {!taskOpen && !liveOpen && view === "annuaire" && <Annuaire data={data} />}
+        {!taskOpen && !liveOpen && view === "annuaire" && <Annuaire data={data} me={me} isAdmin={isAdmin} reload={reload} />}
         {!taskOpen && !liveOpen && view === "admin" && isAdmin && <AdminUsers me={me} data={data} reload={reload} />}
       </div>
       {modal && modal.type === "task" && <NewTask me={me} data={data} isAdmin={isAdmin} initialPole={modal.pole} onClose={() => setModal(null)} reload={reload} />}
