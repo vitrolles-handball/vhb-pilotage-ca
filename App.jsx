@@ -448,7 +448,11 @@ function TasksView({ me, data, isAdmin, reload, openNewTask, openTask }) {
     const u = ts.filter((t) => { const d = dueInfo(f(t, "Échéance")); return d && d.urg >= 3; }).length;
     return { total: ts.length, urgent: u };
   };
-  const TC = (t) => <TaskCard key={t.id} t={t} me={me} uById={uById} pById={pById} users={users} isAdmin={isAdmin} reload={reload} commentaires={data.commentaires || []} openTask={openTask} />;
+  const putTaskODJ = async (t) => {
+    if (!confirm("Mettre cette tâche à l'ordre du jour du prochain CA ?")) return;
+    try { const nid = nextCAId(data.meetings); const sf = { "Titre": f(t, "Titre"), "Description": f(t, "Description") || "", "Proposé par": [me.id] }; const pid = (f(t, "Pôle") || [])[0]; if (pid) sf["Pôle"] = [pid]; if (nid) { sf["Réunion"] = [nid]; sf["Statut"] = "En cours"; } else { sf["Statut"] = "À traiter"; sf["À l'ordre du prochain CA"] = true; } await db({ action: "create", table: "Sujets CA", fields: sf }); await reload(); alert(nid ? "Ajouté à l'ordre du jour du prochain CA." : "Aucun CA programmé — sera ajouté au prochain CA créé."); } catch (e) { alert("Erreur : " + e.message); }
+  };
+  const TC = (t) => <TaskCard key={t.id} t={t} me={me} uById={uById} pById={pById} users={users} isAdmin={isAdmin} reload={reload} commentaires={data.commentaires || []} openTask={openTask} onODJ={putTaskODJ} />;
 
   return (
     <div className="fade">
@@ -520,7 +524,7 @@ function TasksView({ me, data, isAdmin, reload, openNewTask, openTask }) {
     </div>
   );
 }
-function TaskCard({ t, me, uById, pById, users, isAdmin, reload, commentaires, openTask }) {
+function TaskCard({ t, me, uById, pById, users, isAdmin, reload, commentaires, openTask, onODJ }) {
   const [busy, setBusy] = useState(false);
   const due = dueInfo(f(t, "Échéance"));
   const pole = pById[(f(t, "Pôle") || [])[0]];
@@ -547,6 +551,7 @@ function TaskCard({ t, me, uById, pById, users, isAdmin, reload, commentaires, o
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           {assignes.map((id) => uById[id]).filter(Boolean).slice(0, 4).map((u, i2) => <div key={u.id} title={fullName(u)} style={{ marginLeft: i2 ? -8 : 0 }}><Avatar u={u} size={24} /></div>)}
           <button className="btn btn-ghost" style={{ fontSize: 12, padding: "5px 10px" }} onClick={() => openTask && openTask(t.id)}><i className="ti ti-message-circle" />{coms.length || ""}</button>
+          {onODJ && <button className="btn btn-ghost" style={{ fontSize: 12, padding: "5px 9px" }} title="Mettre à l'ordre du jour du CA" onClick={(e) => { e.stopPropagation(); onODJ(t); }}><i className="ti ti-calendar-plus" /></button>}
         </div>
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <div style={{ display: "inline-flex", background: "#F1F3F5", borderRadius: 30, padding: 3 }}>
@@ -604,9 +609,9 @@ function CommentBox({ task, me, users, reload }) {
     </div>
   );
 }
-function Modal({ children, onClose }) {
+function Modal({ children, onClose, wide }) {
   return <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(16,17,20,.55)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "5vh 16px 40px", zIndex: 100, overflowY: "auto" }}>
-    <div onClick={(e) => e.stopPropagation()} className="rise card" style={{ maxWidth: 680, width: "100%", padding: "30px 34px" }}>{children}</div>
+    <div onClick={(e) => e.stopPropagation()} className="rise card" style={{ maxWidth: wide ? 940 : 680, width: "100%", padding: "30px 34px" }}>{children}</div>
   </div>;
 }
 function AssigneePicker({ assignes, users, onChange, busy }) {
@@ -821,13 +826,21 @@ function AdminUsers({ me, data, reload }) {
 function chipF(on) { return { cursor: "pointer", border: "1px solid " + (on ? RED : "#E6E8EC"), background: on ? "#FBE9E9" : "#fff", color: on ? RED : MUT, fontWeight: on ? 600 : 500, padding: "6px 13px" }; }
 
 function SujetsView({ me, data, isAdmin, reload, openNewSujet }) {
-  const { sujets, users, poles } = data;
+  const { sujets, users, poles, meetings } = data;
   const [theme, setTheme] = useState("");
   const uById = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users]);
   const pById = useMemo(() => Object.fromEntries(poles.map((p) => [p.id, p])), [poles]);
   const themes = ["Finances", "Sportif", "Événements", "Bénévoles", "Communication", "Administratif", "Partenariats", "Divers"];
   const actifs = sujets.filter((x) => f(x, "Statut") !== "Traité").filter((x) => !theme || f(x, "Thème") === theme);
   const traites = sujets.filter((x) => f(x, "Statut") === "Traité");
+  const putODJ = async (sj) => {
+    const nid = nextCAId(meetings);
+    try {
+      if (nid) { await db({ action: "update", table: "Sujets CA", recordId: sj.id, fields: { "Réunion": [nid], "Statut": "En cours", "À l'ordre du prochain CA": false } }); alert("Ajouté à l'ordre du jour du prochain CA."); }
+      else { await db({ action: "update", table: "Sujets CA", recordId: sj.id, fields: { "À l'ordre du prochain CA": true } }); alert("Aucun CA programmé — ce sujet sera ajouté automatiquement au prochain CA créé."); }
+      await reload();
+    } catch (e) { alert("Erreur : " + e.message); }
+  };
   return (
     <div className="fade">
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
@@ -852,7 +865,7 @@ function SujetsView({ me, data, isAdmin, reload, openNewSujet }) {
               <span style={{ fontSize: 15, fontWeight: 700, color: TEXT }}>{p ? f(p, "Pôles") : "Sans pôle"}</span>
               <span style={{ fontSize: 12, color: MUT }}>· {items.length}</span>
             </div>
-            {items.map((x) => <SujetCard key={x.id} s={x} me={me} uById={uById} pById={pById} reload={reload} />)}
+            {items.map((x) => <SujetCard key={x.id} s={x} me={me} uById={uById} pById={pById} reload={reload} onODJ={putODJ} />)}
           </div>;
         })}
       {traites.length > 0 && (
@@ -902,7 +915,7 @@ function ReunionsView({ me, data, isAdmin, reload, openNewMeeting, openMeeting, 
   );
 }
 
-function SujetCard({ s, me, uById, pById, reload, done }) {
+function SujetCard({ s, me, uById, pById, reload, done, onODJ }) {
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState(f(s, "Décision / notes") || "");
@@ -931,6 +944,9 @@ function SujetCard({ s, me, uById, pById, reload, done }) {
         <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12, color: MUT }}>
           {prop && <Avatar u={prop} size={20} />}<span>{prop ? fullName(prop) : "—"}</span>
         </div>
+        {(f(s, "Réunion") || []).length > 0 ? <span className="chip" style={{ background: "#E6F0FB", color: "#1B5E9B" }}><i className="ti ti-calendar-check" aria-hidden="true" />À l'ordre du jour</span>
+          : f(s, "À l'ordre du prochain CA") ? <span className="chip" style={{ background: "#EDE7F6", color: "#5E35B1" }}>En file · prochain CA</span>
+          : onODJ && <button className="btn btn-ghost" style={{ fontSize: 12, padding: "6px 11px" }} disabled={busy} onClick={() => onODJ(s)}><i className="ti ti-calendar-plus" aria-hidden="true" />Mettre à l'ordre du jour</button>}
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <div style={{ display: "inline-flex", background: "#F1F3F5", borderRadius: 30, padding: 3 }}>
             {["À traiter", "En cours", "Traité"].map((v) => {
@@ -981,6 +997,7 @@ function NewMeeting({ onClose, reload, data }) {
     try {
       const jr = await db({ action: "create", table: "Réunions", fields: { "Titre": titre.trim() || "Réunion du CA", "Date": date, "Heure": heure.trim(), "Lieu": lieu.trim(), "Statut": "À venir" } });
       const recId = ((jr.records || [])[0] || {}).id;
+      if (recId) { for (const sj of ((data && data.sujets) || []).filter((x) => f(x, "À l'ordre du prochain CA"))) { try { await db({ action: "update", table: "Sujets CA", recordId: sj.id, fields: { "Réunion": Array.from(new Set([...(f(sj, "Réunion") || []), recId])), "Statut": "En cours", "À l'ordre du prochain CA": false } }); } catch (e) {} } }
       await reload();
       ((data && data.users) || []).filter((u) => f(u, "Actif") !== false && f(u, "Email")).forEach((u) => sendMail({ to: f(u, "Email"), subject: "Nouveau CA programmé — VHB Pilotage", html: mailWrap("Un CA est programmé", '<p style="color:#444;line-height:1.55">Une réunion du CA est prévue le <b>' + escapeHtml(fmtDate(date)) + (heure.trim() ? " à " + escapeHtml(heure.trim()) : "") + "</b>" + (lieu.trim() ? " · " + escapeHtml(lieu.trim()) : "") + '.</p><p style="color:#444;line-height:1.55">Merci de répondre à l\'invitation :</p><div style="text-align:center;margin:14px 0"><a href="' + APP_URL + '/?rsvp=' + recId + '&r=present" style="background:#2E8B57;color:#fff;text-decoration:none;padding:11px 18px;border-radius:10px;font-weight:700;display:inline-block;margin:4px">Je serai présent</a> <a href="' + APP_URL + '/?rsvp=' + recId + '&r=absent" style="background:#D62828;color:#fff;text-decoration:none;padding:11px 18px;border-radius:10px;font-weight:700;display:inline-block;margin:4px">Je serai absent</a></div>', { url: APP_URL, label: "Préparer le CA" }) }).catch(() => {}));
       onClose();
@@ -1005,6 +1022,7 @@ function NewMeeting({ onClose, reload, data }) {
 
 function MeetingDetail({ meetingId, me, data, isAdmin, onClose, reload, onStart, onSign }) {
   const { meetings, sujets } = data;
+  const pById = Object.fromEntries((data.poles || []).map((p) => [p.id, p]));
   const m = meetings.find((x) => x.id === meetingId);
   const [busy, setBusy] = useState(false);
   const [cr, setCr] = useState(m ? (f(m, "Compte-rendu") || "") : "");
@@ -1041,7 +1059,7 @@ function MeetingDetail({ meetingId, me, data, isAdmin, onClose, reload, onStart,
     setCr((f(m, "Titre") || "Réunion du CA") + " - " + fmtDate(f(m, "Date")) + "\n\n" + lines.join("\n"));
   };
   return (
-    <Modal onClose={onClose}>
+    <Modal onClose={onClose} wide>
       {edit ? (
         <div style={{ marginBottom: 6 }}>
           <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>Modifier la réunion</div>
@@ -1082,20 +1100,25 @@ function MeetingDetail({ meetingId, me, data, isAdmin, onClose, reload, onStart,
       {!past && <button className="btn btn-red" style={{ width: "100%", justifyContent: "center", marginBottom: 14 }} onClick={onStart}><i className="ti ti-player-play" />Commencer la réunion</button>}
       <div className="cond" style={{ fontSize: 12.5, color: MUT, fontWeight: 700, marginBottom: 8 }}>Ordre du jour ({linked.length})</div>
       {linked.length === 0 ? <Empty t="Aucun sujet rattaché pour l'instant." /> :
-        linked.map((s) => <div key={s.id} className="card" style={{ marginBottom: 7, padding: "10px 13px", display: "flex", alignItems: "flex-start", gap: 10 }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 13.5, fontWeight: 500 }}>{f(s, "Titre")} <span className="chip" style={{ background: "#EEF0F3", color: "#444" }}>{f(s, "Statut")}</span></div>
-            {f(s, "Décision / notes") && <div style={{ fontSize: 12.5, color: MUT, marginTop: 4 }}>{f(s, "Décision / notes")}</div>}
+        linked.map((s) => { const pole = pById[(f(s, "Pôle") || [])[0]]; const pc = pole ? (POLE_COLORS[f(pole, "Identifiant")] || BLACK) : "#C9CCD2"; return <div key={s.id} className="card" style={{ marginBottom: 8, padding: "12px 14px", display: "flex", alignItems: "flex-start", gap: 10, borderLeft: "4px solid " + pc }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap", marginBottom: 4 }}>
+              {pole && <span className="tag" style={{ background: POLE_COLORS[f(pole, "Identifiant")] || BLACK, display: "inline-flex", alignItems: "center", gap: 5 }}><i className={"ti " + (POLE_ICONS[f(pole, "Identifiant")] || "ti-folder")} style={{ fontSize: 12 }} aria-hidden="true" />{f(pole, "Pôles")}</span>}
+              <span className="chip" style={{ background: "#EEF0F3", color: "#5A6066" }}>{f(s, "Statut")}</span>
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: TEXT }}>{f(s, "Titre")}</div>
+            {f(s, "Décision / notes") && <div style={{ fontSize: 12.5, color: MUT, marginTop: 3 }}>{f(s, "Décision / notes")}</div>}
           </div>
-          {!past && <button className="btn btn-ghost" style={{ fontSize: 12, padding: "5px 10px", color: RED, borderColor: "#F0C7C3" }} disabled={busy} onClick={() => detach(s)}>Retirer</button>}
-        </div>)}
+          {!past && <button className="btn btn-ghost" style={{ fontSize: 12, padding: "5px 10px", color: RED, borderColor: "#F0C7C3", flex: "0 0 auto" }} disabled={busy} onClick={() => detach(s)}>Retirer</button>}
+        </div>; })}
       {!past && dispo.length > 0 && (
         <div>
-          <div className="cond" style={{ fontSize: 12.5, color: MUT, fontWeight: 700, margin: "14px 0 8px" }}>Ajouter un sujet</div>
-          {dispo.slice(0, 15).map((s) => <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 9, padding: "7px 0", borderBottom: "1px solid " + BORDER }}>
-            <span style={{ fontSize: 13.5, flex: 1 }}>{f(s, "Titre")}</span>
-            <button className="btn btn-ghost" style={{ fontSize: 12, padding: "5px 11px" }} onClick={() => attach(s)}>+ Ajouter</button>
-          </div>)}
+          <div className="cond" style={{ fontSize: 12.5, color: MUT, fontWeight: 700, margin: "16px 0 8px" }}>Ajouter un sujet en attente</div>
+          {dispo.slice(0, 30).map((s) => { const pole = pById[(f(s, "Pôle") || [])[0]]; return <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 0", borderBottom: "1px solid " + BORDER }}>
+            {pole && <span className="tag" style={{ background: POLE_COLORS[f(pole, "Identifiant")] || BLACK, flex: "0 0 auto" }}>{f(pole, "Pôles")}</span>}
+            <span style={{ fontSize: 13.5, flex: 1, minWidth: 0 }}>{f(s, "Titre")}</span>
+            <button className="btn btn-red" style={{ fontSize: 12, padding: "6px 12px", flex: "0 0 auto" }} disabled={busy} onClick={() => attach(s)}><i className="ti ti-plus" />Ajouter</button>
+          </div>; })}
         </div>
       )}
       <div className="cond" style={{ fontSize: 12.5, color: MUT, fontWeight: 700, margin: "16px 0 8px", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>Compte-rendu <button className="btn btn-ghost" style={{ fontSize: 11.5, padding: "4px 9px" }} onClick={buildCR}>Générer depuis les sujets</button></div>
@@ -1169,7 +1192,7 @@ function TaskDetailPage({ taskId, me, data, isAdmin, onClose, reload }) {
     catch (e) { alert("Erreur : " + e.message); }
     setUploading(false);
   };
-  const toCA = async () => { if (!confirm("Ajouter cette tâche comme sujet à aborder au prochain CA ?")) return; setBusy(true); try { const sf = { "Titre": f(t, "Titre"), "Description": f(t, "Description") || "", "Statut": "À traiter", "Proposé par": [me.id] }; const pid = (f(t, "Pôle") || [])[0]; if (pid) sf["Pôle"] = [pid]; await db({ action: "create", table: "Sujets CA", fields: sf }); await reload(); alert("Sujet ajouté au CA ✓"); } catch (e) { alert("Erreur : " + e.message); } setBusy(false); };
+  const toCA = async () => { if (!confirm("Mettre cette tâche à l'ordre du jour du prochain CA ?")) return; setBusy(true); try { const nid = nextCAId(data.meetings); const sf = { "Titre": f(t, "Titre"), "Description": f(t, "Description") || "", "Proposé par": [me.id] }; const pid = (f(t, "Pôle") || [])[0]; if (pid) sf["Pôle"] = [pid]; if (nid) { sf["Réunion"] = [nid]; sf["Statut"] = "En cours"; } else { sf["Statut"] = "À traiter"; sf["À l'ordre du prochain CA"] = true; } await db({ action: "create", table: "Sujets CA", fields: sf }); await reload(); alert(nid ? "Ajouté à l'ordre du jour du prochain CA ✓" : "Aucun CA programmé — sera ajouté au prochain CA créé."); } catch (e) { alert("Erreur : " + e.message); } setBusy(false); };
   const raiseHelp = async () => { if (!helpMsg.trim()) return; await upd({ "Besoin d'aide": true, "Message aide": helpMsg.trim() }); setHelpOpen(false); setHelpMsg(""); };
   const sayDispo = async () => { setBusy(true); try { await db({ action: "create", table: "Commentaires", fields: { "Texte": "✋ Je suis dispo pour aider !", "Tâche": [t.id], "Auteur": [me.id], "Date": new Date().toISOString() } }); await reload(); } catch (e) { alert("Erreur : " + e.message); } setBusy(false); };
   const stColor = statut === "Fait" ? OK : statut === "En cours" ? "#B8860B" : MUT;
@@ -1258,7 +1281,7 @@ function TaskDetailPage({ taskId, me, data, isAdmin, onClose, reload }) {
             <AssigneePicker assignes={assignes} users={users} busy={busy} onChange={(next) => upd({ "Assignés": next })} />
             <div className="lbl" style={{ marginTop: 18 }}>Échéance</div>
             <input className="inp" type="date" value={f(t, "Échéance") || ""} onChange={(e) => upd({ "Échéance": e.target.value || null })} />
-            <button className="btn btn-ghost" style={{ width: "100%", justifyContent: "center", marginTop: 14 }} disabled={busy} onClick={toCA}><i className="ti ti-clipboard-plus" />Proposer au CA</button>
+            <button className="btn btn-ghost" style={{ width: "100%", justifyContent: "center", marginTop: 14 }} disabled={busy} onClick={toCA}><i className="ti ti-calendar-plus" />Mettre à l'ordre du jour CA</button>
             {canDelete && <div style={{ marginTop: 20, borderTop: "1px solid " + BORDER, paddingTop: 16 }}><button className="btn btn-ghost" style={{ color: RED, borderColor: "#F0C7C3", width: "100%", justifyContent: "center" }} disabled={busy} onClick={async () => { if (!confirm("Supprimer cette tâche ?")) return; setBusy(true); try { await db({ action: "delete", table: "Tâches", recordId: t.id }); await reload(); onClose(); } catch (e) { alert("Erreur : " + e.message); setBusy(false); } }}>Supprimer la tâche</button></div>}
           </div>
         </div>
@@ -1320,6 +1343,7 @@ function MonCompte({ me, data, onClose, reload, onLogout, onUsers }) {
     </Modal>
   );
 }
+function nextCAId(meetings) { const up = (meetings || []).filter((m) => f(m, "Statut") !== "Passée").sort((a, b) => String(f(a, "Date")).localeCompare(String(f(b, "Date")))); return up[0] ? up[0].id : null; }
 function crDocHtml(m, data, presents, logoSrc, bodyText) {
   const { sujets, users, poles } = data;
   const uById = Object.fromEntries(users.map((u) => [u.id, u]));
