@@ -45,7 +45,7 @@ html{overflow-x:clip;}body{margin:0;font-family:'Manrope',system-ui,sans-serif;o
 .wrap{max-width:1180px;margin:0 auto;padding:26px 26px 64px;}
 .dash-grid{display:grid;grid-template-columns:1fr;gap:18px;align-items:start;}
 .cardgrid{display:grid;grid-template-columns:1fr;}
-@media(min-width:1000px){.dash-grid{grid-template-columns:1.7fr 1fr;gap:24px;}.cardgrid{grid-template-columns:1fr 1fr;column-gap:12px;}}
+@media(min-width:1000px){.dash-grid{grid-template-columns:1.7fr 1fr;gap:24px;}}
 .detail-grid{display:grid;grid-template-columns:1fr;gap:18px;align-items:start;}
 @media(min-width:1000px){.detail-grid{grid-template-columns:1.65fr 1fr;gap:22px;}}
 @media(max-width:760px){.wrap{padding:14px 12px 104px;}}
@@ -551,7 +551,7 @@ function TaskCard({ t, me, uById, pById, users, isAdmin, reload, commentaires, o
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           {assignes.map((id) => uById[id]).filter(Boolean).slice(0, 4).map((u, i2) => <div key={u.id} title={fullName(u)} style={{ marginLeft: i2 ? -8 : 0 }}><Avatar u={u} size={24} /></div>)}
           <button className="btn btn-ghost" style={{ fontSize: 12, padding: "5px 10px" }} onClick={() => openTask && openTask(t.id)}><i className="ti ti-message-circle" />{coms.length || ""}</button>
-          {onODJ && <button className="btn btn-ghost" style={{ fontSize: 12, padding: "5px 9px" }} title="Mettre à l'ordre du jour du CA" onClick={(e) => { e.stopPropagation(); onODJ(t); }}><i className="ti ti-calendar-plus" /></button>}
+          {onODJ && <button className="btn btn-ghost" style={{ fontSize: 12, padding: "5px 11px" }} onClick={(e) => { e.stopPropagation(); onODJ(t); }}><i className="ti ti-calendar-plus" />Mettre à l'ordre du jour</button>}
         </div>
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <div style={{ display: "inline-flex", background: "#F1F3F5", borderRadius: 30, padding: 3 }}>
@@ -1116,11 +1116,22 @@ function MeetingDetail({ meetingId, me, data, isAdmin, onClose, reload, onStart,
       {!past && dispo.length > 0 && (
         <div>
           <div className="cond" style={{ fontSize: 12.5, color: MUT, fontWeight: 700, margin: "16px 0 8px" }}>Ajouter un sujet en attente</div>
-          {dispo.slice(0, 30).map((s) => { const pole = pById[(f(s, "Pôle") || [])[0]]; return <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 0", borderBottom: "1px solid " + BORDER }}>
-            {pole && <span className="tag" style={{ background: POLE_COLORS[f(pole, "Identifiant")] || BLACK, flex: "0 0 auto" }}>{f(pole, "Pôles")}</span>}
-            <span style={{ fontSize: 13.5, flex: 1, minWidth: 0 }}>{f(s, "Titre")}</span>
-            <button className="btn btn-red" style={{ fontSize: 12, padding: "6px 12px", flex: "0 0 auto" }} disabled={busy} onClick={() => attach(s)}><i className="ti ti-plus" />Ajouter</button>
-          </div>; })}
+          {[...(data.poles || []).map((p) => p.id), "_"].map((pid) => {
+            const items = dispo.filter((x) => ((f(x, "Pôle") || [])[0] || "_") === pid);
+            if (!items.length) return null;
+            const p = pById[pid]; const pId = p ? f(p, "Identifiant") : null;
+            return <div key={pid} style={{ marginBottom: 6 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "12px 0 6px" }}>
+                <span style={{ width: 22, height: 22, borderRadius: 7, background: POLE_COLORS[pId] || MUT, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}><i className={"ti " + (POLE_ICONS[pId] || "ti-folder")} style={{ fontSize: 13 }} aria-hidden="true" /></span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: TEXT }}>{p ? f(p, "Pôles") : "Sans pôle"}</span>
+                <span style={{ fontSize: 12, color: MUT }}>· {items.length}</span>
+              </div>
+              {items.map((x) => <div key={x.id} style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 0 8px 30px", borderBottom: "1px solid " + BORDER }}>
+                <span style={{ fontSize: 13.5, flex: 1, minWidth: 0 }}>{f(x, "Titre")}</span>
+                <button className="btn btn-red" style={{ fontSize: 12, padding: "6px 12px", flex: "0 0 auto" }} disabled={busy} onClick={() => attach(x)}><i className="ti ti-plus" />Ajouter</button>
+              </div>)}
+            </div>;
+          })}
         </div>
       )}
       <div className="cond" style={{ fontSize: 12.5, color: MUT, fontWeight: 700, margin: "16px 0 8px", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>Compte-rendu <button className="btn btn-ghost" style={{ fontSize: 11.5, padding: "4px 9px" }} onClick={buildCR}>Générer depuis les sujets</button></div>
