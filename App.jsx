@@ -870,7 +870,31 @@ function Annuaire({ data, me, isAdmin, reload }) {
                   <div style={{ fontSize: 12, color: f(u, "Fonction") === "Responsable" ? RED : MUT, fontWeight: f(u, "Fonction") === "Responsable" ? 600 : 400 }}>{f(u, "Fonction") || "Membre"}{f(u, "Rôle") === "Admin" ? " · admin" : ""}{p ? " · " + f(p, "Pôles") : ""}</div>
                   {f(u, "Email") && <div style={{ fontSize: 11.5, color: "#1B5E9B", marginTop: 2, wordBreak: "break-word" }}>{f(u, "Email")}</div>}
                   {f(u, "Téléphone") && <div style={{ fontSize: 11.5, color: MUT }}>{f(u, "Téléphone")}</div>}
-                  {isAdmin && <select className="sel" style={{ width: "auto", padding: "4px 8px", fontSize: 11.5, marginTop: 6 }} value={f(u, "Bureau") || ""} onChange={async (e) => { try { await db({ action: "update", table: "Utilisateurs", recordId: u.id, fields: { "Bureau": e.target.value || null } }); await reload(); } catch (err) { alert("Erreur : " + err.message); } }}><option value="">Bureau : —</option><option value="Président">Président</option><option value="Vice-président">Vice-président</option><option value="Secrétaire">Secrétaire</option><option value="Trésorier">Trésorier</option><option value="Membre du CA">Membre du CA</option></select>}
+                  {isAdmin && (() => {
+                    const updU = async (fields) => { try { await db({ action: "update", table: "Utilisateurs", recordId: u.id, fields }); await reload(); } catch (err) { alert("Erreur : " + err.message); } };
+                    const selSty = { width: "100%", padding: "5px 8px", fontSize: 11.5 };
+                    return (
+                      <div style={{ marginTop: 8, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }} onClick={(e) => e.stopPropagation()}>
+                        <select className="sel" style={selSty} value={(f(u, "Pôle") || [])[0] || ""} onChange={(e) => updU({ "Pôle": e.target.value ? [e.target.value] : [] })}>
+                          <option value="">Pôle : —</option>
+                          {poles.map((p) => <option key={p.id} value={p.id}>{f(p, "Pôles")}</option>)}
+                        </select>
+                        <select className="sel" style={selSty} value={f(u, "Fonction") || ""} onChange={(e) => updU({ "Fonction": e.target.value || null })}>
+                          <option value="">Fonction : —</option>
+                          <option value="Responsable">Responsable</option>
+                          <option value="Membre">Membre</option>
+                        </select>
+                        <select className="sel" style={{ ...selSty, gridColumn: "1 / -1" }} value={f(u, "Bureau") || ""} onChange={(e) => updU({ "Bureau": e.target.value || null })}>
+                          <option value="">Bureau : —</option>
+                          <option value="Président">Président</option>
+                          <option value="Vice-président">Vice-président</option>
+                          <option value="Secrétaire">Secrétaire</option>
+                          <option value="Trésorier">Trésorier</option>
+                          <option value="Membre du CA">Membre du CA</option>
+                        </select>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             ))}
