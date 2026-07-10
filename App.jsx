@@ -944,6 +944,7 @@ function MeetingRow({ m, sujets, onClick, past, onStart }) {
       </div>
       {!past && onStart && <button className="btn btn-red" style={{ fontSize: 12.5, padding: "7px 12px", flex: "0 0 auto" }} onClick={(e) => { e.stopPropagation(); onStart(m.id); }}><i className="ti ti-player-play" />Commencer</button>}
       <span className="chip" style={{ background: past ? "#EEF0F3" : "#FEF6D8", color: past ? MUT : "#8A6D00" }}>{past ? "Passée" : "À venir"}{linked.length ? " · " + linked.length + " sujet" + (linked.length > 1 ? "s" : "") : ""}</span>
+      {past && f(m, "Validation CR") && <span className="chip" style={{ background: f(m, "Validation CR") === "Signé" ? "#E4F6E9" : "#FEF3D6", color: f(m, "Validation CR") === "Signé" ? OK : "#8A6D00" }}>{f(m, "Validation CR") === "Signé" ? "Signé ✓" : "À signer"}</span>}
     </div>
   );
 }
@@ -995,6 +996,15 @@ function MeetingDetail({ meetingId, me, data, isAdmin, onClose, reload, onStart 
   const linked = sujets.filter((s) => (f(s, "Réunion") || []).includes(m.id));
   const dispo = sujets.filter((s) => f(s, "Statut") !== "Traité" && !(f(s, "Réunion") || []).includes(m.id));
   const updM = async (fields) => { setBusy(true); try { await db({ action: "update", table: "Réunions", recordId: m.id, fields }); await reload(); } catch (e) { alert("Erreur : " + e.message); } setBusy(false); };
+  const signCR = async (statut) => { setBusy(true); try { await db({ action: "update", table: "Réunions", recordId: m.id, fields: { "Validation CR": statut } }); await reload(); } catch (e) { alert("Erreur : " + e.message); } setBusy(false); };
+  const sendSign = async () => {
+    const targets = data.users.filter((u) => (f(u, "Bureau") === "Président" || f(u, "Bureau") === "Secrétaire") && f(u, "Email"));
+    if (!targets.length) { alert("Aucun Président ou Secrétaire défini — désigne-les dans l'Annuaire."); return; }
+    if (!confirm("Envoyer le compte-rendu pour signature à : " + targets.map((u) => fullName(u)).join(", ") + " ?")) return;
+    const body = crDocHtml(m, data, f(m, "Présents") || [], APP_URL + "/logo.png");
+    setBusy(true);
+    try { for (const u of targets) { await sendMail({ to: f(u, "Email"), subject: "Compte-rendu à signer — " + (f(m, "Titre") || "Réunion du CA"), html: '<div style="font-family:Arial;color:#333;max-width:720px;margin:0 auto 14px">Bonjour ' + escapeHtml(f(u, "Prénom") || "") + ', merci de relire et signer le compte-rendu ci-dessous.</div>' + body }); } await db({ action: "update", table: "Réunions", recordId: m.id, fields: { "Validation CR": "En attente de signature" } }); await reload(); alert("Compte-rendu envoyé à : " + targets.map((u) => fullName(u)).join(", ")); } catch (e) { alert("Erreur : " + e.message); } setBusy(false);
+  };
   const attach = async (s) => { try { await db({ action: "update", table: "Sujets CA", recordId: s.id, fields: { "Réunion": Array.from(new Set([...(f(s, "Réunion") || []), m.id])), "Statut": "En cours" } }); await reload(); } catch (e) { alert("Erreur : " + e.message); } };
   const detach = async (s) => { if (!confirm("Retirer « " + (f(s, "Titre") || "ce sujet") + " » de l'ordre du jour ?")) return; setBusy(true); try { await db({ action: "update", table: "Sujets CA", recordId: s.id, fields: { "Réunion": (f(s, "Réunion") || []).filter((id) => id !== m.id), "Statut": "À traiter" } }); await reload(); } catch (e) { alert("Erreur : " + e.message); } setBusy(false); };
   const saveEdit = async () => { if (!date) { alert("La date est obligatoire."); return; } if (!confirm("Enregistrer les modifications de la réunion ?")) return; await updM({ "Titre": titre.trim() || "Réunion du CA", "Date": date, "Heure": heure.trim(), "Lieu": lieu.trim() }); setEdit(false); };
@@ -1049,6 +1059,12 @@ function MeetingDetail({ meetingId, me, data, isAdmin, onClose, reload, onStart 
       )}
       <div className="cond" style={{ fontSize: 12.5, color: MUT, fontWeight: 700, margin: "16px 0 8px", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>Compte-rendu <button className="btn btn-ghost" style={{ fontSize: 11.5, padding: "4px 9px" }} onClick={buildCR}>Générer depuis les sujets</button></div>
       <textarea className="ta" style={{ minHeight: 120 }} value={cr} onChange={(e) => setCr(e.target.value)} />
+      <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap", alignItems: "center" }}>
+        {f(m, "Validation CR") && <span className="chip" style={{ background: f(m, "Validation CR") === "Signé" ? "#E4F6E9" : "#FEF3D6", color: f(m, "Validation CR") === "Signé" ? OK : "#8A6D00" }}><i className={"ti " + (f(m, "Validation CR") === "Signé" ? "ti-checks" : "ti-clock")} />{f(m, "Validation CR")}</span>}
+        <button className="btn btn-ghost" style={{ fontSize: 12.5 }} onClick={() => printCRdoc(m, data, f(m, "Présents") || [])}><i className="ti ti-printer" />Imprimer / PDF</button>
+        <button className="btn btn-dark" style={{ fontSize: 12.5 }} disabled={busy} onClick={sendSign}><i className="ti ti-mail" />Envoyer pour signature</button>
+        {f(m, "Validation CR") !== "Signé" && <button className="btn btn-ghost" style={{ fontSize: 12.5, color: OK, borderColor: "#BFE6CD" }} disabled={busy} onClick={() => signCR("Signé")}><i className="ti ti-checks" />Marquer comme signé</button>}
+      </div>
       <div style={{ display: "flex", gap: 9, marginTop: 14, flexWrap: "wrap", alignItems: "center" }}>
         <button className="btn btn-ghost" onClick={onClose}>Fermer</button>
         <button className="btn btn-dark" disabled={busy} onClick={() => updM({ "Compte-rendu": cr })}>Enregistrer le CR</button>
@@ -1262,6 +1278,45 @@ function MonCompte({ me, data, onClose, reload, onLogout, onUsers }) {
     </Modal>
   );
 }
+function crDocHtml(m, data, presents, logoSrc) {
+  const { sujets, users, poles } = data;
+  const uById = Object.fromEntries(users.map((u) => [u.id, u]));
+  const pById = Object.fromEntries(poles.map((p) => [p.id, p]));
+  const linked = sujets.filter((s) => (f(s, "Réunion") || []).includes(m.id));
+  const pres = (presents || []).map((id) => uById[id]).filter(Boolean).map(fullName);
+  const absents = users.filter((u) => f(u, "Actif") !== false && !(presents || []).includes(u.id)).map(fullName);
+  var rows = "";
+  linked.forEach((s, i) => {
+    const pole = pById[(f(s, "Pôle") || [])[0]];
+    const pc = pole ? (POLE_COLORS[f(pole, "Identifiant")] || "#16171B") : "#16171B";
+    const n = escapeHtml(f(s, "Décision / notes") || "").replace(/\n/g, "<br>");
+    rows += '<div style="margin:0 0 11px;padding:11px 13px;border:1px solid #eceef1;border-left:4px solid ' + pc + ';border-radius:8px">'
+      + '<div style="font-weight:700;font-size:13.5px;color:#16171B">' + (i + 1) + '. ' + (pole ? '<span style="display:inline-block;color:#fff;font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:5px;margin-right:6px;background:' + pc + '">' + escapeHtml(f(pole, "Pôles")) + '</span>' : '') + escapeHtml(f(s, "Titre")) + '</div>'
+      + (n ? '<div style="margin-top:6px;color:#333;white-space:pre-wrap">' + n + '</div>' : '<div style="margin-top:6px;color:#9aa0a6;font-style:italic">Aucune note consignée.</div>')
+      + '</div>';
+  });
+  const sec = (t) => '<div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#16171B;border-bottom:1.5px solid #16171B;padding-bottom:4px;margin:20px 0 8px">' + t + '</div>';
+  return '<div style="font-family:Arial,Helvetica,sans-serif;color:#1a1c22;max-width:720px;margin:0 auto;font-size:13px;line-height:1.5">'
+    + '<div style="display:flex;align-items:center;gap:16px;border-bottom:3px solid #D62828;padding-bottom:14px">'
+    + '<img src="' + logoSrc + '" alt="VHB" width="64" height="64" style="width:64px;height:64px;object-fit:contain">'
+    + '<div style="font-size:20px;font-weight:800;line-height:1.15">Vitrolles Handball Jeunes<span style="display:block;font-weight:700;color:#D62828;font-size:11.5px;letter-spacing:.03em;margin-top:3px">Conseil d\'Administration · Tous Hand\'semble</span></div>'
+    + '</div>'
+    + '<div style="text-align:center;margin:24px 0 3px;font-size:16px;font-weight:800;text-transform:uppercase;letter-spacing:.04em">Compte-rendu de réunion du Conseil d\'Administration</div>'
+    + '<div style="text-align:center;color:#666;font-size:13px;margin-bottom:18px">' + escapeHtml(f(m, "Titre") || "Réunion du CA") + '</div>'
+    + '<div style="background:#f6f7f9;border:1px solid #e6e8ec;border-radius:8px;padding:11px 15px;margin-bottom:16px;font-size:12.5px"><b>Date :</b> ' + escapeHtml(fmtDate(f(m, "Date"))) + (f(m, "Heure") ? ' &nbsp;&nbsp; <b>Heure :</b> ' + escapeHtml(f(m, "Heure")) : '') + (f(m, "Lieu") ? ' &nbsp;&nbsp; <b>Lieu :</b> ' + escapeHtml(f(m, "Lieu")) : '') + '</div>'
+    + sec('Membres présents (' + pres.length + ')') + '<div style="font-size:12.5px;color:#222">' + (pres.length ? escapeHtml(pres.join(", ")) : "—") + '</div>'
+    + sec('Excusés / Absents (' + absents.length + ')') + '<div style="font-size:12.5px;color:#666">' + (absents.length ? escapeHtml(absents.join(", ")) : "Aucun") + '</div>'
+    + sec('Ordre du jour &amp; décisions') + rows
+    + '<div style="margin-top:36px;display:flex;justify-content:space-between;gap:40px"><div style="flex:1"><div style="font-weight:700;font-size:12.5px;margin-bottom:42px">Le Président</div><div style="border-top:1px solid #999;padding-top:4px;font-size:10.5px;color:#777">Nom &amp; signature</div></div><div style="flex:1"><div style="font-weight:700;font-size:12.5px;margin-bottom:42px">Le / La Secrétaire</div><div style="border-top:1px solid #999;padding-top:4px;font-size:10.5px;color:#777">Nom &amp; signature</div></div></div>'
+    + '<div style="margin-top:24px;text-align:center;color:#9aa0a6;font-size:10px;border-top:1px solid #eee;padding-top:8px">Fait à Vitrolles, le ' + escapeHtml(fmtDate(new Date().toISOString())) + ' — Document généré via VHB Pilotage · Tous Hand\'semble.</div>'
+    + '</div>';
+}
+function printCRdoc(m, data, presents) {
+  const html = '<!doctype html><html><head><meta charset="utf-8"><title>Compte-rendu — CA Vitrolles Handball</title><style>@page{size:A4;margin:15mm 14mm;}body{margin:0;}</style></head><body>' + crDocHtml(m, data, presents, LOGO) + '</body></html>';
+  const w = window.open("", "_blank");
+  if (w) { w.document.write(html); w.document.close(); w.focus(); setTimeout(() => { w.print(); }, 500); }
+  else { alert("Autorise les fenêtres pop-up pour imprimer le compte-rendu."); }
+}
 function LiveSujet({ s, me, pById, reload, index, meetingId }) {
   const [busy, setBusy] = useState(false);
   const [titre, setTitre] = useState(f(s, "Titre") || "");
@@ -1358,41 +1413,8 @@ function MeetingLive({ meetingId, me, data, isAdmin, onClose, reload }) {
     setBusy(false);
   };
   const copyCR = () => { try { navigator.clipboard.writeText(cr || buildCRtext()); alert("Compte-rendu copié !"); } catch (e) { alert("Copie impossible sur cet appareil — utilise Imprimer / PDF."); } };
-  const crHtml = (logoSrc) => {
-    const pres = presents.map((id) => uById[id]).filter(Boolean).map(fullName);
-    const absents = activeUsers.filter((u) => !presents.includes(u.id)).map(fullName);
-    var rows = "";
-    linked.forEach((s, i) => {
-      const pole = pById[(f(s, "Pôle") || [])[0]];
-      const pc = pole ? (POLE_COLORS[f(pole, "Identifiant")] || "#16171B") : "#16171B";
-      const n = escapeHtml(f(s, "Décision / notes") || "").replace(/\n/g, "<br>");
-      rows += '<div style="margin:0 0 11px;padding:11px 13px;border:1px solid #eceef1;border-left:4px solid ' + pc + ';border-radius:8px">'
-        + '<div style="font-weight:700;font-size:13.5px;color:#16171B">' + (i + 1) + '. ' + (pole ? '<span style="display:inline-block;color:#fff;font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:5px;margin-right:6px;background:' + pc + '">' + escapeHtml(f(pole, "Pôles")) + '</span>' : '') + escapeHtml(f(s, "Titre")) + '</div>'
-        + (n ? '<div style="margin-top:6px;color:#333;white-space:pre-wrap">' + n + '</div>' : '<div style="margin-top:6px;color:#9aa0a6;font-style:italic">Aucune note consignée.</div>')
-        + '</div>';
-    });
-    const sec = (t) => '<div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#16171B;border-bottom:1.5px solid #16171B;padding-bottom:4px;margin:20px 0 8px">' + t + '</div>';
-    return '<div style="font-family:Arial,Helvetica,sans-serif;color:#1a1c22;max-width:720px;margin:0 auto;font-size:13px;line-height:1.5">'
-      + '<div style="display:flex;align-items:center;gap:16px;border-bottom:3px solid #D62828;padding-bottom:14px">'
-      + '<img src="' + logoSrc + '" alt="VHB" width="64" height="64" style="width:64px;height:64px;object-fit:contain">'
-      + '<div style="font-size:20px;font-weight:800;line-height:1.15">Vitrolles Handball Jeunes<span style="display:block;font-weight:700;color:#D62828;font-size:11.5px;letter-spacing:.03em;margin-top:3px">Conseil d\'Administration · Tous Hand\'semble</span></div>'
-      + '</div>'
-      + '<div style="text-align:center;margin:24px 0 3px;font-size:16px;font-weight:800;text-transform:uppercase;letter-spacing:.04em">Compte-rendu de réunion du Conseil d\'Administration</div>'
-      + '<div style="text-align:center;color:#666;font-size:13px;margin-bottom:18px">' + escapeHtml(f(m, "Titre") || "Réunion du CA") + '</div>'
-      + '<div style="background:#f6f7f9;border:1px solid #e6e8ec;border-radius:8px;padding:11px 15px;margin-bottom:16px;font-size:12.5px"><b>Date :</b> ' + escapeHtml(fmtDate(f(m, "Date"))) + (f(m, "Heure") ? ' &nbsp;&nbsp; <b>Heure :</b> ' + escapeHtml(f(m, "Heure")) : '') + (f(m, "Lieu") ? ' &nbsp;&nbsp; <b>Lieu :</b> ' + escapeHtml(f(m, "Lieu")) : '') + '</div>'
-      + sec('Membres présents (' + pres.length + ')') + '<div style="font-size:12.5px;color:#222">' + (pres.length ? escapeHtml(pres.join(", ")) : "—") + '</div>'
-      + sec('Excusés / Absents (' + absents.length + ')') + '<div style="font-size:12.5px;color:#666">' + (absents.length ? escapeHtml(absents.join(", ")) : "Aucun") + '</div>'
-      + sec('Ordre du jour &amp; décisions') + rows
-      + '<div style="margin-top:36px;display:flex;justify-content:space-between;gap:40px"><div style="flex:1"><div style="font-weight:700;font-size:12.5px;margin-bottom:42px">Le Président</div><div style="border-top:1px solid #999;padding-top:4px;font-size:10.5px;color:#777">Nom &amp; signature</div></div><div style="flex:1"><div style="font-weight:700;font-size:12.5px;margin-bottom:42px">Le / La Secrétaire</div><div style="border-top:1px solid #999;padding-top:4px;font-size:10.5px;color:#777">Nom &amp; signature</div></div></div>'
-      + '<div style="margin-top:24px;text-align:center;color:#9aa0a6;font-size:10px;border-top:1px solid #eee;padding-top:8px">Fait à Vitrolles, le ' + escapeHtml(fmtDate(new Date().toISOString())) + ' — Document généré via VHB Pilotage · Tous Hand\'semble.</div>'
-      + '</div>';
-  };
-  const printCR = () => {
-    const html = '<!doctype html><html><head><meta charset="utf-8"><title>Compte-rendu — CA Vitrolles Handball</title><style>@page{size:A4;margin:15mm 14mm;}body{margin:0;}</style></head><body>' + crHtml(LOGO) + '</body></html>';
-    const w = window.open("", "_blank");
-    if (w) { w.document.write(html); w.document.close(); w.focus(); setTimeout(() => { w.print(); }, 500); }
-    else { alert("Autorise les fenêtres pop-up pour imprimer le compte-rendu."); }
-  };
+  const crHtml = (logoSrc) => crDocHtml(m, data, presents, logoSrc);
+  const printCR = () => printCRdoc(m, data, presents);
   const sendForSignature = async () => {
     const targets = users.filter((u) => (f(u, "Bureau") === "Président" || f(u, "Bureau") === "Secrétaire") && f(u, "Email"));
     if (!targets.length) { alert("Aucun Président ou Secrétaire défini. Un admin peut les désigner dans l'Annuaire."); return; }
@@ -1403,6 +1425,7 @@ function MeetingLive({ meetingId, me, data, isAdmin, onClose, reload }) {
       for (const u of targets) {
         await sendMail({ to: f(u, "Email"), subject: "Compte-rendu à signer — " + (f(m, "Titre") || "Réunion du CA"), html: '<div style="font-family:Arial;color:#333;max-width:720px;margin:0 auto 14px">Bonjour ' + escapeHtml(f(u, "Prénom") || "") + ', voici le compte-rendu de la réunion du CA à relire et signer. Tu peux l\'imprimer pour signature.</div>' + body });
       }
+      await db({ action: "update", table: "Réunions", recordId: m.id, fields: { "Validation CR": "En attente de signature" } }); await reload();
       alert("Compte-rendu envoyé à : " + targets.map((u) => fullName(u)).join(", "));
     } catch (e) { alert("Envoi impossible : " + e.message); }
     setBusy(false);
