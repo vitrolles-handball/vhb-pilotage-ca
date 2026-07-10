@@ -265,7 +265,7 @@ function Header({ me, view, setView, isAdmin, onLogout, unread, onBell, onProfil
         {tabs.map(([v, l]) => <button key={v} className={"navb" + (view === v ? " on" : "")} onClick={() => setView(v)}>{l}</button>)}
       </nav>
       <div className="appactions">
-        <button onClick={onHelp} title="Aide / Guide" style={{ background: "rgba(255,255,255,.08)", border: "none", color: "#E9EAEC", width: 36, height: 36, borderRadius: 11, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}><i className="ti ti-help-circle" style={{ fontSize: 19 }} aria-hidden="true" /></button>
+        <button onClick={onHelp} title="Aide / Guide" style={{ background: YELLOW, color: BLACK, border: "none", borderRadius: 30, padding: "7px 14px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontFamily: "inherit", fontWeight: 700, fontSize: 12.5, flex: "0 0 auto", boxShadow: "0 2px 8px rgba(0,0,0,.18)" }}><i className="ti ti-help-circle" style={{ fontSize: 17 }} aria-hidden="true" />Aide</button>
         <button onClick={onBell} title="Notifications" style={{ position: "relative", background: "rgba(255,255,255,.08)", border: "none", color: "#E9EAEC", width: 36, height: 36, borderRadius: 11, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}><i className="ti ti-bell" style={{ fontSize: 18 }} />{unread > 0 && <span style={{ position: "absolute", top: -5, right: -5, background: RED, color: "#fff", fontSize: 10, fontWeight: 700, borderRadius: 10, minWidth: 17, height: 17, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>{unread}</span>}</button>
         <div style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", flex: "0 0 auto" }} onClick={onProfile} title="Mon espace">
           <Avatar u={me} size={32} />
@@ -1894,23 +1894,30 @@ function HelpView({ onClose }) {
     ["ti-mail", "#2563EB", "Les e-mails automatiques", [["Ce qui part tout seul", "Invitation d'un nouvel utilisateur, alerte @mention, nouveau CA programmé, rappels de signature et de réponse, et un rappel 48h avant le CA pour remplir l'ordre du jour."]]],
     ["ti-star", "#F5C518", "Les règles d'or", [["Reste à jour", "Un petit tour régulier suffit. Mets tes tâches à jour et préviens si tu es dépassé."], ["Prépare en amont", "Dépose tes sujets avant le CA, pas le jour J. On avance ensemble !"]]],
   ];
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState({});
+  const ql = q.trim().toLowerCase();
+  const shown = S.map((sec, i) => [sec, i]).filter(([sec]) => !ql || (sec[2] + " " + sec[3].map((it) => it[0] + " " + it[1]).join(" ")).toLowerCase().includes(ql));
   return (
     <Modal onClose={onClose} wide>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 6, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10, flexWrap: "wrap" }}>
         <div style={{ fontSize: 20, fontWeight: 800 }}>Guide d'utilisation</div>
         <a href="/Livret_Formation_VHB_Pilotage.pdf" target="_blank" rel="noreferrer" className="btn btn-red" style={{ marginLeft: "auto", textDecoration: "none" }}><i className="ti ti-download" />Télécharger le livret PDF</a>
       </div>
-      <div style={{ fontSize: 13, color: MUT, marginBottom: 16 }}>Tout ce qu'il faut savoir pour utiliser l'outil. Accessible à tout moment via le « ? » en haut.</div>
-      {S.map(([icon, color, title, items], i) => <div key={i} className="card" style={{ marginBottom: 12, padding: "16px 18px", borderLeft: "4px solid " + color }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-          <span style={{ width: 32, height: 32, borderRadius: 9, background: color, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}><i className={"ti " + icon} style={{ fontSize: 18 }} aria-hidden="true" /></span>
-          <div style={{ fontSize: 15.5, fontWeight: 800, color: TEXT }}>{title}</div>
+      <input className="inp" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher dans le guide (ex. « signature », « installer », « échéance »…)" style={{ marginBottom: 8 }} />
+      <div style={{ fontSize: 12, color: MUT, marginBottom: 14 }}>{ql ? (shown.length + " résultat" + (shown.length > 1 ? "s" : "")) : "Touche un thème pour l'ouvrir, ou tape un mot-clé."}</div>
+      {shown.length === 0 && <Empty t="Aucun résultat — essaie un autre mot." />}
+      {shown.map(([sec, i]) => { const icon = sec[0], color = sec[1], title = sec[2], items = sec[3]; const isOpen = ql ? true : !!open[i]; return <div key={i} className="card" style={{ marginBottom: 9, padding: 0, overflow: "hidden", borderLeft: "4px solid " + color }}>
+        <div onClick={() => { if (!ql) setOpen((o) => ({ ...o, [i]: !o[i] })); }} style={{ display: "flex", alignItems: "center", gap: 10, padding: "13px 15px", cursor: ql ? "default" : "pointer" }}>
+          <span style={{ width: 30, height: 30, borderRadius: 8, background: color, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}><i className={"ti " + icon} style={{ fontSize: 17 }} aria-hidden="true" /></span>
+          <div style={{ fontSize: 15, fontWeight: 800, color: TEXT, flex: 1 }}>{title}</div>
+          {!ql && <i className={"ti " + (open[i] ? "ti-chevron-up" : "ti-chevron-down")} style={{ color: MUT, fontSize: 18 }} aria-hidden="true" />}
         </div>
-        {items.map(([h, b], j) => <div key={j} style={{ marginBottom: 8 }}>
+        {isOpen && <div style={{ padding: "0 15px 14px" }}>{items.map(([h, b], j) => <div key={j} style={{ marginBottom: 8 }}>
           <div style={{ fontSize: 13.5, fontWeight: 700, color: TEXT }}>{h}</div>
           <div style={{ fontSize: 13, color: MUT, lineHeight: 1.55 }}>{b}</div>
-        </div>)}
-      </div>)}
+        </div>)}</div>}
+      </div>; })}
     </Modal>
   );
 }
