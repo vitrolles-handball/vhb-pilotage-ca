@@ -250,7 +250,7 @@ function ProfileForm({ me, poles, onSaved }) {
   );
 }
 
-function Header({ me, view, setView, isAdmin, onLogout, unread, onBell, onProfile }) {
+function Header({ me, view, setView, isAdmin, onLogout, unread, onBell, onProfile, onHelp }) {
   const tabs = [["dash", "Accueil"], ["taches", "Tâches"], ["sujets", "Sujets"], ["ca", "Réunions"], ["cal", "Agenda"], ["annuaire", "Annuaire"]];
   return (
     <header className="appheader" style={{ backgroundColor: "#E8590C", backgroundImage: "linear-gradient(rgba(28,10,0,.22), rgba(28,10,0,.36)), url(/accent.jpg)", backgroundSize: "cover", backgroundPosition: "center", position: "sticky", top: 0, zIndex: 30, boxShadow: "0 2px 18px rgba(0,0,0,.22)" }}>
@@ -265,6 +265,7 @@ function Header({ me, view, setView, isAdmin, onLogout, unread, onBell, onProfil
         {tabs.map(([v, l]) => <button key={v} className={"navb" + (view === v ? " on" : "")} onClick={() => setView(v)}>{l}</button>)}
       </nav>
       <div className="appactions">
+        <button onClick={onHelp} title="Aide / Guide" style={{ background: "rgba(255,255,255,.08)", border: "none", color: "#E9EAEC", width: 36, height: 36, borderRadius: 11, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}><i className="ti ti-help-circle" style={{ fontSize: 19 }} aria-hidden="true" /></button>
         <button onClick={onBell} title="Notifications" style={{ position: "relative", background: "rgba(255,255,255,.08)", border: "none", color: "#E9EAEC", width: 36, height: 36, borderRadius: 11, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}><i className="ti ti-bell" style={{ fontSize: 18 }} />{unread > 0 && <span style={{ position: "absolute", top: -5, right: -5, background: RED, color: "#fff", fontSize: 10, fontWeight: 700, borderRadius: 10, minWidth: 17, height: 17, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>{unread}</span>}</button>
         <div style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", flex: "0 0 auto" }} onClick={onProfile} title="Mon espace">
           <Avatar u={me} size={32} />
@@ -1375,7 +1376,7 @@ function TaskDetailPage({ taskId, me, data, isAdmin, onClose, reload }) {
   );
 }
 
-function MonCompte({ me, data, onClose, reload, onLogout, onUsers }) {
+function MonCompte({ me, data, onClose, reload, onLogout, onUsers, onHelp }) {
   const { poles } = data;
   const [prenom, setPrenom] = useState(f(me, "Prénom") || "");
   const [nom, setNom] = useState(f(me, "Nom") || "");
@@ -1422,6 +1423,7 @@ function MonCompte({ me, data, onClose, reload, onLogout, onUsers }) {
       </div>}
       <div style={{ display: "flex", gap: 9, marginTop: 20, flexWrap: "wrap", alignItems: "center" }}>
         <button className="btn btn-ghost" onClick={onClose}>Fermer</button>
+        <button className="btn btn-ghost" onClick={onHelp}><i className="ti ti-help-circle" />Guide</button>
         <button className="btn btn-red" disabled={busy} onClick={save}>{busy ? "…" : "Enregistrer"}</button>
         <button className="btn btn-ghost" style={{ marginLeft: "auto", color: RED, borderColor: "#F0C7C3" }} onClick={onLogout}><i className="ti ti-logout" />Se déconnecter</button>
       </div>
@@ -1872,6 +1874,46 @@ function CalendarView({ me, data, openTask, openMeeting }) {
     </div>
   );
 }
+function HelpView({ onClose }) {
+  const S = [
+    ["ti-heart-handshake", "#D62828", "Bienvenue", [["L'outil du CA", "VHB Pilotage réunit au même endroit les tâches, les sujets, les réunions et l'annuaire du Conseil d'Administration."], ["Organisé par pôles", "Gestion, Secrétariat, Développement, Communication, Sportif, Bénévoles — chacun a sa couleur pour se repérer."]]],
+    ["ti-device-mobile", "#2563EB", "Installer sur ton téléphone", [["iPhone", "Ouvre le lien du club dans Safari → bouton Partager → « Sur l'écran d'accueil » → Ajouter."], ["Android", "Ouvre le lien dans Chrome → menu ⋮ → « Installer l'application » (ou « Ajouter à l'écran d'accueil »)."]]],
+    ["ti-user-circle", "#EA580C", "Première connexion & profil", [["Connexion par email", "Pas de mot de passe : tu te connectes avec ton adresse email (créée par un admin)."], ["Complète ton profil", "Prénom, nom, pôle, fonction, téléphone et photo — modifiables à tout moment dans « Mon espace »."]]],
+    ["ti-home", "#059669", "Le tableau de bord", [["L'essentiel en un coup d'œil", "Prochain CA, tes chiffres clés, tes tâches, les coups de main demandés et l'activité récente."], ["Sujets du prochain CA", "Clique sur un sujet pour l'ouvrir et le commenter ; le badge permet de l'ajouter/retirer de l'ordre du jour."]]],
+    ["ti-checklist", "#DC2626", "Les tâches", [["Deux vues", "« Mes tâches » (les tiennes / ton pôle) et « Tâches par pôle » (tout le club). Recherche et tri disponibles."], ["Agir", "« Je prends » pour t'affecter, change le statut (À faire / En cours / Fait), fixe une échéance, ajoute des documents."], ["Socle & ponctuelles", "Le socle = missions officielles permanentes du pôle. Les ponctuelles = au fil de l'eau."]]],
+    ["ti-urgent", "#E8590C", "Demander un coup de main", [["Besoin de renfort ?", "Sur une tâche, « Demander un coup de main » avec un message : une alerte apparaît pour tout le club sur l'accueil."], ["Répondre", "Chacun peut cliquer « Je suis dispo » et préciser ses créneaux en commentaire."]]],
+    ["ti-clipboard-list", "#7C3AED", "Les sujets & la discussion", [["Proposer un sujet", "Onglet Sujets → « Proposer un sujet » (thème, pôle, précisions, documents)."], ["Discuter", "Clique un sujet pour ouvrir sa fiche : n'importe qui peut ajouter un commentaire pour préparer le sujet. Ces échanges ne vont PAS dans le compte-rendu mais restent visibles en réunion."]]],
+    ["ti-calendar-plus", "#2563EB", "Mettre à l'ordre du jour du CA", [["Depuis une tâche ou un sujet", "Le bouton « Mettre à l'ordre du jour » rattache l'élément au prochain CA programmé — ou le met en file s'il n'y en a pas encore (rattaché automatiquement à la création du CA)."]]],
+    ["ti-calendar-event", "#DB2777", "Les réunions & présences", [["Planifier un CA", "Un admin crée la réunion ; un mail part à tous avec « Je serai présent / absent »."], ["Suivi des présences", "Le détail de la réunion affiche présents / absents / en attente, avec les noms et avatars. Tu peux répondre directement."]]],
+    ["ti-player-play", "#16171B", "Mode réunion & compte-rendu", [["Commencer la réunion", "Ouvre une page dédiée : coche les présents, traite les sujets un par un (notes, titre modifiable), ajoute des sujets en séance."], ["Générer le compte-rendu", "Ça ouvre une page pour relire et corriger le CR ; « Aperçu » montre le vrai document, « Imprimer / PDF » l'exporte."]]],
+    ["ti-signature", "#7C3AED", "Signatures électroniques", [["Envoyer pour signature", "Clôture la réunion et envoie le CR au Président et au Secrétaire par mail."], ["Signer", "Ils cliquent le lien, relisent, et signent au doigt/souris. Quand les deux ont signé, le CR passe « Signé » et apparaît dans le PDF officiel."]]],
+    ["ti-history", "#8A9098", "Historique & validation", [["Réunions passées", "Rangées en « En attente de signature » et « Validé ». Un bouton « Renvoyer » relance le signataire manquant."], ["Voir le CR", "Sur un CR signé, « Voir le CR » ouvre l'aperçu officiel, avec impression / téléchargement."]]],
+    ["ti-calendar-month", "#059669", "L'agenda", [["Vue mensuelle", "L'onglet Agenda affiche les réunions (en noir) et les échéances de tâches (couleur du pôle). Clique un événement pour l'ouvrir."]]],
+    ["ti-bell", "#DC2626", "Notifications", [["La cloche", "Regroupe : mentions, compte-rendus à signer, réponses attendues, échéances proches et coups de main. Chaque ligne t'emmène au bon endroit."]]],
+    ["ti-user-cog", "#EA580C", "Mon espace & rôles du bureau", [["Mon espace", "Clique ton avatar en haut à droite : infos, photo, déconnexion."], ["Administration", "Les admins gèrent les utilisateurs et attribuent les rôles du bureau (Président, Vice-président, Secrétaire, Trésorier, Membre du CA) depuis l'Annuaire."]]],
+    ["ti-mail", "#2563EB", "Les e-mails automatiques", [["Ce qui part tout seul", "Invitation d'un nouvel utilisateur, alerte @mention, nouveau CA programmé, rappels de signature et de réponse, et un rappel 48h avant le CA pour remplir l'ordre du jour."]]],
+    ["ti-star", "#F5C518", "Les règles d'or", [["Reste à jour", "Un petit tour régulier suffit. Mets tes tâches à jour et préviens si tu es dépassé."], ["Prépare en amont", "Dépose tes sujets avant le CA, pas le jour J. On avance ensemble !"]]],
+  ];
+  return (
+    <Modal onClose={onClose} wide>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 6, flexWrap: "wrap" }}>
+        <div style={{ fontSize: 20, fontWeight: 800 }}>Guide d'utilisation</div>
+        <a href="/Livret_Formation_VHB_Pilotage.pdf" target="_blank" rel="noreferrer" className="btn btn-red" style={{ marginLeft: "auto", textDecoration: "none" }}><i className="ti ti-download" />Télécharger le livret PDF</a>
+      </div>
+      <div style={{ fontSize: 13, color: MUT, marginBottom: 16 }}>Tout ce qu'il faut savoir pour utiliser l'outil. Accessible à tout moment via le « ? » en haut.</div>
+      {S.map(([icon, color, title, items], i) => <div key={i} className="card" style={{ marginBottom: 12, padding: "16px 18px", borderLeft: "4px solid " + color }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+          <span style={{ width: 32, height: 32, borderRadius: 9, background: color, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}><i className={"ti " + icon} style={{ fontSize: 18 }} aria-hidden="true" /></span>
+          <div style={{ fontSize: 15.5, fontWeight: 800, color: TEXT }}>{title}</div>
+        </div>
+        {items.map(([h, b], j) => <div key={j} style={{ marginBottom: 8 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 700, color: TEXT }}>{h}</div>
+          <div style={{ fontSize: 13, color: MUT, lineHeight: 1.55 }}>{b}</div>
+        </div>)}
+      </div>)}
+    </Modal>
+  );
+}
 function BottomNav({ view, setView }) {
   const tabs = [["dash", "Accueil", "ti-home"], ["taches", "Tâches", "ti-checklist"], ["sujets", "Sujets", "ti-clipboard-list"], ["ca", "Réunions", "ti-calendar"], ["cal", "Agenda", "ti-calendar-month"], ["annuaire", "Annuaire", "ti-users"]];
   return (
@@ -1941,7 +1983,7 @@ export default function App() {
   return (
     <div style={{ minHeight: "100vh", backgroundColor: "#F4F5F8", backgroundImage: "radial-gradient(720px circle at 100% -6%, rgba(214,40,40,.06), transparent 58%), radial-gradient(620px circle at -6% 112%, rgba(245,197,24,.07), transparent 58%)", backgroundAttachment: "fixed", color: TEXT, fontFamily: "'Manrope',system-ui,sans-serif" }}>
       <style>{CSS}</style>
-      <Header me={me} view={view} setView={(v) => { setTaskOpen(null); setLiveOpen(null); setSignOpen(null); setRsvpOpen(null); setView(v); }} isAdmin={isAdmin} onLogout={logout} unread={unread} onBell={() => setModal({ type: "notifs" })} onProfile={() => setModal({ type: "profile" })} />
+      <Header me={me} view={view} setView={(v) => { setTaskOpen(null); setLiveOpen(null); setSignOpen(null); setRsvpOpen(null); setView(v); }} isAdmin={isAdmin} onLogout={logout} unread={unread} onBell={() => setModal({ type: "notifs" })} onProfile={() => setModal({ type: "profile" })} onHelp={() => setModal({ type: "help" })} />
       <div className="wrap">
         {rsvpOpen && <RSVPView meetingId={rsvpOpen} me={me} data={data} onClose={() => { setRsvpOpen(null); try { window.history.replaceState({}, "", window.location.pathname); } catch (e) {} }} reload={reload} openNewSujet={(opts) => setModal({ type: "sujet", ...(opts || {}) })} />}
         {!rsvpOpen && signOpen && <SignatureView meetingId={signOpen} me={me} data={data} onClose={() => { setSignOpen(null); try { window.history.replaceState({}, "", window.location.pathname); } catch (e) {} }} reload={reload} />}
@@ -1960,9 +2002,10 @@ export default function App() {
       {modal && modal.type === "notifs" && <NotifsModal me={me} data={data} onClose={() => setModal(null)} reload={reload} openTask={(id) => { setModal(null); setTaskOpen(id); }} openSujet={(id) => setModal({ type: "sujetDetail", id })} openRSVP={(id) => { setModal(null); setRsvpOpen(id); }} openSign={(id) => { setModal(null); setSignOpen(id); }} />}
       {modal && modal.type === "meeting" && <NewMeeting onClose={() => setModal(null)} reload={reload} data={data} />}
       {modal && modal.type === "meetingDetail" && <MeetingDetail meetingId={modal.id} me={me} data={data} isAdmin={isAdmin} onClose={() => setModal(null)} reload={reload} onStart={() => { setModal(null); setLiveOpen(modal.id); }} onSign={() => { setModal(null); setSignOpen(modal.id); }} />}
-      {modal && modal.type === "profile" && <MonCompte me={me} data={data} onClose={() => setModal(null)} reload={reload} onLogout={logout} onUsers={() => { setModal(null); setView("admin"); }} />}
+      {modal && modal.type === "profile" && <MonCompte me={me} data={data} onClose={() => setModal(null)} reload={reload} onLogout={logout} onUsers={() => { setModal(null); setView("admin"); }} onHelp={() => setModal({ type: "help" })} />}
       {modal && modal.type === "cr" && <CRView meetingId={modal.id} data={data} onClose={() => setModal(null)} />}
       {modal && modal.type === "sujetDetail" && <SujetDetail sujetId={modal.id} me={me} data={data} reload={reload} onClose={() => setModal(null)} />}
+      {modal && modal.type === "help" && <HelpView onClose={() => setModal(null)} />}
       <BottomNav view={view} setView={(v) => { setTaskOpen(null); setLiveOpen(null); setSignOpen(null); setRsvpOpen(null); setView(v); }} />
     </div>
   );
