@@ -63,7 +63,7 @@ export default async function handler(req, res) {
           + '<p>Bonjour ' + prenom + ',</p>'
           + '<p>Le compte-rendu de la réunion <b>' + titre + '</b>' + (date ? ' du <b>' + date + '</b>' : '') + ' est <b>en attente de ta signature</b>.</p>'
           + '<p>Merci de le relire et de le signer dès que possible.</p>'
-          + '<p style="margin-top:16px"><a href="' + APP + '" style="background:#D62828;color:#fff;text-decoration:none;padding:11px 18px;border-radius:10px;font-weight:700;display:inline-block">Ouvrir VHB Pilotage</a></p>'
+          + '<p style="margin-top:16px"><a href="' + APP + '/?sign=' + m.id + '" style="background:#D62828;color:#fff;text-decoration:none;padding:11px 18px;border-radius:10px;font-weight:700;display:inline-block">Signer le compte-rendu en ligne</a></p>'
           + '</div>'
           + '<div style="color:#9aa0a6;font-size:11px;padding:10px 4px">Rappel automatique quotidien · Vitrolles Handball Jeunes</div>'
           + '</div>';
