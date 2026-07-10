@@ -1268,7 +1268,7 @@ function MonCompte({ me, data, onClose, reload, onLogout, onUsers }) {
     </Modal>
   );
 }
-function LiveSujet({ s, me, pById, reload, index }) {
+function LiveSujet({ s, me, pById, reload, index, meetingId }) {
   const [busy, setBusy] = useState(false);
   const [titre, setTitre] = useState(f(s, "Titre") || "");
   const [note, setNote] = useState(f(s, "Décision / notes") || "");
@@ -1278,6 +1278,7 @@ function LiveSujet({ s, me, pById, reload, index }) {
   const col = pole ? (POLE_COLORS[f(pole, "Identifiant")] || BLACK) : "#C9CCD2";
   const done = statut === "Traité";
   const upd = async (fields) => { setBusy(true); try { await db({ action: "update", table: "Sujets CA", recordId: s.id, fields }); await reload(); } catch (e) { alert("Erreur : " + e.message); } setBusy(false); };
+  const detach = async () => { if (!confirm("Retirer ce sujet de la réunion ? Il repartira dans les sujets à aborder (non traité).")) return; setBusy(true); try { await db({ action: "update", table: "Sujets CA", recordId: s.id, fields: { "Réunion": (f(s, "Réunion") || []).filter((id) => id !== meetingId), "Statut": "À traiter" } }); await reload(); } catch (e) { alert("Erreur : " + e.message); } setBusy(false); };
   return (
     <div className="card" style={{ marginBottom: 12, padding: "16px 18px", borderLeft: "4px solid " + (done ? OK : col) }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 9, flexWrap: "wrap" }}>
@@ -1302,6 +1303,7 @@ function LiveSujet({ s, me, pById, reload, index }) {
         <button className="btn btn-red" style={{ fontSize: 12.5 }} disabled={busy} onClick={() => upd({ "Décision / notes": note })}>Enregistrer les notes</button>
         {done ? <button className="btn btn-ghost" style={{ fontSize: 12.5 }} disabled={busy} onClick={() => upd({ "Statut": "En cours" })}>Rouvrir</button>
           : <button className="btn btn-dark" style={{ fontSize: 12.5 }} disabled={busy} onClick={() => upd({ "Décision / notes": note, "Statut": "Traité" })}><i className="ti ti-check" />Marquer traité</button>}
+        <button className="btn btn-ghost" style={{ fontSize: 12.5, marginLeft: "auto", color: RED, borderColor: "#F0C7C3" }} disabled={busy} onClick={detach}><i className="ti ti-arrow-back-up" />Retirer de la réunion</button>
       </div>
     </div>
   );
@@ -1402,7 +1404,7 @@ function MeetingLive({ meetingId, me, data, isAdmin, onClose, reload }) {
             <span className="chip" style={{ background: "#EEF0F3", color: "#5A6066" }}>{doneCount}/{linked.length} traités</span>
           </div>
           {linked.length === 0 ? <Empty t="Aucun sujet à l'ordre du jour — ajoutes-en un ci-dessous." /> :
-            linked.map((s, i) => <LiveSujet key={s.id} s={s} me={me} pById={pById} reload={reload} index={i + 1} />)}
+            linked.map((s, i) => <LiveSujet key={s.id} s={s} me={me} pById={pById} reload={reload} index={i + 1} meetingId={m.id} />)}
           <div className="card" style={{ padding: "16px 18px", marginTop: 4, border: "1px dashed " + BORDER }}>
             <div className="lbl" style={{ marginTop: 0 }}>Ajouter un sujet en séance</div>
             <div style={{ display: "flex", gap: 8 }}>
