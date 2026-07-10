@@ -296,7 +296,7 @@ function HelpCard({ t, me, data, reload, openTask, poleTag }) {
     </div>
   );
 }
-function Dashboard({ me, data, setView, openNewTask, openNewSujet, openTask, reload, openMeeting }) {
+function Dashboard({ me, data, setView, openNewTask, openNewSujet, openTask, reload, openMeeting, openSujet }) {
   const { tasks, users, poles, meetings } = data;
   const uById = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users]);
   const pById = useMemo(() => Object.fromEntries(poles.map((p) => [p.id, p])), [poles]);
@@ -373,7 +373,7 @@ function Dashboard({ me, data, setView, openNewTask, openNewSujet, openTask, rel
                     <span style={{ fontSize: 12.5, fontWeight: 700, color: TEXT }}>{f(p, "Pôles")}</span>
                     <span style={{ fontSize: 11.5, color: MUT }}>· {list.length}</span>
                   </div>
-                  {list.map((x) => <div key={x.id} className="card lift" style={{ padding: "9px 13px", marginBottom: 6, display: "flex", alignItems: "center", gap: 8 }}>
+                  {list.map((x) => <div key={x.id} onClick={() => openSujet && openSujet(x.id)} className="card lift" style={{ padding: "9px 13px", marginBottom: 6, display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
                     <span style={{ fontSize: 13.5, color: TEXT, flex: 1 }}>{f(x, "Titre")}</span>
                     {f(x, "Thème") && <span className="chip" style={{ background: "#EEF0F3", color: "#444" }}>{f(x, "Thème")}</span>}
                   </div>)}
@@ -569,7 +569,7 @@ function renderMentions(text) {
   const parts = String(text || "").split(/(@[\wÀ-ÿ]+)/g);
   return parts.map((p, i) => (p[0] === "@" ? <span key={i} style={{ color: RED, fontWeight: 600 }}>{p}</span> : p));
 }
-function CommentBox({ task, me, users, reload }) {
+function CommentBox({ task, sujet, me, users, reload }) {
   const [text, setText] = useState("");
   const [mentions, setMentions] = useState([]);
   const [q, setQ] = useState(null);
@@ -588,9 +588,10 @@ function CommentBox({ task, me, users, reload }) {
     if (!text.trim()) return; setBusy(true);
     const body = text.trim(); const mIds = mentions;
     try {
-      await db({ action: "create", table: "Commentaires", fields: { "Texte": body, "Tâche": [task.id], "Auteur": [me.id], "Mentions": mIds, "Date": new Date().toISOString(), "Lu par": me.id } });
+      const rec = task || sujet; const linkField = task ? "Tâche" : "Sujet";
+      await db({ action: "create", table: "Commentaires", fields: { "Texte": body, [linkField]: [rec.id], "Auteur": [me.id], "Mentions": mIds, "Date": new Date().toISOString(), "Lu par": me.id } });
       setText(""); setMentions([]); await reload();
-      users.filter((u) => mIds.includes(u.id) && f(u, "Email")).forEach((u) => sendMail({ to: f(u, "Email"), subject: fullName(me) + " t'a mentionné — VHB Pilotage", html: mailWrap(fullName(me) + " t'a mentionné sur une tâche", '<p style="color:#16171B;font-weight:700;margin:0 0 6px">' + escapeHtml(f(task, "Titre") || "Tâche") + '</p><p style="color:#444;line-height:1.55;margin:0">' + escapeHtml(body) + '</p>', { url: APP_URL, label: "Voir la tâche" }) }).catch(() => {}));
+      users.filter((u) => mIds.includes(u.id) && f(u, "Email")).forEach((u) => sendMail({ to: f(u, "Email"), subject: fullName(me) + " t'a mentionné — VHB Pilotage", html: mailWrap(fullName(me) + " t'a mentionné sur " + (task ? "une tâche" : "un sujet"), '<p style="color:#16171B;font-weight:700;margin:0 0 6px">' + escapeHtml(f(rec, "Titre") || "") + '</p><p style="color:#444;line-height:1.55;margin:0">' + escapeHtml(body) + '</p>', { url: APP_URL, label: task ? "Voir la tâche" : "Ouvrir VHB Pilotage" }) }).catch(() => {}));
     } catch (e) { alert("Erreur : " + e.message); }
     setBusy(false);
   };
@@ -825,7 +826,7 @@ function AdminUsers({ me, data, reload }) {
 
 function chipF(on) { return { cursor: "pointer", border: "1px solid " + (on ? RED : "#E6E8EC"), background: on ? "#FBE9E9" : "#fff", color: on ? RED : MUT, fontWeight: on ? 600 : 500, padding: "6px 13px" }; }
 
-function SujetsView({ me, data, isAdmin, reload, openNewSujet }) {
+function SujetsView({ me, data, isAdmin, reload, openNewSujet, openSujet }) {
   const { sujets, users, poles, meetings } = data;
   const [theme, setTheme] = useState("");
   const uById = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users]);
@@ -865,13 +866,13 @@ function SujetsView({ me, data, isAdmin, reload, openNewSujet }) {
               <span style={{ fontSize: 15, fontWeight: 700, color: TEXT }}>{p ? f(p, "Pôles") : "Sans pôle"}</span>
               <span style={{ fontSize: 12, color: MUT }}>· {items.length}</span>
             </div>
-            {items.map((x) => <SujetCard key={x.id} s={x} me={me} uById={uById} pById={pById} reload={reload} onODJ={putODJ} />)}
+            {items.map((x) => <SujetCard key={x.id} s={x} me={me} uById={uById} pById={pById} reload={reload} onODJ={putODJ} openSujet={openSujet} commentaires={data.commentaires || []} />)}
           </div>;
         })}
       {traites.length > 0 && (
         <div style={{ marginTop: 22 }}>
           <div className="cond" style={{ fontSize: 12.5, color: MUT, fontWeight: 700, marginBottom: 9 }}>Sujets traités ({traites.length})</div>
-          {traites.map((x) => <SujetCard key={x.id} s={x} me={me} uById={uById} pById={pById} reload={reload} done />)}
+          {traites.map((x) => <SujetCard key={x.id} s={x} me={me} uById={uById} pById={pById} reload={reload} done openSujet={openSujet} commentaires={data.commentaires || []} />)}
         </div>
       )}
     </div>
@@ -915,7 +916,7 @@ function ReunionsView({ me, data, isAdmin, reload, openNewMeeting, openMeeting, 
   );
 }
 
-function SujetCard({ s, me, uById, pById, reload, done, onODJ }) {
+function SujetCard({ s, me, uById, pById, reload, done, onODJ, openSujet, commentaires }) {
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState(f(s, "Décision / notes") || "");
@@ -954,6 +955,7 @@ function SujetCard({ s, me, uById, pById, reload, done, onODJ }) {
               return <button key={v} disabled={busy} onClick={() => upd({ "Statut": v })} style={{ border: "none", background: on ? "#fff" : "transparent", color: on ? c : MUT, fontWeight: on ? 700 : 500, fontSize: 12, padding: "5px 11px", borderRadius: 30, cursor: "pointer", boxShadow: on ? "0 1px 2px rgba(20,22,30,.10)" : "none", fontFamily: "inherit" }}>{v}</button>;
             })}
           </div>
+          {openSujet && <button className="btn btn-ghost" style={{ fontSize: 12, padding: "6px 11px" }} onClick={() => openSujet(s.id)}><i className="ti ti-message-circle" aria-hidden="true" />{(commentaires || []).filter((c) => (f(c, "Sujet") || []).includes(s.id)).length || "Discuter"}</button>}
           <button className="btn btn-ghost" style={{ fontSize: 12, padding: "6px 11px" }} onClick={() => setOpen((o) => !o)}>{open ? "Fermer" : "Décision / notes"}</button>
         </div>
       </div>
@@ -1388,15 +1390,17 @@ function printCRdoc(m, data, presents, bodyText) {
   if (w) { w.document.write(html); w.document.close(); w.focus(); setTimeout(() => { w.print(); }, 500); }
   else { alert("Autorise les fenêtres pop-up pour imprimer le compte-rendu."); }
 }
-function LiveSujet({ s, me, pById, reload, index, meetingId }) {
+function LiveSujet({ s, me, pById, reload, index, meetingId, commentaires, uById }) {
   const [busy, setBusy] = useState(false);
   const [titre, setTitre] = useState(f(s, "Titre") || "");
   const [note, setNote] = useState(f(s, "Décision / notes") || "");
   const [editT, setEditT] = useState(false);
+  const [showC, setShowC] = useState(false);
   const statut = f(s, "Statut") || "À traiter";
   const pole = pById[(f(s, "Pôle") || [])[0]];
   const col = pole ? (POLE_COLORS[f(pole, "Identifiant")] || BLACK) : "#C9CCD2";
   const done = statut === "Traité";
+  const coms = (commentaires || []).filter((c) => (f(c, "Sujet") || []).includes(s.id));
   const upd = async (fields) => { setBusy(true); try { await db({ action: "update", table: "Sujets CA", recordId: s.id, fields }); await reload(); } catch (e) { alert("Erreur : " + e.message); } setBusy(false); };
   const detach = async () => { if (!confirm("Retirer ce sujet de la réunion ? Il repartira dans les sujets à aborder (non traité).")) return; setBusy(true); try { await db({ action: "update", table: "Sujets CA", recordId: s.id, fields: { "Réunion": (f(s, "Réunion") || []).filter((id) => id !== meetingId), "Statut": "À traiter" } }); await reload(); } catch (e) { alert("Erreur : " + e.message); } setBusy(false); };
   return (
@@ -1423,8 +1427,12 @@ function LiveSujet({ s, me, pById, reload, index, meetingId }) {
         <button className="btn btn-red" style={{ fontSize: 12.5 }} disabled={busy} onClick={() => upd({ "Décision / notes": note })}>Enregistrer les notes</button>
         {done ? <button className="btn btn-ghost" style={{ fontSize: 12.5 }} disabled={busy} onClick={() => upd({ "Statut": "En cours" })}>Rouvrir</button>
           : <button className="btn btn-dark" style={{ fontSize: 12.5 }} disabled={busy} onClick={() => upd({ "Décision / notes": note, "Statut": "Traité" })}><i className="ti ti-check" />Marquer traité</button>}
+        {coms.length > 0 && <button className="btn btn-ghost" style={{ fontSize: 12.5 }} onClick={() => setShowC((v) => !v)}><i className="ti ti-message-circle" />{coms.length} info{coms.length > 1 ? "s" : ""}</button>}
         <button className="btn btn-ghost" style={{ fontSize: 12.5, marginLeft: "auto", color: RED, borderColor: "#F0C7C3" }} disabled={busy} onClick={detach}><i className="ti ti-arrow-back-up" />Retirer de la réunion</button>
       </div>
+      {showC && coms.length > 0 && <div style={{ marginTop: 10, borderTop: "1px solid " + BORDER, paddingTop: 10 }}>
+        {coms.map((c) => { const au = uById && uById[(f(c, "Auteur") || [])[0]]; return <div key={c.id} style={{ display: "flex", gap: 9, marginBottom: 8 }}><Avatar u={au} size={26} /><div style={{ background: "#F4F6F8", borderRadius: 10, padding: "7px 10px", flex: 1 }}><div style={{ fontSize: 11.5, color: MUT, marginBottom: 2 }}>{au ? fullName(au) : "?"}{f(c, "Date") ? " · " + fmtDateTime(f(c, "Date")) : ""}</div><div style={{ fontSize: 13, color: TEXT, whiteSpace: "pre-wrap" }}>{renderMentions(f(c, "Texte"))}</div></div></div>; })}
+      </div>}
     </div>
   );
 }
@@ -1555,7 +1563,7 @@ function MeetingLive({ meetingId, me, data, isAdmin, onClose, reload }) {
             <span className="chip" style={{ background: "#EEF0F3", color: "#5A6066" }}>{doneCount}/{linked.length} traités</span>
           </div>
           {linked.length === 0 ? <Empty t="Aucun sujet à l'ordre du jour — ajoutes-en un ci-dessous." /> :
-            linked.map((s, i) => <LiveSujet key={s.id} s={s} me={me} pById={pById} reload={reload} index={i + 1} meetingId={m.id} />)}
+            linked.map((s, i) => <LiveSujet key={s.id} s={s} me={me} pById={pById} reload={reload} index={i + 1} meetingId={m.id} commentaires={data.commentaires || []} uById={uById} />)}
         </div>
         <div>
           <div className="card" style={{ padding: "18px 20px", marginBottom: 16 }}>
@@ -1691,6 +1699,33 @@ function RSVPView({ meetingId, me, data, onClose, reload, openNewSujet }) {
     </div>
   );
 }
+function SujetDetail({ sujetId, me, data, reload, onClose }) {
+  const s = data.sujets.find((x) => x.id === sujetId);
+  const uById = Object.fromEntries(data.users.map((u) => [u.id, u]));
+  const pById = Object.fromEntries(data.poles.map((p) => [p.id, p]));
+  if (!s) return <Modal onClose={onClose}><Empty t="Sujet introuvable." /></Modal>;
+  const pole = pById[(f(s, "Pôle") || [])[0]];
+  const docs = f(s, "Documents") || [];
+  const coms = (data.commentaires || []).filter((c) => (f(c, "Sujet") || []).includes(s.id)).sort((a, b) => String(f(a, "Date")).localeCompare(String(f(b, "Date"))));
+  return (
+    <Modal onClose={onClose} wide>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+        {f(s, "Thème") && <span className="chip" style={{ background: "#EEF1F4", color: "#5A6066" }}>{f(s, "Thème")}</span>}
+        {pole && <span className="tag" style={{ background: POLE_COLORS[f(pole, "Identifiant")] || BLACK, display: "inline-flex", alignItems: "center", gap: 5 }}><i className={"ti " + (POLE_ICONS[f(pole, "Identifiant")] || "ti-folder")} style={{ fontSize: 12 }} aria-hidden="true" />{f(pole, "Pôles")}</span>}
+        <span className="chip" style={{ background: "#EEF0F3", color: "#5A6066" }}>{f(s, "Statut") || "À traiter"}</span>
+      </div>
+      <div style={{ fontSize: 20, fontWeight: 800, color: TEXT, marginBottom: 8, letterSpacing: "-.01em" }}>{f(s, "Titre")}</div>
+      {f(s, "Description") && <div style={{ fontSize: 14, color: TEXT, lineHeight: 1.6, marginBottom: 10 }}>{f(s, "Description")}</div>}
+      {docs.length > 0 && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>{docs.map((a, i) => { const thumb = a.thumbnails && a.thumbnails.small && a.thumbnails.small.url; return <a key={i} href={a.url} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "#1B5E9B", textDecoration: "none", border: "1px solid " + BORDER, borderRadius: 10, padding: "5px 10px" }}>{thumb ? <img src={thumb} alt="" style={{ width: 22, height: 22, borderRadius: 5, objectFit: "cover" }} /> : <i className="ti ti-paperclip" />}{a.filename || "fichier"}</a>; })}</div>}
+      {f(s, "Décision / notes") && <div style={{ background: "#F7F8FA", borderRadius: 10, padding: "10px 12px", fontSize: 13, color: TEXT, marginBottom: 12 }}><b>Décision / notes :</b> {f(s, "Décision / notes")}</div>}
+      <div style={{ fontSize: 14, fontWeight: 700, color: TEXT, margin: "14px 0 4px", borderTop: "1px solid " + BORDER, paddingTop: 14 }}>Discussion & informations</div>
+      <div style={{ fontSize: 12, color: MUT, marginBottom: 12 }}>Ces échanges aident à préparer le sujet. Ils ne figurent pas dans le compte-rendu, mais restent visibles pendant la réunion.</div>
+      {coms.length === 0 ? <div style={{ fontSize: 13, color: MUT, marginBottom: 12 }}>Aucun commentaire — ajoute une info si besoin.</div> :
+        coms.map((c) => { const au = uById[(f(c, "Auteur") || [])[0]]; return <div key={c.id} style={{ display: "flex", gap: 10, marginBottom: 12 }}><Avatar u={au} size={30} /><div style={{ background: "#F4F6F8", borderRadius: 12, padding: "9px 12px", flex: 1 }}><div style={{ fontSize: 12, color: MUT, marginBottom: 3 }}>{au ? fullName(au) : "?"}{f(c, "Date") ? " · " + fmtDateTime(f(c, "Date")) : ""}</div><div style={{ fontSize: 14, color: TEXT, whiteSpace: "pre-wrap" }}>{renderMentions(f(c, "Texte"))}</div></div></div>; })}
+      <CommentBox sujet={s} me={me} users={data.users} reload={reload} />
+    </Modal>
+  );
+}
 function BottomNav({ view, setView }) {
   const tabs = [["dash", "Accueil", "ti-home"], ["taches", "Tâches", "ti-checklist"], ["sujets", "Sujets", "ti-clipboard-list"], ["ca", "Réunions", "ti-calendar"], ["annuaire", "Annuaire", "ti-users"]];
   return (
@@ -1764,9 +1799,9 @@ export default function App() {
         {!rsvpOpen && signOpen && <SignatureView meetingId={signOpen} me={me} data={data} onClose={() => { setSignOpen(null); try { window.history.replaceState({}, "", window.location.pathname); } catch (e) {} }} reload={reload} />}
         {!rsvpOpen && !signOpen && taskOpen && <TaskDetailPage taskId={taskOpen} me={me} data={data} isAdmin={isAdmin} onClose={() => setTaskOpen(null)} reload={reload} />}
         {!rsvpOpen && !signOpen && !taskOpen && liveOpen && <MeetingLive meetingId={liveOpen} me={me} data={data} isAdmin={isAdmin} onClose={() => setLiveOpen(null)} reload={reload} />}
-        {!rsvpOpen && !signOpen && !taskOpen && !liveOpen && view === "dash" && <Dashboard me={me} data={data} setView={setView} openNewTask={() => setModal({ type: "task", pole: (f(me, "Pôle") || [])[0] || "" })} openNewSujet={(opts) => setModal({ type: "sujet", ...(opts || {}) })} openTask={(id) => setTaskOpen(id)} reload={reload} openMeeting={(id) => setModal({ type: "meetingDetail", id })} />}
+        {!rsvpOpen && !signOpen && !taskOpen && !liveOpen && view === "dash" && <Dashboard me={me} data={data} setView={setView} openNewTask={() => setModal({ type: "task", pole: (f(me, "Pôle") || [])[0] || "" })} openNewSujet={(opts) => setModal({ type: "sujet", ...(opts || {}) })} openTask={(id) => setTaskOpen(id)} reload={reload} openMeeting={(id) => setModal({ type: "meetingDetail", id })} openSujet={(id) => setModal({ type: "sujetDetail", id })} />}
         {!rsvpOpen && !signOpen && !taskOpen && !liveOpen && view === "taches" && <TasksView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewTask={(pole) => setModal({ type: "task", pole })} openTask={(id) => setTaskOpen(id)} />}
-        {!rsvpOpen && !signOpen && !taskOpen && !liveOpen && view === "sujets" && <SujetsView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewSujet={(opts) => setModal({ type: "sujet", ...(opts || {}) })} />}
+        {!rsvpOpen && !signOpen && !taskOpen && !liveOpen && view === "sujets" && <SujetsView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewSujet={(opts) => setModal({ type: "sujet", ...(opts || {}) })} openSujet={(id) => setModal({ type: "sujetDetail", id })} />}
         {!rsvpOpen && !signOpen && !taskOpen && !liveOpen && view === "ca" && <ReunionsView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewMeeting={() => setModal({ type: "meeting" })} openMeeting={(id) => setModal({ type: "meetingDetail", id })} openLive={(id) => setLiveOpen(id)} openCR={(id) => setModal({ type: "cr", id })} />}
         {!rsvpOpen && !signOpen && !taskOpen && !liveOpen && view === "annuaire" && <Annuaire data={data} me={me} isAdmin={isAdmin} reload={reload} />}
         {!rsvpOpen && !signOpen && !taskOpen && !liveOpen && view === "admin" && isAdmin && <AdminUsers me={me} data={data} reload={reload} />}
@@ -1778,6 +1813,7 @@ export default function App() {
       {modal && modal.type === "meetingDetail" && <MeetingDetail meetingId={modal.id} me={me} data={data} isAdmin={isAdmin} onClose={() => setModal(null)} reload={reload} onStart={() => { setModal(null); setLiveOpen(modal.id); }} onSign={() => { setModal(null); setSignOpen(modal.id); }} />}
       {modal && modal.type === "profile" && <MonCompte me={me} data={data} onClose={() => setModal(null)} reload={reload} onLogout={logout} onUsers={() => { setModal(null); setView("admin"); }} />}
       {modal && modal.type === "cr" && <CRView meetingId={modal.id} data={data} onClose={() => setModal(null)} />}
+      {modal && modal.type === "sujetDetail" && <SujetDetail sujetId={modal.id} me={me} data={data} reload={reload} onClose={() => setModal(null)} />}
       <BottomNav view={view} setView={(v) => { setTaskOpen(null); setLiveOpen(null); setSignOpen(null); setRsvpOpen(null); setView(v); }} />
     </div>
   );
