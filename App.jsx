@@ -62,6 +62,11 @@ html{overflow-x:clip;}body{margin:0;font-family:'Manrope',system-ui,sans-serif;o
 @keyframes pulsevhb{0%,100%{transform:scale(1);opacity:.82}50%{transform:scale(1.06);opacity:1}}
 @keyframes vhbfall{to{transform:translateY(105vh) rotate(720deg);opacity:.85}}
 .pulse{animation:pulsevhb 1.6s ease-in-out infinite;}
+@keyframes vhbspin{to{transform:rotate(360deg);}}
+.vhb-busy-ov{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(22,23,27,.22);backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);animation:vfade .12s ease both;}
+.vhb-busy-card{background:#fff;border-radius:18px;padding:20px 24px;box-shadow:0 12px 44px rgba(0,0,0,.24);display:flex;flex-direction:column;align-items:center;gap:9px;}
+.vhb-busy-card img{width:52px;height:52px;object-fit:contain;animation:vhbspin 1s linear infinite;}
+.vhb-busy-card span{font-size:12px;font-weight:700;color:#6E747D;letter-spacing:.03em;}
 @media(max-width:380px){.hide-xs{display:none;}}
 @media(max-width:760px){.inp,.sel,.ta{font-size:16px;}.appheader{padding:calc(8px + env(safe-area-inset-top)) 12px 10px;}.navb{padding:7px 12px;font-size:12.5px;}.caprep{padding:14px 15px !important;}.caprep .btn{font-size:12.5px;padding:9px 13px;}.appnav{display:none;}.bottomnav{display:flex;}}
 @media (max-width:760px){
@@ -70,7 +75,13 @@ html{overflow-x:clip;}body{margin:0;font-family:'Manrope',system-ui,sans-serif;o
 }
 `;
 
+let __vhbBusy = 0;
+function __vhbSetBusy(delta) {
+  __vhbBusy = Math.max(0, __vhbBusy + delta);
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("vhb-busy", { detail: __vhbBusy }));
+}
 function db(payload) {
+  __vhbSetBusy(1);
   return fetch("/api/db", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -79,7 +90,24 @@ function db(payload) {
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || ("Erreur " + r.status));
     return j;
-  });
+  }).finally(() => __vhbSetBusy(-1));
+}
+function BusyOverlay() {
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    const h = (e) => setN((e && e.detail) || 0);
+    window.addEventListener("vhb-busy", h);
+    return () => window.removeEventListener("vhb-busy", h);
+  }, []);
+  if (n <= 0) return null;
+  return (
+    <div className="vhb-busy-ov">
+      <div className="vhb-busy-card">
+        <img src="/logo.png" alt="VHB" />
+        <span>Un instant…</span>
+      </div>
+    </div>
+  );
 }
 const esc = (s) => String(s || "").replace(/'/g, "\\'");
 const f = (rec, name) => (rec && rec.fields ? rec.fields[name] : undefined);
@@ -981,7 +1009,7 @@ function SujetCard({ s, me, uById, pById, reload, done, onODJ, openSujet, commen
   const upd = async (fields) => { setBusy(true); try { await db({ action: "update", table: "Sujets CA", recordId: s.id, fields }); await reload(); } catch (e) { alert("Erreur : " + e.message); } setBusy(false); };
   const segColor = (v) => (v === "Traité" ? OK : v === "En cours" ? "#1B5E9B" : "#B5660A");
   return (
-    <div className="card" style={{ marginBottom: 11, padding: "16px 18px", opacity: done ? 0.72 : 1, position: "relative", overflow: "hidden" }}>
+    <div className={"card" + (openSujet ? " lift" : "")} onClick={() => openSujet && openSujet(s.id)} style={{ marginBottom: 11, padding: "16px 18px", opacity: done ? 0.72 : 1, position: "relative", overflow: "hidden", cursor: openSujet ? "pointer" : "default" }}>
       {f(s, "Thème") && <i className={"ti " + (THEME_ICONS[f(s, "Thème")] || "ti-dots")} style={{ position: "absolute", right: 16, top: 14, fontSize: 64, color: THEME_COLORS[f(s, "Thème")] || MUT, opacity: 0.16, pointerEvents: "none" }} aria-hidden="true" />}
       <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 9, position: "relative" }}>
         {f(s, "Thème") && <span className="chip" style={{ background: "#EEF1F4", color: "#5A6066" }}>{f(s, "Thème")}</span>}
@@ -989,13 +1017,13 @@ function SujetCard({ s, me, uById, pById, reload, done, onODJ, openSujet, commen
       </div>
       <div style={{ fontSize: 15.5, fontWeight: 700, color: TEXT, lineHeight: 1.35, letterSpacing: "-.01em", position: "relative", paddingRight: 40 }}>{f(s, "Titre")}</div>
       {f(s, "Description") && <div style={{ fontSize: 13.5, color: MUT, marginTop: 6, lineHeight: 1.55 }}>{f(s, "Description")}</div>}
-      {docs.length > 0 && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+      {docs.length > 0 && <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
         {docs.map((a, idx) => {
           const thumb = a.thumbnails && a.thumbnails.small && a.thumbnails.small.url;
           return <a key={idx} href={a.url} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "#1B5E9B", textDecoration: "none", border: "1px solid " + BORDER, borderRadius: 9, padding: "4px 9px" }}>{thumb ? <img src={thumb} alt="" style={{ width: 22, height: 22, borderRadius: 5, objectFit: "cover" }} /> : <i className="ti ti-paperclip" />}{a.filename || "fichier"}</a>;
         })}
       </div>}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 13, paddingTop: 12, borderTop: "1px solid #F0F1F3", flexWrap: "wrap" }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 13, paddingTop: 12, borderTop: "1px solid #F0F1F3", flexWrap: "wrap" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12, color: MUT }}>
           {prop && <Avatar u={prop} size={20} />}<span>{prop ? fullName(prop) : "—"}</span>
         </div>
@@ -1006,7 +1034,7 @@ function SujetCard({ s, me, uById, pById, reload, done, onODJ, openSujet, commen
           <div style={{ display: "inline-flex", background: "#F1F3F5", borderRadius: 30, padding: 3 }}>
             {["À traiter", "En cours", "Traité"].map((v) => {
               const on = statut === v; const c = segColor(v);
-              return <button key={v} disabled={busy} onClick={() => upd({ "Statut": v })} style={{ border: "none", background: on ? "#fff" : "transparent", color: on ? c : MUT, fontWeight: on ? 700 : 500, fontSize: 12, padding: "5px 11px", borderRadius: 30, cursor: "pointer", boxShadow: on ? "0 1px 2px rgba(20,22,30,.10)" : "none", fontFamily: "inherit" }}>{v}</button>;
+              return <button key={v} disabled={busy} onClick={() => { if (v === "Traité" && statut !== "Traité") celebrate(); upd({ "Statut": v }); }} style={{ border: "none", background: on ? "#fff" : "transparent", color: on ? c : MUT, fontWeight: on ? 700 : 500, fontSize: 12, padding: "5px 11px", borderRadius: 30, cursor: "pointer", boxShadow: on ? "0 1px 2px rgba(20,22,30,.10)" : "none", fontFamily: "inherit" }}>{v}</button>;
             })}
           </div>
           {openSujet && <button className="btn btn-ghost" style={{ fontSize: 12, padding: "6px 11px" }} onClick={() => openSujet(s.id)}><i className="ti ti-message-circle" aria-hidden="true" />{(commentaires || []).filter((c) => (f(c, "Sujet") || []).includes(s.id)).length || "Discuter"}</button>}
@@ -1014,7 +1042,7 @@ function SujetCard({ s, me, uById, pById, reload, done, onODJ, openSujet, commen
         </div>
       </div>
       {open && (
-        <div style={{ marginTop: 11 }}>
+        <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 11 }}>
           <textarea className="ta" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Décision prise, notes…" />
           <button className="btn btn-red" style={{ marginTop: 8, fontSize: 12.5, padding: "7px 13px" }} disabled={busy} onClick={() => upd({ "Décision / notes": note })}>Enregistrer</button>
         </div>
@@ -1799,26 +1827,82 @@ function RSVPView({ meetingId, me, data, onClose, reload, openNewSujet }) {
     </div>
   );
 }
-function SujetDetail({ sujetId, me, data, reload, onClose }) {
+function SujetDetail({ sujetId, me, data, isAdmin, reload, onClose }) {
   const s = data.sujets.find((x) => x.id === sujetId);
+  const [busy, setBusy] = useState(false);
+  const [edit, setEdit] = useState(false);
+  const [titre, setTitre] = useState("");
+  const [desc, setDesc] = useState("");
+  const [theme, setTheme] = useState("");
+  const [pole, setPole] = useState("");
+  const themes = ["Finances", "Sportif", "Événements", "Bénévoles", "Communication", "Administratif", "Partenariats", "Divers"];
   const uById = Object.fromEntries(data.users.map((u) => [u.id, u]));
   const pById = Object.fromEntries(data.poles.map((p) => [p.id, p]));
   if (!s) return <Modal onClose={onClose}><Empty t="Sujet introuvable." /></Modal>;
-  const pole = pById[(f(s, "Pôle") || [])[0]];
+  const poleRec = pById[(f(s, "Pôle") || [])[0]];
   const docs = f(s, "Documents") || [];
+  const statut = f(s, "Statut") || "À traiter";
   const coms = (data.commentaires || []).filter((c) => (f(c, "Sujet") || []).includes(s.id)).sort((a, b) => String(f(a, "Date")).localeCompare(String(f(b, "Date"))));
+  const canManage = isAdmin || (f(s, "Proposé par") || [])[0] === me.id;
+  const inCA = (f(s, "Réunion") || []).length > 0;
+  const segColor = (v) => (v === "Traité" ? OK : v === "En cours" ? "#1B5E9B" : "#B5660A");
+  const upd = async (fields) => { setBusy(true); try { await db({ action: "update", table: "Sujets CA", recordId: s.id, fields }); await reload(); } catch (e) { alert("Erreur : " + e.message); } setBusy(false); };
+  const startEdit = () => { setTitre(f(s, "Titre") || ""); setDesc(f(s, "Description") || ""); setTheme(f(s, "Thème") || ""); setPole((f(s, "Pôle") || [])[0] || ""); setEdit(true); };
+  const saveEdit = async () => { if (!titre.trim()) { alert("Le titre est obligatoire."); return; } const fields = { "Titre": titre.trim(), "Description": desc.trim(), "Thème": theme }; fields["Pôle"] = pole ? [pole] : []; await upd(fields); setEdit(false); };
+  const putODJ = async () => {
+    const nid = nextCAId(data.meetings);
+    if (nid) { await upd({ "Réunion": [nid], "Statut": "En cours", "À l'ordre du prochain CA": false }); alert("Ajouté à l'ordre du jour du prochain CA."); }
+    else { await upd({ "À l'ordre du prochain CA": true }); alert("Aucun CA programmé — ce sujet sera ajouté automatiquement au prochain CA créé."); }
+  };
+  const del = async () => { if (!confirm("Supprimer définitivement le sujet « " + (f(s, "Titre") || "") + " » ? Cette action est irréversible.")) return; setBusy(true); try { await db({ action: "delete", table: "Sujets CA", recordId: s.id }); await reload(); onClose(); } catch (e) { alert("Erreur : " + e.message); setBusy(false); } };
   return (
     <Modal onClose={onClose} wide>
       <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
         {f(s, "Thème") && <span className="chip" style={{ background: "#EEF1F4", color: "#5A6066" }}>{f(s, "Thème")}</span>}
-        {pole && <span className="tag" style={{ background: POLE_COLORS[f(pole, "Identifiant")] || BLACK, display: "inline-flex", alignItems: "center", gap: 5 }}><i className={"ti " + (POLE_ICONS[f(pole, "Identifiant")] || "ti-folder")} style={{ fontSize: 12 }} aria-hidden="true" />{f(pole, "Pôles")}</span>}
-        <span className="chip" style={{ background: "#EEF0F3", color: "#5A6066" }}>{f(s, "Statut") || "À traiter"}</span>
+        {poleRec && <span className="tag" style={{ background: POLE_COLORS[f(poleRec, "Identifiant")] || BLACK, display: "inline-flex", alignItems: "center", gap: 5 }}><i className={"ti " + (POLE_ICONS[f(poleRec, "Identifiant")] || "ti-folder")} style={{ fontSize: 12 }} aria-hidden="true" />{f(poleRec, "Pôles")}</span>}
+        {inCA && <span className="chip" style={{ background: "#E6F0FB", color: "#1B5E9B" }}><i className="ti ti-calendar-check" aria-hidden="true" />À l'ordre du jour</span>}
       </div>
-      <div style={{ fontSize: 20, fontWeight: 800, color: TEXT, marginBottom: 8, letterSpacing: "-.01em" }}>{f(s, "Titre")}</div>
-      {f(s, "Description") && <div style={{ fontSize: 14, color: TEXT, lineHeight: 1.6, marginBottom: 10 }}>{f(s, "Description")}</div>}
-      {docs.length > 0 && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>{docs.map((a, i) => { const thumb = a.thumbnails && a.thumbnails.small && a.thumbnails.small.url; return <a key={i} href={a.url} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "#1B5E9B", textDecoration: "none", border: "1px solid " + BORDER, borderRadius: 10, padding: "5px 10px" }}>{thumb ? <img src={thumb} alt="" style={{ width: 22, height: 22, borderRadius: 5, objectFit: "cover" }} /> : <i className="ti ti-paperclip" />}{a.filename || "fichier"}</a>; })}</div>}
-      {f(s, "Décision / notes") && <div style={{ background: "#F7F8FA", borderRadius: 10, padding: "10px 12px", fontSize: 13, color: TEXT, marginBottom: 12 }}><b>Décision / notes :</b> {f(s, "Décision / notes")}</div>}
-      <div style={{ fontSize: 14, fontWeight: 700, color: TEXT, margin: "14px 0 4px", borderTop: "1px solid " + BORDER, paddingTop: 14 }}>Discussion & informations</div>
+      {edit ? (
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ fontSize: 12, fontWeight: 700, color: MUT }}>Titre</label>
+          <input className="inp" style={{ marginTop: 4, marginBottom: 10 }} value={titre} onChange={(e) => setTitre(e.target.value)} placeholder="Titre du sujet" />
+          <label style={{ fontSize: 12, fontWeight: 700, color: MUT }}>Description</label>
+          <textarea className="ta" style={{ marginTop: 4, marginBottom: 10 }} value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Décris le sujet…" />
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <div style={{ flex: 1, minWidth: 160 }}>
+              <label style={{ fontSize: 12, fontWeight: 700, color: MUT }}>Thème</label>
+              <select className="sel" style={{ marginTop: 4 }} value={theme} onChange={(e) => setTheme(e.target.value)}><option value="">— Aucun —</option>{themes.map((t) => <option key={t} value={t}>{t}</option>)}</select>
+            </div>
+            <div style={{ flex: 1, minWidth: 160 }}>
+              <label style={{ fontSize: 12, fontWeight: 700, color: MUT }}>Pôle</label>
+              <select className="sel" style={{ marginTop: 4 }} value={pole} onChange={(e) => setPole(e.target.value)}><option value="">— Aucun —</option>{data.poles.map((p) => <option key={p.id} value={p.id}>{f(p, "Pôles")}</option>)}</select>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+            <button className="btn btn-red" disabled={busy} onClick={saveEdit}><i className="ti ti-check" aria-hidden="true" />Enregistrer</button>
+            <button className="btn btn-ghost" disabled={busy} onClick={() => setEdit(false)}>Annuler</button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div style={{ fontSize: 20, fontWeight: 800, color: TEXT, marginBottom: 8, letterSpacing: "-.01em" }}>{f(s, "Titre")}</div>
+          {f(s, "Description") && <div style={{ fontSize: 14, color: TEXT, lineHeight: 1.6, marginBottom: 10 }}>{f(s, "Description")}</div>}
+          {docs.length > 0 && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>{docs.map((a, i) => { const thumb = a.thumbnails && a.thumbnails.small && a.thumbnails.small.url; return <a key={i} href={a.url} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "#1B5E9B", textDecoration: "none", border: "1px solid " + BORDER, borderRadius: 10, padding: "5px 10px" }}>{thumb ? <img src={thumb} alt="" style={{ width: 22, height: 22, borderRadius: 5, objectFit: "cover" }} /> : <i className="ti ti-paperclip" />}{a.filename || "fichier"}</a>; })}</div>}
+          {f(s, "Décision / notes") && <div style={{ background: "#F7F8FA", borderRadius: 10, padding: "10px 12px", fontSize: 13, color: TEXT, marginBottom: 12 }}><b>Décision / notes :</b> {f(s, "Décision / notes")}</div>}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 6 }}>
+            <span style={{ fontSize: 12.5, fontWeight: 700, color: MUT }}>Statut</span>
+            <div style={{ display: "inline-flex", background: "#F1F3F5", borderRadius: 30, padding: 3 }}>
+              {["À traiter", "En cours", "Traité"].map((v) => { const on = statut === v; const c = segColor(v); return <button key={v} disabled={busy} onClick={() => { if (v === "Traité" && statut !== "Traité") celebrate(); upd({ "Statut": v }); }} style={{ border: "none", background: on ? "#fff" : "transparent", color: on ? c : MUT, fontWeight: on ? 700 : 500, fontSize: 12, padding: "6px 12px", borderRadius: 30, cursor: "pointer", boxShadow: on ? "0 1px 2px rgba(20,22,30,.10)" : "none", fontFamily: "inherit" }}>{v}</button>; })}
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+            {!inCA && statut !== "Traité" && <button className="btn btn-ghost" style={{ fontSize: 12.5 }} disabled={busy} onClick={putODJ}><i className="ti ti-calendar-plus" aria-hidden="true" />Mettre à l'ordre du jour</button>}
+            {canManage && <button className="btn btn-ghost" style={{ fontSize: 12.5 }} disabled={busy} onClick={startEdit}><i className="ti ti-edit" aria-hidden="true" />Modifier</button>}
+            {canManage && <button className="btn btn-ghost" style={{ fontSize: 12.5, color: RED }} disabled={busy} onClick={del}><i className="ti ti-trash" aria-hidden="true" />Supprimer</button>}
+          </div>
+        </>
+      )}
+      <div style={{ fontSize: 14, fontWeight: 700, color: TEXT, margin: "16px 0 4px", borderTop: "1px solid " + BORDER, paddingTop: 14 }}>Discussion & informations</div>
       <div style={{ fontSize: 12, color: MUT, marginBottom: 12 }}>Ces échanges aident à préparer le sujet. Ils ne figurent pas dans le compte-rendu, mais restent visibles pendant la réunion.</div>
       {coms.length === 0 ? <div style={{ fontSize: 13, color: MUT, marginBottom: 12 }}>Aucun commentaire — ajoute une info si besoin.</div> :
         coms.map((c) => { const au = uById[(f(c, "Auteur") || [])[0]]; return <div key={c.id} style={{ display: "flex", gap: 10, marginBottom: 12 }}><Avatar u={au} size={30} /><div style={{ background: "#F4F6F8", borderRadius: 12, padding: "9px 12px", flex: 1 }}><div style={{ fontSize: 12, color: MUT, marginBottom: 3 }}>{au ? fullName(au) : "?"}{f(c, "Date") ? " · " + fmtDateTime(f(c, "Date")) : ""}</div><div style={{ fontSize: 14, color: TEXT, whiteSpace: "pre-wrap" }}>{renderMentions(f(c, "Texte"))}</div></div></div>; })}
@@ -1993,6 +2077,7 @@ export default function App() {
   return (
     <div style={{ minHeight: "100vh", backgroundColor: "#F4F5F8", backgroundImage: "radial-gradient(720px circle at 100% -6%, rgba(214,40,40,.06), transparent 58%), radial-gradient(620px circle at -6% 112%, rgba(245,197,24,.07), transparent 58%)", backgroundAttachment: "fixed", color: TEXT, fontFamily: "'Manrope',system-ui,sans-serif" }}>
       <style>{CSS}</style>
+      <BusyOverlay />
       <Header me={me} view={view} setView={(v) => { setTaskOpen(null); setLiveOpen(null); setSignOpen(null); setRsvpOpen(null); setView(v); }} isAdmin={isAdmin} onLogout={logout} unread={unread} onBell={() => setModal({ type: "notifs" })} onProfile={() => setModal({ type: "profile" })} onHelp={() => setModal({ type: "help" })} />
       <div className="wrap">
         {rsvpOpen && <RSVPView meetingId={rsvpOpen} me={me} data={data} onClose={() => { setRsvpOpen(null); try { window.history.replaceState({}, "", window.location.pathname); } catch (e) {} }} reload={reload} openNewSujet={(opts) => setModal({ type: "sujet", ...(opts || {}) })} />}
@@ -2014,7 +2099,7 @@ export default function App() {
       {modal && modal.type === "meetingDetail" && <MeetingDetail meetingId={modal.id} me={me} data={data} isAdmin={isAdmin} onClose={() => setModal(null)} reload={reload} onStart={() => { setModal(null); setLiveOpen(modal.id); }} onSign={() => { setModal(null); setSignOpen(modal.id); }} />}
       {modal && modal.type === "profile" && <MonCompte me={me} data={data} onClose={() => setModal(null)} reload={reload} onLogout={logout} onUsers={() => { setModal(null); setView("admin"); }} onHelp={() => setModal({ type: "help" })} />}
       {modal && modal.type === "cr" && <CRView meetingId={modal.id} data={data} onClose={() => setModal(null)} />}
-      {modal && modal.type === "sujetDetail" && <SujetDetail sujetId={modal.id} me={me} data={data} reload={reload} onClose={() => setModal(null)} />}
+      {modal && modal.type === "sujetDetail" && <SujetDetail sujetId={modal.id} me={me} data={data} isAdmin={isAdmin} reload={reload} onClose={() => setModal(null)} />}
       {modal && modal.type === "help" && <HelpView onClose={() => setModal(null)} />}
       <BottomNav view={view} setView={(v) => { setTaskOpen(null); setLiveOpen(null); setSignOpen(null); setRsvpOpen(null); setView(v); }} />
     </div>
