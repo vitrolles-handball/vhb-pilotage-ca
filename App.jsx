@@ -819,7 +819,7 @@ function AdminUsers({ me, data, reload }) {
 
 function chipF(on) { return { cursor: "pointer", border: "1px solid " + (on ? RED : "#E6E8EC"), background: on ? "#FBE9E9" : "#fff", color: on ? RED : MUT, fontWeight: on ? 600 : 500, padding: "6px 13px" }; }
 
-function CAView({ me, data, isAdmin, reload, openNewSujet, openNewMeeting, openMeeting }) {
+function CAView({ me, data, isAdmin, reload, openNewSujet, openNewMeeting, openMeeting, openLive }) {
   const { sujets, meetings, users, poles } = data;
   const [tab, setTab] = useState("sujets");
   const [theme, setTheme] = useState("");
@@ -880,7 +880,7 @@ function CAView({ me, data, isAdmin, reload, openNewSujet, openNewMeeting, openM
           {isAdmin && <button className="btn btn-red" style={{ marginBottom: 14 }} onClick={openNewMeeting}><i className="ti ti-calendar-plus" />Planifier un CA</button>}
           {aVenir.length === 0 && passees.length === 0 && <Empty t="Aucune réunion programmée." />}
           {aVenir.length > 0 && <div className="cond" style={{ fontSize: 12.5, color: MUT, fontWeight: 700, margin: "4px 0 9px" }}>À venir</div>}
-          {aVenir.map((m) => <MeetingRow key={m.id} m={m} sujets={sujets} onClick={() => openMeeting(m.id)} />)}
+          {aVenir.map((m) => <MeetingRow key={m.id} m={m} sujets={sujets} onClick={() => openMeeting(m.id)} onStart={openLive} />)}
           {passees.length > 0 && <div className="cond" style={{ fontSize: 12.5, color: MUT, fontWeight: 700, margin: "18px 0 9px" }}>Réunions passées</div>}
           {passees.map((m) => <MeetingRow key={m.id} m={m} sujets={sujets} onClick={() => openMeeting(m.id)} past />)}
         </div>
@@ -937,7 +937,7 @@ function SujetCard({ s, me, uById, pById, reload, done }) {
     </div>
   );
 }
-function MeetingRow({ m, sujets, onClick, past }) {
+function MeetingRow({ m, sujets, onClick, past, onStart }) {
   const linked = sujets.filter((s) => (f(s, "Réunion") || []).includes(m.id));
   return (
     <div className="card lift" onClick={onClick} style={{ marginBottom: 9, padding: "14px 16px", cursor: "pointer", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
@@ -948,6 +948,7 @@ function MeetingRow({ m, sujets, onClick, past }) {
         <div style={{ fontSize: 15, fontWeight: 600, color: TEXT }}>{f(m, "Titre") || "Réunion du CA"}</div>
         <div style={{ fontSize: 12.5, color: MUT }}>{fmtDate(f(m, "Date"))}{f(m, "Heure") ? " · " + f(m, "Heure") : ""}{f(m, "Lieu") ? " · " + f(m, "Lieu") : ""}</div>
       </div>
+      {!past && onStart && <button className="btn btn-red" style={{ fontSize: 12.5, padding: "7px 12px", flex: "0 0 auto" }} onClick={(e) => { e.stopPropagation(); onStart(m.id); }}><i className="ti ti-player-play" />Commencer</button>}
       <span className="chip" style={{ background: past ? "#EEF0F3" : "#FEF6D8", color: past ? MUT : "#8A6D00" }}>{past ? "Passée" : "À venir"}{linked.length ? " · " + linked.length + " sujet" + (linked.length > 1 ? "s" : "") : ""}</span>
     </div>
   );
@@ -985,7 +986,7 @@ function NewMeeting({ onClose, reload, data }) {
   );
 }
 
-function MeetingDetail({ meetingId, me, data, isAdmin, onClose, reload }) {
+function MeetingDetail({ meetingId, me, data, isAdmin, onClose, reload, onStart }) {
   const { meetings, sujets } = data;
   const m = meetings.find((x) => x.id === meetingId);
   const [busy, setBusy] = useState(false);
@@ -1033,6 +1034,7 @@ function MeetingDetail({ meetingId, me, data, isAdmin, onClose, reload }) {
           {isAdmin && !past && <button className="btn btn-ghost" style={{ fontSize: 12, padding: "6px 11px" }} onClick={() => setEdit(true)}><i className="ti ti-pencil" />Modifier</button>}
         </div>
       )}
+      {!past && <button className="btn btn-red" style={{ width: "100%", justifyContent: "center", marginBottom: 14 }} onClick={onStart}><i className="ti ti-player-play" />Commencer la réunion</button>}
       <div className="cond" style={{ fontSize: 12.5, color: MUT, fontWeight: 700, marginBottom: 8 }}>Ordre du jour ({linked.length})</div>
       {linked.length === 0 ? <Empty t="Aucun sujet rattaché pour l'instant." /> :
         linked.map((s) => <div key={s.id} className="card" style={{ marginBottom: 7, padding: "10px 13px", display: "flex", alignItems: "flex-start", gap: 10 }}>
@@ -1266,6 +1268,180 @@ function MonCompte({ me, data, onClose, reload, onLogout, onUsers }) {
     </Modal>
   );
 }
+function LiveSujet({ s, me, pById, reload, index }) {
+  const [busy, setBusy] = useState(false);
+  const [titre, setTitre] = useState(f(s, "Titre") || "");
+  const [note, setNote] = useState(f(s, "Décision / notes") || "");
+  const [editT, setEditT] = useState(false);
+  const statut = f(s, "Statut") || "À traiter";
+  const pole = pById[(f(s, "Pôle") || [])[0]];
+  const col = pole ? (POLE_COLORS[f(pole, "Identifiant")] || BLACK) : "#C9CCD2";
+  const done = statut === "Traité";
+  const upd = async (fields) => { setBusy(true); try { await db({ action: "update", table: "Sujets CA", recordId: s.id, fields }); await reload(); } catch (e) { alert("Erreur : " + e.message); } setBusy(false); };
+  return (
+    <div className="card" style={{ marginBottom: 12, padding: "16px 18px", borderLeft: "4px solid " + (done ? OK : col) }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 9, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 11.5, fontWeight: 700, color: MUT, letterSpacing: ".04em" }}>SUJET {index}</span>
+        {pole && <span className="tag" style={{ background: POLE_COLORS[f(pole, "Identifiant")] || BLACK, display: "inline-flex", alignItems: "center", gap: 5 }}><i className={"ti " + (POLE_ICONS[f(pole, "Identifiant")] || "ti-folder")} style={{ fontSize: 12 }} aria-hidden="true" />{f(pole, "Pôles")}</span>}
+        {done && <span className="chip" style={{ background: "#E4F6E9", color: OK }}><i className="ti ti-check" />Traité</span>}
+      </div>
+      {editT ? (
+        <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+          <input className="inp" value={titre} onChange={(e) => setTitre(e.target.value)} autoFocus />
+          <button className="btn btn-dark" style={{ flex: "0 0 auto" }} disabled={busy} onClick={async () => { await upd({ "Titre": titre.trim() || f(s, "Titre") }); setEditT(false); }}>OK</button>
+        </div>
+      ) : (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+          <div style={{ fontSize: 16.5, fontWeight: 700, color: TEXT, flex: 1, lineHeight: 1.3 }}>{f(s, "Titre")}</div>
+          <button className="btn btn-ghost" style={{ fontSize: 12, padding: "5px 10px", flex: "0 0 auto" }} onClick={() => { setTitre(f(s, "Titre") || ""); setEditT(true); }}><i className="ti ti-pencil" />Titre</button>
+        </div>
+      )}
+      <div className="lbl" style={{ marginTop: 0 }}>Notes pour le compte-rendu</div>
+      <textarea className="ta" style={{ minHeight: 90 }} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Décisions prises, points abordés, actions à suivre…" />
+      <div style={{ display: "flex", gap: 8, marginTop: 9, flexWrap: "wrap" }}>
+        <button className="btn btn-red" style={{ fontSize: 12.5 }} disabled={busy} onClick={() => upd({ "Décision / notes": note })}>Enregistrer les notes</button>
+        {done ? <button className="btn btn-ghost" style={{ fontSize: 12.5 }} disabled={busy} onClick={() => upd({ "Statut": "En cours" })}>Rouvrir</button>
+          : <button className="btn btn-dark" style={{ fontSize: 12.5 }} disabled={busy} onClick={() => upd({ "Décision / notes": note, "Statut": "Traité" })}><i className="ti ti-check" />Marquer traité</button>}
+      </div>
+    </div>
+  );
+}
+function MeetingLive({ meetingId, me, data, isAdmin, onClose, reload }) {
+  const { meetings, sujets, users, poles } = data;
+  const m = meetings.find((x) => x.id === meetingId);
+  const uById = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users]);
+  const pById = useMemo(() => Object.fromEntries(poles.map((p) => [p.id, p])), [poles]);
+  const [presents, setPresents] = useState(m ? (f(m, "Présents") || []) : []);
+  const [newSujet, setNewSujet] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [cr, setCr] = useState(null);
+  if (!m) return <div className="fade"><button className="btn btn-ghost" onClick={onClose}><i className="ti ti-arrow-left" />Retour</button></div>;
+  const linked = sujets.filter((s) => (f(s, "Réunion") || []).includes(m.id));
+  const activeUsers = users.filter((u) => f(u, "Actif") !== false);
+  const doneCount = linked.filter((s) => f(s, "Statut") === "Traité").length;
+  const togglePresent = async (uid) => {
+    const next = presents.includes(uid) ? presents.filter((x) => x !== uid) : [...presents, uid];
+    setPresents(next);
+    try { await db({ action: "update", table: "Réunions", recordId: m.id, fields: { "Présents": next } }); } catch (e) {}
+  };
+  const addSujet = async () => {
+    if (!newSujet.trim()) return; setBusy(true);
+    try { await db({ action: "create", table: "Sujets CA", fields: { "Titre": newSujet.trim(), "Statut": "En cours", "Réunion": [m.id], "Proposé par": [me.id] } }); setNewSujet(""); await reload(); } catch (e) { alert("Erreur : " + e.message); }
+    setBusy(false);
+  };
+  const buildCRtext = () => {
+    const pres = presents.map((id) => uById[id]).filter(Boolean).map(fullName);
+    const L = [];
+    L.push("COMPTE-RENDU — " + (f(m, "Titre") || "Réunion du CA"));
+    L.push("Vitrolles Handball Jeunes — Tous Hand'semble");
+    L.push("Date : " + fmtDate(f(m, "Date")) + (f(m, "Heure") ? " à " + f(m, "Heure") : "") + (f(m, "Lieu") ? " · " + f(m, "Lieu") : ""));
+    L.push("");
+    L.push("Présents (" + pres.length + ") : " + (pres.join(", ") || "—"));
+    L.push("");
+    L.push("ORDRE DU JOUR");
+    linked.forEach((s, i) => {
+      const pole = pById[(f(s, "Pôle") || [])[0]];
+      L.push("");
+      L.push((i + 1) + ". " + (pole ? "[" + f(pole, "Pôles") + "] " : "") + f(s, "Titre"));
+      const n = f(s, "Décision / notes");
+      if (n) String(n).split("\n").forEach((ln) => L.push("   " + ln));
+      else L.push("   —");
+    });
+    L.push("");
+    L.push("——");
+    L.push("Compte-rendu généré le " + fmtDate(new Date().toISOString()) + " via VHB Pilotage.");
+    return L.join("\n");
+  };
+  const cloturer = async () => {
+    if (!confirm("Clôturer la réunion et générer le compte-rendu ? La réunion passera en « clôturée ».")) return;
+    setBusy(true);
+    const text = buildCRtext();
+    try { await db({ action: "update", table: "Réunions", recordId: m.id, fields: { "Compte-rendu": text, "Statut": "Passée", "Présents": presents } }); await reload(); setCr(text); } catch (e) { alert("Erreur : " + e.message); }
+    setBusy(false);
+  };
+  const copyCR = () => { try { navigator.clipboard.writeText(cr || buildCRtext()); alert("Compte-rendu copié !"); } catch (e) { alert("Copie impossible sur cet appareil — utilise Imprimer / PDF."); } };
+  const printCR = () => {
+    const pres = presents.map((id) => uById[id]).filter(Boolean).map(fullName);
+    var rows = "";
+    linked.forEach((s, i) => {
+      const pole = pById[(f(s, "Pôle") || [])[0]];
+      const n = escapeHtml(f(s, "Décision / notes") || "").replace(/\n/g, "<br>");
+      rows += '<div style="margin:14px 0;padding:12px 14px;border-left:4px solid #D62828;background:#fafafa;border-radius:8px">'
+        + '<div style="font-weight:700;color:#16171B;font-size:15px">' + (i + 1) + '. ' + (pole ? '<span style="color:#D62828">[' + escapeHtml(f(pole, "Pôles")) + '] </span>' : '') + escapeHtml(f(s, "Titre")) + '</div>'
+        + (n ? '<div style="margin-top:6px;color:#333;line-height:1.55">' + n + '</div>' : '<div style="margin-top:6px;color:#999;font-style:italic">Aucune note.</div>')
+        + '</div>';
+    });
+    const html = '<html><head><meta charset="utf-8"><title>Compte-rendu CA</title></head>'
+      + '<body style="font-family:Arial,Helvetica,sans-serif;max-width:720px;margin:24px auto;color:#16171B;padding:0 16px">'
+      + '<div style="border-bottom:3px solid #D62828;padding-bottom:12px;margin-bottom:16px">'
+      + '<div style="font-size:22px;font-weight:800">Compte-rendu — ' + escapeHtml(f(m, "Titre") || "Réunion du CA") + '</div>'
+      + '<div style="color:#F5C518;background:#16171B;display:inline-block;padding:3px 9px;border-radius:6px;font-size:12px;font-weight:700;margin-top:6px">Vitrolles Handball Jeunes · Tous Hand\'semble</div>'
+      + '<div style="color:#555;margin-top:8px">Date : <b>' + escapeHtml(fmtDate(f(m, "Date"))) + (f(m, "Heure") ? ' à ' + escapeHtml(f(m, "Heure")) : '') + '</b>' + (f(m, "Lieu") ? ' · ' + escapeHtml(f(m, "Lieu")) : '') + '</div>'
+      + '</div>'
+      + '<div style="margin-bottom:16px"><b>Présents (' + pres.length + ')</b> : ' + (pres.length ? escapeHtml(pres.join(", ")) : "—") + '</div>'
+      + '<h3 style="border-bottom:1px solid #eee;padding-bottom:6px">Ordre du jour</h3>'
+      + rows
+      + '<div style="margin-top:24px;color:#999;font-size:11px;border-top:1px solid #eee;padding-top:8px">Compte-rendu généré le ' + escapeHtml(fmtDate(new Date().toISOString())) + ' via VHB Pilotage.</div>'
+      + '</body></html>';
+    const w = window.open("", "_blank");
+    if (w) { w.document.write(html); w.document.close(); w.focus(); setTimeout(() => { w.print(); }, 400); }
+    else { alert("Autorise les fenêtres pop-up pour imprimer le compte-rendu."); }
+  };
+  return (
+    <div className="fade">
+      <button className="btn btn-ghost" style={{ marginBottom: 16 }} onClick={onClose}><i className="ti ti-arrow-left" />Retour aux réunions</button>
+      <div style={{ marginBottom: 18 }}>
+        <span className="chip" style={{ background: RED, color: "#fff" }}><i className="ti ti-player-play" />Réunion en cours</span>
+        <div style={{ fontSize: 28, fontWeight: 800, color: TEXT, letterSpacing: "-.02em", lineHeight: 1.2, marginTop: 8 }}>{f(m, "Titre") || "Réunion du CA"}</div>
+        <div style={{ fontSize: 13.5, color: MUT, marginTop: 3 }}>{fmtDate(f(m, "Date"))}{f(m, "Heure") ? " à " + f(m, "Heure") : ""}{f(m, "Lieu") ? " · " + f(m, "Lieu") : ""}</div>
+      </div>
+      <div className="detail-grid">
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: TEXT }}>Ordre du jour</div>
+            <span className="chip" style={{ background: "#EEF0F3", color: "#5A6066" }}>{doneCount}/{linked.length} traités</span>
+          </div>
+          {linked.length === 0 ? <Empty t="Aucun sujet à l'ordre du jour — ajoutes-en un ci-dessous." /> :
+            linked.map((s, i) => <LiveSujet key={s.id} s={s} me={me} pById={pById} reload={reload} index={i + 1} />)}
+          <div className="card" style={{ padding: "16px 18px", marginTop: 4, border: "1px dashed " + BORDER }}>
+            <div className="lbl" style={{ marginTop: 0 }}>Ajouter un sujet en séance</div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input className="inp" value={newSujet} onChange={(e) => setNewSujet(e.target.value)} placeholder="Sujet abordé hors ordre du jour…" onKeyDown={(e) => { if (e.key === "Enter") addSujet(); }} />
+              <button className="btn btn-red" style={{ flex: "0 0 auto" }} disabled={busy} onClick={addSujet}><i className="ti ti-plus" />Ajouter</button>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div className="card" style={{ padding: "18px 20px", marginBottom: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: TEXT }}>Présents</div>
+              <span className="chip" style={{ background: "#E4F6E9", color: OK }}>{presents.length}</span>
+            </div>
+            <div style={{ maxHeight: 340, overflowY: "auto" }}>
+              {activeUsers.map((u) => { const on = presents.includes(u.id); return <div key={u.id} onClick={() => togglePresent(u.id)} style={{ display: "flex", alignItems: "center", gap: 9, padding: "7px 8px", borderRadius: 10, cursor: "pointer", background: on ? "#E9F7EE" : "transparent" }}><Avatar u={u} size={30} /><span style={{ flex: 1, fontSize: 13.5, color: TEXT, fontWeight: on ? 600 : 400 }}>{fullName(u)}</span><i className={"ti " + (on ? "ti-circle-check" : "ti-circle")} style={{ fontSize: 20, color: on ? OK : "#C9CCD2" }} aria-hidden="true" /></div>; })}
+            </div>
+          </div>
+          <div className="card" style={{ padding: "18px 20px" }}>
+            <div style={{ fontSize: 13.5, color: MUT, marginBottom: 12 }}>Quand la réunion est terminée, génère le compte-rendu (il sera archivé sur la réunion).</div>
+            <button className="btn btn-dark" style={{ width: "100%", justifyContent: "center" }} disabled={busy} onClick={cloturer}><i className="ti ti-file-check" />Clôturer & générer le CR</button>
+          </div>
+        </div>
+      </div>
+      {cr && (
+        <div className="card rise" style={{ marginTop: 18, padding: "22px 24px", borderTop: "4px solid " + OK }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
+            <div style={{ fontSize: 17, fontWeight: 800, color: TEXT }}>Compte-rendu généré ✓</div>
+            <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button className="btn btn-ghost" onClick={copyCR}><i className="ti ti-copy" />Copier</button>
+              <button className="btn btn-red" onClick={printCR}><i className="ti ti-printer" />Imprimer / PDF</button>
+            </div>
+          </div>
+          <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", fontSize: 13.5, color: TEXT, lineHeight: 1.6, background: "#F7F8FA", borderRadius: 12, padding: "16px 18px", margin: 0 }}>{cr}</pre>
+        </div>
+      )}
+    </div>
+  );
+}
 function BottomNav({ view, setView }) {
   const tabs = [["dash", "Accueil", "ti-home"], ["taches", "Tâches", "ti-checklist"], ["ca", "Réunions", "ti-calendar"], ["annuaire", "Annuaire", "ti-users"]];
   return (
@@ -1281,6 +1457,7 @@ export default function App() {
   const [data, setData] = useState({ poles: [], users: [], tasks: [], meetings: [], sujets: [], commentaires: [] });
   const [modal, setModal] = useState(null);
   const [taskOpen, setTaskOpen] = useState(null);
+  const [liveOpen, setLiveOpen] = useState(null);
 
   const loadData = useCallback(async () => {
     const [poles, users, tasks, meetings, sujets, commentaires] = await Promise.all([
@@ -1328,22 +1505,23 @@ export default function App() {
   return (
     <div style={{ minHeight: "100vh", backgroundColor: "#F4F5F8", backgroundImage: "radial-gradient(720px circle at 100% -6%, rgba(214,40,40,.06), transparent 58%), radial-gradient(620px circle at -6% 112%, rgba(245,197,24,.07), transparent 58%)", backgroundAttachment: "fixed", color: TEXT, fontFamily: "'Manrope',system-ui,sans-serif" }}>
       <style>{CSS}</style>
-      <Header me={me} view={view} setView={(v) => { setTaskOpen(null); setView(v); }} isAdmin={isAdmin} onLogout={logout} unread={unread} onBell={() => setModal({ type: "notifs" })} onProfile={() => setModal({ type: "profile" })} />
+      <Header me={me} view={view} setView={(v) => { setTaskOpen(null); setLiveOpen(null); setView(v); }} isAdmin={isAdmin} onLogout={logout} unread={unread} onBell={() => setModal({ type: "notifs" })} onProfile={() => setModal({ type: "profile" })} />
       <div className="wrap">
         {taskOpen && <TaskDetailPage taskId={taskOpen} me={me} data={data} isAdmin={isAdmin} onClose={() => setTaskOpen(null)} reload={reload} />}
-        {!taskOpen && view === "dash" && <Dashboard me={me} data={data} setView={setView} openNewTask={() => setModal({ type: "task", pole: (f(me, "Pôle") || [])[0] || "" })} openNewSujet={(opts) => setModal({ type: "sujet", ...(opts || {}) })} openTask={(id) => setTaskOpen(id)} reload={reload} openMeeting={(id) => setModal({ type: "meetingDetail", id })} />}
-        {!taskOpen && view === "taches" && <TasksView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewTask={(pole) => setModal({ type: "task", pole })} openTask={(id) => setTaskOpen(id)} />}
-        {!taskOpen && view === "ca" && <CAView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewSujet={(opts) => setModal({ type: "sujet", ...(opts || {}) })} openNewMeeting={() => setModal({ type: "meeting" })} openMeeting={(id) => setModal({ type: "meetingDetail", id })} />}
-        {!taskOpen && view === "annuaire" && <Annuaire data={data} />}
-        {!taskOpen && view === "admin" && isAdmin && <AdminUsers me={me} data={data} reload={reload} />}
+        {!taskOpen && liveOpen && <MeetingLive meetingId={liveOpen} me={me} data={data} isAdmin={isAdmin} onClose={() => setLiveOpen(null)} reload={reload} />}
+        {!taskOpen && !liveOpen && view === "dash" && <Dashboard me={me} data={data} setView={setView} openNewTask={() => setModal({ type: "task", pole: (f(me, "Pôle") || [])[0] || "" })} openNewSujet={(opts) => setModal({ type: "sujet", ...(opts || {}) })} openTask={(id) => setTaskOpen(id)} reload={reload} openMeeting={(id) => setModal({ type: "meetingDetail", id })} />}
+        {!taskOpen && !liveOpen && view === "taches" && <TasksView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewTask={(pole) => setModal({ type: "task", pole })} openTask={(id) => setTaskOpen(id)} />}
+        {!taskOpen && !liveOpen && view === "ca" && <CAView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewSujet={(opts) => setModal({ type: "sujet", ...(opts || {}) })} openNewMeeting={() => setModal({ type: "meeting" })} openMeeting={(id) => setModal({ type: "meetingDetail", id })} openLive={(id) => setLiveOpen(id)} />}
+        {!taskOpen && !liveOpen && view === "annuaire" && <Annuaire data={data} />}
+        {!taskOpen && !liveOpen && view === "admin" && isAdmin && <AdminUsers me={me} data={data} reload={reload} />}
       </div>
       {modal && modal.type === "task" && <NewTask me={me} data={data} isAdmin={isAdmin} initialPole={modal.pole} onClose={() => setModal(null)} reload={reload} />}
       {modal && modal.type === "sujet" && <NewSujet me={me} data={data} meetingId={modal.meetingId} initialPole={modal.pole} onClose={() => setModal(null)} reload={reload} />}
       {modal && modal.type === "notifs" && <NotifsModal me={me} data={data} setView={setView} onClose={() => setModal(null)} reload={reload} openTask={(id) => { setModal(null); setTaskOpen(id); }} />}
       {modal && modal.type === "meeting" && <NewMeeting onClose={() => setModal(null)} reload={reload} data={data} />}
-      {modal && modal.type === "meetingDetail" && <MeetingDetail meetingId={modal.id} me={me} data={data} isAdmin={isAdmin} onClose={() => setModal(null)} reload={reload} />}
+      {modal && modal.type === "meetingDetail" && <MeetingDetail meetingId={modal.id} me={me} data={data} isAdmin={isAdmin} onClose={() => setModal(null)} reload={reload} onStart={() => { setModal(null); setLiveOpen(modal.id); }} />}
       {modal && modal.type === "profile" && <MonCompte me={me} data={data} onClose={() => setModal(null)} reload={reload} onLogout={logout} onUsers={() => { setModal(null); setView("admin"); }} />}
-      <BottomNav view={view} setView={(v) => { setTaskOpen(null); setView(v); }} />
+      <BottomNav view={view} setView={(v) => { setTaskOpen(null); setLiveOpen(null); setView(v); }} />
     </div>
   );
 }
