@@ -844,60 +844,99 @@ function NewSujet({ me, data, onClose, reload, meetingId, initialPole }) {
   );
 }
 
+function AnnuaireCard({ u, pole, poleId, isAdmin, poles, reload }) {
+  const [edit, setEdit] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const color = POLE_COLORS[poleId] || MUT;
+  const isResp = f(u, "Fonction") === "Responsable";
+  const bureau = f(u, "Bureau");
+  const updU = async (fields) => { setBusy(true); try { await db({ action: "update", table: "Utilisateurs", recordId: u.id, fields }); await reload(); } catch (err) { alert("Erreur : " + err.message); } setBusy(false); };
+  return (
+    <div className="card lift" style={{ padding: 0, overflow: "hidden", position: "relative", borderTop: "3px solid " + color }}>
+      <i className={"ti " + (POLE_ICONS[poleId] || "ti-folder")} style={{ position: "absolute", right: -8, bottom: -12, fontSize: 96, color: color, opacity: 0.06, pointerEvents: "none" }} aria-hidden="true" />
+      <div style={{ padding: "18px 20px", display: "flex", gap: 15, position: "relative" }}>
+        <div style={{ position: "relative", flex: "0 0 auto" }}>
+          <Avatar u={u} size={62} />
+          {isResp && <span title="Responsable du pôle" style={{ position: "absolute", bottom: -3, right: -3, width: 24, height: 24, borderRadius: "50%", background: color, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", border: "2.5px solid #fff", boxShadow: "0 1px 4px rgba(0,0,0,.2)" }}><i className="ti ti-star-filled" style={{ fontSize: 12 }} aria-hidden="true" /></span>}
+        </div>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+            <div style={{ fontSize: 17, fontWeight: 800, color: TEXT, letterSpacing: "-.01em", lineHeight: 1.2, marginRight: "auto" }}>{fullName(u)}</div>
+            {isAdmin && <button onClick={() => setEdit((v) => !v)} title="Modifier le poste / la fonction" style={{ flex: "0 0 auto", width: 30, height: 30, borderRadius: 9, border: "1px solid " + BORDER, background: edit ? color : "#fff", color: edit ? "#fff" : MUT, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><i className={"ti " + (edit ? "ti-x" : "ti-pencil")} style={{ fontSize: 15 }} aria-hidden="true" /></button>}
+          </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", margin: "7px 0 11px" }}>
+            <span className="tag" style={{ background: color, display: "inline-flex", alignItems: "center", gap: 5 }}><i className={"ti " + (POLE_ICONS[poleId] || "ti-folder")} style={{ fontSize: 12 }} aria-hidden="true" />{pole ? f(pole, "Pôles") : "Sans pôle"}</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: isResp ? color : MUT }}>{isResp ? "Responsable" : "Membre"}</span>
+            {bureau && <span className="chip" style={{ background: "#16171B", color: YELLOW, fontSize: 10.5 }}><i className="ti ti-award" style={{ fontSize: 11 }} aria-hidden="true" />{bureau}</span>}
+            {f(u, "Rôle") === "Admin" && <span className="chip" style={{ background: "#EDE7F6", color: "#5E35B1", fontSize: 10.5 }}>admin</span>}
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {f(u, "Email") && <a href={"mailto:" + f(u, "Email")} style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "#1B5E9B", textDecoration: "none", wordBreak: "break-word" }}><i className="ti ti-mail" style={{ fontSize: 15, color: MUT, flex: "0 0 auto" }} aria-hidden="true" />{f(u, "Email")}</a>}
+            {f(u, "Téléphone") && <a href={"tel:" + String(f(u, "Téléphone")).replace(/\s/g, "")} style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 12.5, color: TEXT, textDecoration: "none" }}><i className="ti ti-phone" style={{ fontSize: 15, color: MUT, flex: "0 0 auto" }} aria-hidden="true" />{f(u, "Téléphone")}</a>}
+          </div>
+        </div>
+      </div>
+      {isAdmin && edit && (
+        <div style={{ borderTop: "1px solid " + BORDER, background: "#FAFBFC", padding: "13px 20px", position: "relative" }}>
+          <div style={{ fontSize: 11, fontWeight: 800, color: MUT, letterSpacing: ".05em", textTransform: "uppercase", marginBottom: 9 }}>Modifier</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 9 }}>
+            <div>
+              <label className="lbl" style={{ fontSize: 11 }}>Pôle</label>
+              <select className="sel" style={{ padding: "7px 9px", fontSize: 12.5 }} disabled={busy} value={(f(u, "Pôle") || [])[0] || ""} onChange={(e) => updU({ "Pôle": e.target.value ? [e.target.value] : [] })}>
+                <option value="">— Aucun —</option>
+                {poles.map((p) => <option key={p.id} value={p.id}>{f(p, "Pôles")}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="lbl" style={{ fontSize: 11 }}>Fonction</label>
+              <select className="sel" style={{ padding: "7px 9px", fontSize: 12.5 }} disabled={busy} value={f(u, "Fonction") || ""} onChange={(e) => updU({ "Fonction": e.target.value || null })}>
+                <option value="">— Aucune —</option>
+                <option value="Responsable">Responsable</option>
+                <option value="Membre">Membre</option>
+              </select>
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <label className="lbl" style={{ fontSize: 11 }}>Rôle au bureau</label>
+              <select className="sel" style={{ padding: "7px 9px", fontSize: 12.5 }} disabled={busy} value={bureau || ""} onChange={(e) => updU({ "Bureau": e.target.value || null })}>
+                <option value="">— Aucun —</option>
+                <option value="Président">Président</option>
+                <option value="Vice-président">Vice-président</option>
+                <option value="Secrétaire">Secrétaire</option>
+                <option value="Trésorier">Trésorier</option>
+                <option value="Membre du CA">Membre du CA</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 function Annuaire({ data, me, isAdmin, reload }) {
   const { users, poles } = data;
   const pById = Object.fromEntries(poles.map((p) => [p.id, p]));
   const byPole = {};
   users.filter((u) => f(u, "Profil complété")).forEach((u) => { const pid = (f(u, "Pôle") || [])[0] || "_"; (byPole[pid] = byPole[pid] || []).push(u); });
   const order = [...poles.map((p) => p.id), "_"];
+  const total = users.filter((u) => f(u, "Profil complété")).length;
   return (
     <div className="fade">
-      <div style={{ fontSize: 20, fontWeight: 700, color: TEXT, marginBottom: 14 }}>Annuaire du CA</div>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 18, flexWrap: "wrap" }}>
+        <div className="display" style={{ fontSize: 22, color: TEXT }}>Annuaire du CA</div>
+        <span style={{ fontSize: 13, color: MUT }}>{total} membre{total > 1 ? "s" : ""}</span>
+      </div>
       {order.filter((pid) => byPole[pid]).map((pid) => {
-        const p = pById[pid]; const id = p ? f(p, "Identifiant") : null;
-        return <div key={pid} style={{ marginBottom: 18 }}>
-          <div className="cond" style={{ fontSize: 14, fontWeight: 600, marginBottom: 9, display: "flex", alignItems: "center", gap: 9 }}>
-            <span style={{ width: 26, height: 26, borderRadius: 8, background: POLE_COLORS[id] || MUT, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}><i className={"ti " + (POLE_ICONS[id] || "ti-folder")} style={{ fontSize: 15 }} aria-hidden="true" /></span>
-            {p ? f(p, "Pôles") : "Sans pôle"}
+        const p = pById[pid]; const id = p ? f(p, "Identifiant") : null; const color = POLE_COLORS[id] || MUT;
+        const list = byPole[pid].sort((a, b) => (f(a, "Fonction") === "Responsable" ? -1 : 1));
+        return <div key={pid} style={{ marginBottom: 26 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 11, marginBottom: 13 }}>
+            <span style={{ width: 30, height: 30, borderRadius: 9, background: color, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}><i className={"ti " + (POLE_ICONS[id] || "ti-folder")} style={{ fontSize: 17 }} aria-hidden="true" /></span>
+            <span style={{ fontSize: 16, fontWeight: 800, color: TEXT }}>{p ? f(p, "Pôles") : "Sans pôle"}</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: "#fff", background: color, borderRadius: 20, padding: "2px 9px" }}>{list.length}</span>
+            <div style={{ flex: 1, height: 1, background: BORDER }} />
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(250px,1fr))", gap: 10 }}>
-            {byPole[pid].sort((a, b) => (f(a, "Fonction") === "Responsable" ? -1 : 1)).map((u) => (
-              <div key={u.id} className="card" style={{ padding: "13px 15px", display: "flex", alignItems: "center", gap: 12, position: "relative", overflow: "hidden" }}>
-                <i className={"ti " + (POLE_ICONS[id] || "ti-folder")} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", fontSize: 54, color: POLE_COLORS[id] || MUT, opacity: 0.10, pointerEvents: "none" }} aria-hidden="true" />
-                <Avatar u={u} size={46} />
-                <div style={{ minWidth: 0, flex: 1, position: "relative" }}>
-                  <div style={{ fontSize: 14.5, fontWeight: 700, color: TEXT }}>{fullName(u)}{f(u, "Bureau") && <span className="chip" style={{ background: "#16171B", color: YELLOW, marginLeft: 6, fontSize: 10 }}>{f(u, "Bureau")}</span>}</div>
-                  <div style={{ fontSize: 12, color: f(u, "Fonction") === "Responsable" ? RED : MUT, fontWeight: f(u, "Fonction") === "Responsable" ? 600 : 400 }}>{f(u, "Fonction") || "Membre"}{f(u, "Rôle") === "Admin" ? " · admin" : ""}{p ? " · " + f(p, "Pôles") : ""}</div>
-                  {f(u, "Email") && <div style={{ fontSize: 11.5, color: "#1B5E9B", marginTop: 2, wordBreak: "break-word" }}>{f(u, "Email")}</div>}
-                  {f(u, "Téléphone") && <div style={{ fontSize: 11.5, color: MUT }}>{f(u, "Téléphone")}</div>}
-                  {isAdmin && (() => {
-                    const updU = async (fields) => { try { await db({ action: "update", table: "Utilisateurs", recordId: u.id, fields }); await reload(); } catch (err) { alert("Erreur : " + err.message); } };
-                    const selSty = { width: "100%", padding: "5px 8px", fontSize: 11.5 };
-                    return (
-                      <div style={{ marginTop: 8, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }} onClick={(e) => e.stopPropagation()}>
-                        <select className="sel" style={selSty} value={(f(u, "Pôle") || [])[0] || ""} onChange={(e) => updU({ "Pôle": e.target.value ? [e.target.value] : [] })}>
-                          <option value="">Pôle : —</option>
-                          {poles.map((p) => <option key={p.id} value={p.id}>{f(p, "Pôles")}</option>)}
-                        </select>
-                        <select className="sel" style={selSty} value={f(u, "Fonction") || ""} onChange={(e) => updU({ "Fonction": e.target.value || null })}>
-                          <option value="">Fonction : —</option>
-                          <option value="Responsable">Responsable</option>
-                          <option value="Membre">Membre</option>
-                        </select>
-                        <select className="sel" style={{ ...selSty, gridColumn: "1 / -1" }} value={f(u, "Bureau") || ""} onChange={(e) => updU({ "Bureau": e.target.value || null })}>
-                          <option value="">Bureau : —</option>
-                          <option value="Président">Président</option>
-                          <option value="Vice-président">Vice-président</option>
-                          <option value="Secrétaire">Secrétaire</option>
-                          <option value="Trésorier">Trésorier</option>
-                          <option value="Membre du CA">Membre du CA</option>
-                        </select>
-                      </div>
-                    );
-                  })()}
-                </div>
-              </div>
-            ))}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(330px,1fr))", gap: 14 }}>
+            {list.map((u) => <AnnuaireCard key={u.id} u={u} pole={p} poleId={id} isAdmin={isAdmin} poles={poles} reload={reload} />)}
           </div>
         </div>;
       })}
