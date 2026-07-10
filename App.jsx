@@ -1367,26 +1367,52 @@ function MeetingLive({ meetingId, me, data, isAdmin, onClose, reload }) {
     var rows = "";
     linked.forEach((s, i) => {
       const pole = pById[(f(s, "Pôle") || [])[0]];
+      const pc = pole ? (POLE_COLORS[f(pole, "Identifiant")] || "#16171B") : "#16171B";
       const n = escapeHtml(f(s, "Décision / notes") || "").replace(/\n/g, "<br>");
-      rows += '<div style="margin:14px 0;padding:12px 14px;border-left:4px solid #D62828;background:#fafafa;border-radius:8px">'
-        + '<div style="font-weight:700;color:#16171B;font-size:15px">' + (i + 1) + '. ' + (pole ? '<span style="color:#D62828">[' + escapeHtml(f(pole, "Pôles")) + '] </span>' : '') + escapeHtml(f(s, "Titre")) + '</div>'
-        + (n ? '<div style="margin-top:6px;color:#333;line-height:1.55">' + n + '</div>' : '<div style="margin-top:6px;color:#999;font-style:italic">Aucune note.</div>')
+      rows += '<div class="subj" style="border-left-color:' + pc + '">'
+        + '<div class="t">' + (i + 1) + '. ' + (pole ? '<span class="tag" style="background:' + pc + '">' + escapeHtml(f(pole, "Pôles")) + '</span>' : '') + escapeHtml(f(s, "Titre")) + '</div>'
+        + (n ? '<div class="n">' + n + '</div>' : '<div class="no">Aucune note consignée.</div>')
         + '</div>';
     });
-    const html = '<html><head><meta charset="utf-8"><title>Compte-rendu CA</title></head>'
-      + '<body style="font-family:Arial,Helvetica,sans-serif;max-width:720px;margin:24px auto;color:#16171B;padding:0 16px">'
-      + '<div style="border-bottom:3px solid #D62828;padding-bottom:12px;margin-bottom:16px">'
-      + '<div style="font-size:22px;font-weight:800">Compte-rendu — ' + escapeHtml(f(m, "Titre") || "Réunion du CA") + '</div>'
-      + '<div style="color:#F5C518;background:#16171B;display:inline-block;padding:3px 9px;border-radius:6px;font-size:12px;font-weight:700;margin-top:6px">Vitrolles Handball Jeunes · Tous Hand\'semble</div>'
-      + '<div style="color:#555;margin-top:8px">Date : <b>' + escapeHtml(fmtDate(f(m, "Date"))) + (f(m, "Heure") ? ' à ' + escapeHtml(f(m, "Heure")) : '') + '</b>' + (f(m, "Lieu") ? ' · ' + escapeHtml(f(m, "Lieu")) : '') + '</div>'
-      + '</div>'
-      + '<div style="margin-bottom:16px"><b>Présents (' + pres.length + ')</b> : ' + (pres.length ? escapeHtml(pres.join(", ")) : "—") + '</div>'
-      + '<h3 style="border-bottom:1px solid #eee;padding-bottom:6px">Ordre du jour</h3>'
-      + rows
-      + '<div style="margin-top:24px;color:#999;font-size:11px;border-top:1px solid #eee;padding-top:8px">Compte-rendu généré le ' + escapeHtml(fmtDate(new Date().toISOString())) + ' via VHB Pilotage.</div>'
-      + '</body></html>';
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Compte-rendu — CA Vitrolles Handball</title>
+<style>
+@page{size:A4;margin:16mm 15mm;}
+*{box-sizing:border-box;}
+body{font-family:'Helvetica Neue',Arial,sans-serif;color:#1a1c22;margin:0;font-size:13px;line-height:1.5;}
+.head{display:flex;align-items:center;gap:16px;border-bottom:3px solid #D62828;padding-bottom:14px;}
+.head img{width:66px;height:66px;object-fit:contain;}
+.club{font-size:20px;font-weight:800;letter-spacing:-.01em;line-height:1.15;}
+.club small{display:block;font-weight:700;color:#D62828;font-size:11.5px;letter-spacing:.03em;margin-top:3px;}
+.doctitle{text-align:center;margin:24px 0 3px;font-size:16.5px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;}
+.docsub{text-align:center;color:#666;font-size:13px;margin-bottom:18px;}
+.meta{display:flex;gap:22px;flex-wrap:wrap;background:#f6f7f9;border:1px solid #e6e8ec;border-radius:8px;padding:11px 15px;margin-bottom:18px;font-size:12.5px;}
+.meta b{color:#111;}
+.sec{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#16171B;border-bottom:1.5px solid #16171B;padding-bottom:4px;margin:22px 0 10px;}
+.present{font-size:12.5px;color:#222;}
+.subj{margin:0 0 11px;padding:11px 13px;border:1px solid #eceef1;border-left:4px solid #16171B;border-radius:8px;page-break-inside:avoid;}
+.subj .t{font-weight:700;font-size:13.5px;color:#16171B;}
+.subj .tag{display:inline-block;color:#fff;font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:5px;margin-right:6px;vertical-align:middle;letter-spacing:.02em;}
+.subj .n{margin-top:6px;color:#333;white-space:pre-wrap;}
+.subj .no{margin-top:6px;color:#9aa0a6;font-style:italic;}
+.sign{margin-top:38px;display:flex;justify-content:space-between;gap:40px;page-break-inside:avoid;}
+.sign>div{flex:1;}
+.sign .lbl{font-weight:700;font-size:12.5px;margin-bottom:42px;}
+.sign .line{border-top:1px solid #999;padding-top:4px;font-size:10.5px;color:#777;}
+.foot{margin-top:24px;text-align:center;color:#9aa0a6;font-size:10px;border-top:1px solid #eee;padding-top:8px;}
+</style></head><body>
+<div class="head"><img src="${LOGO}" alt="VHB"><div class="club">Vitrolles Handball Jeunes<small>Conseil d'Administration · Tous Hand'semble</small></div></div>
+<div class="doctitle">Compte-rendu de réunion du Conseil d'Administration</div>
+<div class="docsub">${escapeHtml(f(m, "Titre") || "Réunion du CA")}</div>
+<div class="meta"><div><b>Date :</b> ${escapeHtml(fmtDate(f(m, "Date")))}</div>${f(m, "Heure") ? '<div><b>Heure :</b> ' + escapeHtml(f(m, "Heure")) + '</div>' : ''}${f(m, "Lieu") ? '<div><b>Lieu :</b> ' + escapeHtml(f(m, "Lieu")) + '</div>' : ''}</div>
+<div class="sec">Membres présents (${pres.length})</div>
+<div class="present">${pres.length ? escapeHtml(pres.join(", ")) : "—"}</div>
+<div class="sec">Ordre du jour &amp; décisions</div>
+${rows}
+<div class="sign"><div><div class="lbl">Le Président</div><div class="line">Nom &amp; signature</div></div><div><div class="lbl">Le / La Secrétaire</div><div class="line">Nom &amp; signature</div></div></div>
+<div class="foot">Fait à Vitrolles, le ${escapeHtml(fmtDate(new Date().toISOString()))} — Document généré via VHB Pilotage · Tous Hand'semble.</div>
+</body></html>`;
     const w = window.open("", "_blank");
-    if (w) { w.document.write(html); w.document.close(); w.focus(); setTimeout(() => { w.print(); }, 400); }
+    if (w) { w.document.write(html); w.document.close(); w.focus(); setTimeout(() => { w.print(); }, 450); }
     else { alert("Autorise les fenêtres pop-up pour imprimer le compte-rendu."); }
   };
   return (
