@@ -318,7 +318,17 @@ function Dashboard({ me, data, setView, openNewTask, openNewSujet, openTask, rel
   const tById = Object.fromEntries(tasks.map((t) => [t.id, t]));
   const sById = Object.fromEntries((data.sujets || []).map((x) => [x.id, x]));
   const activite = (data.commentaires || []).slice().sort((a, b) => String(f(b, "Date")).localeCompare(String(f(a, "Date")))).slice(0, 6);
-  const poleStats = poles.map((p) => { const ts = tasks.filter((t) => (f(t, "Pôle") || [])[0] === p.id); const dn = ts.filter((t) => f(t, "Statut") === "Fait").length; return { p: p, total: ts.length, done: dn, pct: ts.length ? Math.round(dn / ts.length * 100) : 0 }; });
+  const toggleODJ = async (x) => {
+    const inCA = nextCA && (f(x, "Réunion") || []).includes(nextCA.id);
+    const flagged = f(x, "À l'ordre du prochain CA");
+    try {
+      if (inCA) await db({ action: "update", table: "Sujets CA", recordId: x.id, fields: { "Réunion": (f(x, "Réunion") || []).filter((id) => id !== nextCA.id), "Statut": "À traiter" } });
+      else if (flagged) await db({ action: "update", table: "Sujets CA", recordId: x.id, fields: { "À l'ordre du prochain CA": false } });
+      else if (nextCA) await db({ action: "update", table: "Sujets CA", recordId: x.id, fields: { "Réunion": Array.from(new Set([...(f(x, "Réunion") || []), nextCA.id])), "Statut": "En cours" } });
+      else await db({ action: "update", table: "Sujets CA", recordId: x.id, fields: { "À l'ordre du prochain CA": true } });
+      await reload();
+    } catch (e) { alert("Erreur : " + e.message); }
+  };
   const poleTag = (t) => { const p = pById[(f(t, "Pôle") || [])[0]]; if (!p) return null; const id = f(p, "Identifiant"); return <span className="tag" style={{ background: POLE_COLORS[id] || BLACK, display: "inline-flex", alignItems: "center", gap: 5 }}><i className={"ti " + (POLE_ICONS[id] || "ti-folder")} style={{ fontSize: 13 }} aria-hidden="true" />{f(p, "Pôles")}</span>; };
   const R = 32, CIRC = 2 * Math.PI * R;
 
@@ -355,17 +365,6 @@ function Dashboard({ me, data, setView, openNewTask, openNewSujet, openTask, rel
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><button className="btn btn-red" onClick={openNewTask}><i className="ti ti-plus" />Nouvelle tâche</button><button className="btn btn-dark" onClick={() => openNewSujet()}><i className="ti ti-clipboard-plus" />Proposer un sujet CA</button></div>
           </div>
-          <div className="card rise" style={{ padding: "18px 20px", marginBottom: 22 }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: TEXT, marginBottom: 14 }}>Progression des pôles</div>
-            {poleStats.map(({ p, total, done, pct }) => { const id = f(p, "Identifiant"); const col = POLE_COLORS[id] || BLACK; return <div key={p.id} style={{ marginBottom: 12 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
-                <span style={{ width: 20, height: 20, borderRadius: 6, background: col, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}><i className={"ti " + (POLE_ICONS[id] || "ti-folder")} style={{ fontSize: 12 }} aria-hidden="true" /></span>
-                <span style={{ fontSize: 13, fontWeight: 600, color: TEXT, flex: 1 }}>{f(p, "Pôles")}</span>
-                <span style={{ fontSize: 12, color: MUT }}>{done}/{total}</span>
-              </div>
-              <div style={{ height: 8, background: "#EEF0F3", borderRadius: 20, overflow: "hidden" }}><div style={{ width: pct + "%", height: "100%", background: col, borderRadius: 20, transition: "width .5s ease" }} /></div>
-            </div>; })}
-          </div>
           <Section title="Mes tâches">
             {mine.length === 0 ? <Empty t="Rien ne t'est assigné — prends une tâche pour donner un coup de main !" /> :
               mine.slice(0, 8).map((t) => <RowTask key={t.id} t={t} uById={uById} poleTag={poleTag} onClick={() => openTask(t.id)} />)}
@@ -389,10 +388,10 @@ function Dashboard({ me, data, setView, openNewTask, openNewSujet, openTask, rel
                     <span style={{ fontSize: 12.5, fontWeight: 700, color: TEXT }}>{f(p, "Pôles")}</span>
                     <span style={{ fontSize: 11.5, color: MUT }}>· {list.length}</span>
                   </div>
-                  {list.map((x) => <div key={x.id} onClick={() => openSujet && openSujet(x.id)} className="card lift" style={{ padding: "9px 13px", marginBottom: 6, display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-                    <span style={{ fontSize: 13.5, color: TEXT, flex: 1 }}>{f(x, "Titre")}</span>
-                    {f(x, "Thème") && <span className="chip" style={{ background: "#EEF0F3", color: "#444" }}>{f(x, "Thème")}</span>}
-                  </div>)}
+                  {list.map((x) => { const inCA = nextCA && (f(x, "Réunion") || []).includes(nextCA.id); const flagged = f(x, "À l'ordre du prochain CA"); const on = inCA || flagged; return <div key={x.id} onClick={() => openSujet && openSujet(x.id)} className="card lift" style={{ padding: "9px 13px", marginBottom: 6, display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                    <span style={{ fontSize: 13.5, color: TEXT, flex: 1, minWidth: 0 }}>{f(x, "Titre")}</span>
+                    <button onClick={(e) => { e.stopPropagation(); toggleODJ(x); }} className="chip" style={{ cursor: "pointer", border: "none", fontFamily: "inherit", background: on ? "#E6F0FB" : "#EEF0F3", color: on ? "#1B5E9B" : "#6E747D", flex: "0 0 auto" }} title={on ? "Retirer du CA" : "Ajouter à l'ordre du jour du CA"}><i className={"ti " + (on ? "ti-calendar-check" : "ti-calendar-plus")} aria-hidden="true" />{inCA ? "À l'ordre du jour" : flagged ? "En file" : "Ajouter au CA"}</button>
+                  </div>; })}
                 </div>;
               })}
             </Section>
