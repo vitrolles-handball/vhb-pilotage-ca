@@ -31,6 +31,10 @@ async function sendMail(to, subject, html) {
   });
   if (!r.ok) throw new Error("Resend " + r.status + " : " + (await r.text()));
 }
+async function patch(table, id, fields) {
+  const r = await fetch("https://api.airtable.com/v0/" + BASE + "/" + table + "/" + id, { method: "PATCH", headers: { Authorization: "Bearer " + TOKEN, "Content-Type": "application/json" }, body: JSON.stringify({ fields, typecast: true }) });
+  if (!r.ok) throw new Error("Airtable PATCH " + r.status);
+}
 function frDate(s) { if (!s) return ""; const d = String(s).slice(0, 10).split("-"); return d.length === 3 ? d[2] + "/" + d[1] + "/" + d[0] : String(s); }
 function wrap(title, bodyHtml) {
   return '<div style="font-family:Arial,Helvetica,sans-serif;color:#333;max-width:560px;margin:auto">'
@@ -75,7 +79,22 @@ export default async function handler(req, res) {
       }
     }
 
-    res.status(200).json({ ok: true, signatures_relancees: sign, presences_relancees: rsvp });
+    // 3) Rappel 48h avant : inviter à remplir l'ordre du jour
+    let odj = 0;
+    const now = Date.now();
+    for (const m of reunions) {
+      if (m.fields["Statut"] === "Passée" || m.fields["Relance ODJ envoyée"] || !m.fields["Date"]) continue;
+      const days = (new Date(m.fields["Date"] + "T00:00:00").getTime() - now) / 86400000;
+      if (days > 2 || days < -1) continue;
+      const titre = m.fields["Titre"] || "Réunion du CA";
+      for (const u of actifs) {
+        const html = wrap("Prépare l'ordre du jour du CA", '<p>Bonjour ' + (u.fields["Prénom"] || "") + ',</p><p>Le CA <b>' + titre + '</b>' + (m.fields["Date"] ? ' du <b>' + frDate(m.fields["Date"]) + '</b>' : '') + ' approche (dans moins de 48h). Pense à <b>mettre tes tâches et tes sujets à l\'ordre du jour</b>.</p><p style="margin-top:14px">' + btn(APP, "Ouvrir VHB Pilotage", "#D62828") + '</p>');
+        try { await sendMail(u.fields["Email"], "Prépare l'ordre du jour — " + titre, html); odj++; } catch (e) {}
+      }
+      try { await patch(T_REUNIONS, m.id, { "Relance ODJ envoyée": true }); } catch (e) {}
+    }
+
+    res.status(200).json({ ok: true, signatures_relancees: sign, presences_relancees: rsvp, odj_relances: odj });
   } catch (e) {
     res.status(500).json({ error: String((e && e.message) || e) });
   }
