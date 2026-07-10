@@ -62,11 +62,12 @@ html{overflow-x:clip;}body{margin:0;font-family:'Manrope',system-ui,sans-serif;o
 @keyframes pulsevhb{0%,100%{transform:scale(1);opacity:.82}50%{transform:scale(1.06);opacity:1}}
 @keyframes vhbfall{to{transform:translateY(105vh) rotate(720deg);opacity:.85}}
 .pulse{animation:pulsevhb 1.6s ease-in-out infinite;}
-@keyframes vhbspin{to{transform:rotate(360deg);}}
-.vhb-busy-ov{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(22,23,27,.22);backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);animation:vfade .12s ease both;}
-.vhb-busy-card{background:#fff;border-radius:18px;padding:20px 24px;box-shadow:0 12px 44px rgba(0,0,0,.24);display:flex;flex-direction:column;align-items:center;gap:9px;}
-.vhb-busy-card img{width:52px;height:52px;object-fit:contain;animation:vhbspin 1s linear infinite;}
-.vhb-busy-card span{font-size:12px;font-weight:700;color:#6E747D;letter-spacing:.03em;}
+.vhb-bar{position:fixed;top:0;left:0;right:0;height:3px;z-index:99999;background:rgba(214,40,40,.10);overflow:hidden;animation:vfade .1s ease both;}
+.vhb-bar::before{content:"";position:absolute;top:0;height:100%;width:38%;border-radius:0 3px 3px 0;background:linear-gradient(90deg,#D62828,#F5C518);box-shadow:0 0 8px rgba(214,40,40,.5);animation:vhbslide 1.05s cubic-bezier(.4,0,.2,1) infinite;}
+@keyframes vhbslide{0%{left:-40%;}60%{left:75%;}100%{left:110%;}}
+.vhb-dot{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;color:#6E747D;}
+.vhb-dot i{width:8px;height:8px;border-radius:50%;background:#D62828;animation:vhbpulsedot 1s ease-in-out infinite;}
+@keyframes vhbpulsedot{0%,100%{opacity:.35;transform:scale(.85);}50%{opacity:1;transform:scale(1.1);}}
 @media(max-width:380px){.hide-xs{display:none;}}
 @media(max-width:760px){.inp,.sel,.ta{font-size:16px;}.appheader{padding:calc(8px + env(safe-area-inset-top)) 12px 10px;}.navb{padding:7px 12px;font-size:12.5px;}.caprep{padding:14px 15px !important;}.caprep .btn{font-size:12.5px;padding:9px 13px;}.appnav{display:none;}.bottomnav{display:flex;}}
 @media (max-width:760px){
@@ -101,12 +102,12 @@ function BusyOverlay() {
   }, []);
   if (n <= 0) return null;
   return (
-    <div className="vhb-busy-ov">
-      <div className="vhb-busy-card">
-        <img src="/logo.png" alt="VHB" />
-        <span>Un instant…</span>
+    <>
+      <div className="vhb-bar" />
+      <div style={{ position: "fixed", bottom: "calc(14px + env(safe-area-inset-bottom))", left: "50%", transform: "translateX(-50%)", zIndex: 99999, background: "#fff", border: "1px solid #EEF0F3", borderRadius: 30, padding: "7px 14px", boxShadow: "0 4px 16px rgba(20,22,30,.14)", animation: "vrise .2s ease both" }}>
+        <span className="vhb-dot"><i />Enregistrement…</span>
       </div>
-    </div>
+    </>
   );
 }
 const esc = (s) => String(s || "").replace(/'/g, "\\'");
@@ -489,11 +490,13 @@ function TasksView({ me, data, isAdmin, reload, openNewTask, openTask }) {
   const [sortK, setSortK] = useState("urg");
   const subTab = (id, label) => <button className="navb" style={{ color: mode === id ? "#16171B" : "#9aa0a6", background: mode === id ? "#fff" : "none" }} onClick={() => setMode(id)}>{label}</button>;
 
-  const mesTaches = tasks.filter((t) => { const pid = (f(t, "Pôle") || [])[0]; return (f(t, "Assignés") || []).includes(me.id) || (f(t, "Créé par") || []).includes(me.id) || (myPole && pid === myPole); }).sort((a, b) => ((dueInfo(f(b, "Échéance")) || {}).urg || 0) - ((dueInfo(f(a, "Échéance")) || {}).urg || 0));
+  const isMine = (t) => { const pid = (f(t, "Pôle") || [])[0]; return (f(t, "Assignés") || []).includes(me.id) || (f(t, "Créé par") || []).includes(me.id) || (myPole && pid === myPole); };
+  const mesTaches = tasks.filter((t) => f(t, "Statut") !== "Fait" && isMine(t)).sort((a, b) => ((dueInfo(f(b, "Échéance")) || {}).urg || 0) - ((dueInfo(f(a, "Échéance")) || {}).urg || 0));
+  const faites = tasks.filter((t) => f(t, "Statut") === "Fait");
 
   const poleTasks = tasks.filter((t) => (f(t, "Pôle") || [])[0] === sel);
-  const socle = poleTasks.filter((t) => f(t, "Type") === "Socle");
-  const ponct = poleTasks.filter((t) => f(t, "Type") !== "Socle");
+  const socle = poleTasks.filter((t) => f(t, "Type") === "Socle" && f(t, "Statut") !== "Fait");
+  const ponct = poleTasks.filter((t) => f(t, "Type") !== "Socle" && f(t, "Statut") !== "Fait");
   const selPole = pById[sel];
   const selId = selPole ? f(selPole, "Identifiant") : null;
   const responsable = users.find((u) => (f(u, "Pôle") || [])[0] === sel && f(u, "Fonction") === "Responsable");
@@ -524,7 +527,7 @@ function TasksView({ me, data, isAdmin, reload, openNewTask, openTask }) {
     <div className="fade">
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
         <div className="display" style={{ fontSize: 22, color: TEXT, marginRight: "auto" }}>Tâches</div>
-        <nav style={{ display: "flex", gap: 4, background: "#EEF0F3", borderRadius: 30, padding: 4 }}>{subTab("mes", "Mes tâches")}{subTab("poles", "Tâches par pôle")}</nav>
+        <nav style={{ display: "flex", gap: 4, background: "#EEF0F3", borderRadius: 30, padding: 4 }}>{subTab("mes", "Mes tâches")}{subTab("poles", "Tâches par pôle")}{subTab("faites", "Terminées" + (faites.length ? " · " + faites.length : ""))}</nav>
       </div>
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
         <input className="inp" style={{ maxWidth: 340 }} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher une tâche…" />
@@ -597,6 +600,28 @@ function TasksView({ me, data, isAdmin, reload, openNewTask, openTask }) {
                 <div className="cardgrid">{applyQS(ponct).map(TC)}</div>}
             </div>
           )}
+        </div>
+      )}
+
+      {mode === "faites" && (
+        <div>
+          <div style={{ fontSize: 12.5, color: MUT, marginBottom: 14, display: "flex", alignItems: "center", gap: 7 }}><i className="ti ti-checks" style={{ color: OK, fontSize: 16 }} aria-hidden="true" />Les tâches terminées sont conservées ici. Pour en reprendre une, ouvre-la et repasse son statut en « À faire » ou « En cours ».</div>
+          {faites.length === 0 ? <Empty t="Aucune tâche terminée pour l'instant." /> :
+            [...poles.map((p) => p.id), "_"].map((pid) => {
+              const items = applyQS(faites.filter((t) => ((f(t, "Pôle") || [])[0] || "_") === pid));
+              if (!items.length) return null;
+              const p = pById[pid]; const pid2 = p ? f(p, "Identifiant") : null;
+              return (
+                <div key={pid} style={{ marginBottom: 20 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 11 }}>
+                    <span style={{ width: 28, height: 28, borderRadius: 8, background: POLE_COLORS[pid2] || MUT, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}><i className={"ti " + (POLE_ICONS[pid2] || "ti-folder")} style={{ fontSize: 16 }} aria-hidden="true" /></span>
+                    <span style={{ fontSize: 15, fontWeight: 700, color: TEXT }}>{p ? f(p, "Pôles") : "Sans pôle"}</span>
+                    <span style={{ fontSize: 12, color: MUT }}>· {items.length}</span>
+                  </div>
+                  <div className="cardgrid">{items.map(TC)}</div>
+                </div>
+              );
+            })}
         </div>
       )}
     </div>
@@ -908,11 +933,15 @@ function SujetsView({ me, data, isAdmin, reload, openNewSujet, openSujet }) {
   const { sujets, users, poles, meetings } = data;
   const [theme, setTheme] = useState("");
   const [q, setQ] = useState("");
+  const [mode, setMode] = useState("actifs");
   const uById = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users]);
   const pById = useMemo(() => Object.fromEntries(poles.map((p) => [p.id, p])), [poles]);
   const themes = ["Finances", "Sportif", "Événements", "Bénévoles", "Communication", "Administratif", "Partenariats", "Divers"];
-  const actifs = sujets.filter((x) => f(x, "Statut") !== "Traité").filter((x) => !theme || f(x, "Thème") === theme).filter((x) => !q || (String(f(x, "Titre") || "") + " " + String(f(x, "Description") || "")).toLowerCase().includes(q.toLowerCase()));
-  const traites = sujets.filter((x) => f(x, "Statut") === "Traité");
+  const matchQF = (x) => (!theme || f(x, "Thème") === theme) && (!q || (String(f(x, "Titre") || "") + " " + String(f(x, "Description") || "")).toLowerCase().includes(q.toLowerCase()));
+  const actifs = sujets.filter((x) => f(x, "Statut") !== "Traité").filter(matchQF);
+  const traites = sujets.filter((x) => f(x, "Statut") === "Traité").filter(matchQF);
+  const allTraites = sujets.filter((x) => f(x, "Statut") === "Traité");
+  const subTab = (id, label) => <button className="navb" style={{ color: mode === id ? "#16171B" : "#9aa0a6", background: mode === id ? "#fff" : "none" }} onClick={() => setMode(id)}>{label}</button>;
   const putODJ = async (sj) => {
     const nid = nextCAId(meetings);
     try {
@@ -924,7 +953,8 @@ function SujetsView({ me, data, isAdmin, reload, openNewSujet, openSujet }) {
   return (
     <div className="fade">
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
-        <div className="display" style={{ fontSize: 22, color: TEXT, marginRight: "auto" }}>Sujets à aborder</div>
+        <div className="display" style={{ fontSize: 22, color: TEXT, marginRight: "auto" }}>Sujets</div>
+        <nav style={{ display: "flex", gap: 4, background: "#EEF0F3", borderRadius: 30, padding: 4 }}>{subTab("actifs", "À aborder")}{subTab("traites", "Traités" + (allTraites.length ? " · " + allTraites.length : ""))}</nav>
         <button className="btn btn-red" onClick={() => openNewSujet()}><i className="ti ti-plus" />Proposer un sujet</button>
       </div>
       <div style={{ display: "flex", marginBottom: 16, alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -937,7 +967,7 @@ function SujetsView({ me, data, isAdmin, reload, openNewSujet, openSujet }) {
           </select>
         </div>
       </div>
-      {actifs.length === 0 ? <Empty t="Aucun sujet en attente — propose-en un !" /> :
+      {mode === "actifs" && (actifs.length === 0 ? <Empty t="Aucun sujet en attente — propose-en un !" /> :
         [...poles.map((p) => p.id), "_"].map((pid) => {
           const items = actifs.filter((x) => ((f(x, "Pôle") || [])[0] || "_") === pid).sort((a, b) => themes.indexOf(f(a, "Thème")) - themes.indexOf(f(b, "Thème")));
           if (!items.length) return null;
@@ -950,11 +980,24 @@ function SujetsView({ me, data, isAdmin, reload, openNewSujet, openSujet }) {
             </div>
             {items.map((x) => <SujetCard key={x.id} s={x} me={me} uById={uById} pById={pById} reload={reload} onODJ={putODJ} openSujet={openSujet} commentaires={data.commentaires || []} />)}
           </div>;
-        })}
-      {traites.length > 0 && (
-        <div style={{ marginTop: 22 }}>
-          <div className="cond" style={{ fontSize: 12.5, color: MUT, fontWeight: 700, marginBottom: 9 }}>Sujets traités ({traites.length})</div>
-          {traites.map((x) => <SujetCard key={x.id} s={x} me={me} uById={uById} pById={pById} reload={reload} done openSujet={openSujet} commentaires={data.commentaires || []} />)}
+        }))}
+      {mode === "traites" && (
+        <div>
+          <div style={{ fontSize: 12.5, color: MUT, marginBottom: 14, display: "flex", alignItems: "center", gap: 7 }}><i className="ti ti-checks" style={{ color: OK, fontSize: 16 }} aria-hidden="true" />Les sujets traités sont conservés ici. Pour en reprendre un, ouvre-le et repasse son statut en « À traiter » ou « En cours ».</div>
+          {traites.length === 0 ? <Empty t="Aucun sujet traité pour l'instant." /> :
+            [...poles.map((p) => p.id), "_"].map((pid) => {
+              const items = traites.filter((x) => ((f(x, "Pôle") || [])[0] || "_") === pid).sort((a, b) => themes.indexOf(f(a, "Thème")) - themes.indexOf(f(b, "Thème")));
+              if (!items.length) return null;
+              const p = pById[pid]; const pId = p ? f(p, "Identifiant") : null;
+              return <div key={pid} style={{ marginBottom: 20 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 11 }}>
+                  <span style={{ width: 28, height: 28, borderRadius: 8, background: POLE_COLORS[pId] || MUT, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}><i className={"ti " + (POLE_ICONS[pId] || "ti-folder")} style={{ fontSize: 16 }} aria-hidden="true" /></span>
+                  <span style={{ fontSize: 15, fontWeight: 700, color: TEXT }}>{p ? f(p, "Pôles") : "Sans pôle"}</span>
+                  <span style={{ fontSize: 12, color: MUT }}>· {items.length}</span>
+                </div>
+                {items.map((x) => <SujetCard key={x.id} s={x} me={me} uById={uById} pById={pById} reload={reload} done openSujet={openSujet} commentaires={data.commentaires || []} />)}
+              </div>;
+            })}
         </div>
       )}
     </div>
