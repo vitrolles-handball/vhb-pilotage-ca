@@ -60,6 +60,7 @@ html{overflow-x:clip;}body{margin:0;font-family:'Manrope',system-ui,sans-serif;o
 .bottomnav button.on{color:#F5C518;}
 .bottomnav button i{font-size:21px;}
 @keyframes pulsevhb{0%,100%{transform:scale(1);opacity:.82}50%{transform:scale(1.06);opacity:1}}
+@keyframes vhbfall{to{transform:translateY(105vh) rotate(720deg);opacity:.85}}
 .pulse{animation:pulsevhb 1.6s ease-in-out infinite;}
 @media(max-width:380px){.hide-xs{display:none;}}
 @media(max-width:760px){.inp,.sel,.ta{font-size:16px;}.appheader{padding:calc(8px + env(safe-area-inset-top)) 12px 10px;}.navb{padding:7px 12px;font-size:12.5px;}.caprep{padding:14px 15px !important;}.caprep .btn{font-size:12.5px;padding:9px 13px;}.appnav{display:none;}.bottomnav{display:flex;}}
@@ -314,6 +315,9 @@ function Dashboard({ me, data, setView, openNewTask, openNewSujet, openTask, rel
   const caSujets = nextCA ? (data.sujets || []).filter((s) => (f(s, "Réunion") || []).includes(nextCA.id)) : [];
   const myPoleId = (f(me, "Pôle") || [])[0];
   const isResp = f(me, "Fonction") === "Responsable";
+  const tById = Object.fromEntries(tasks.map((t) => [t.id, t]));
+  const sById = Object.fromEntries((data.sujets || []).map((x) => [x.id, x]));
+  const activite = (data.commentaires || []).slice().sort((a, b) => String(f(b, "Date")).localeCompare(String(f(a, "Date")))).slice(0, 6);
   const poleTag = (t) => { const p = pById[(f(t, "Pôle") || [])[0]]; if (!p) return null; const id = f(p, "Identifiant"); return <span className="tag" style={{ background: POLE_COLORS[id] || BLACK, display: "inline-flex", alignItems: "center", gap: 5 }}><i className={"ti " + (POLE_ICONS[id] || "ti-folder")} style={{ fontSize: 13 }} aria-hidden="true" />{f(p, "Pôles")}</span>; };
   const R = 32, CIRC = 2 * Math.PI * R;
 
@@ -381,6 +385,16 @@ function Dashboard({ me, data, setView, openNewTask, openNewSujet, openTask, rel
               })}
             </Section>
           ) : <Section title="Sujets du prochain CA"><Empty t="Aucun sujet en attente — propose-en un depuis l'espace Réunion CA." /></Section>}
+          <Section title="Activité récente">
+            {activite.length === 0 ? <Empty t="Rien de récent pour l'instant." /> :
+              activite.map((c) => { const au = uById[(f(c, "Auteur") || [])[0]]; const tk = tById[(f(c, "Tâche") || [])[0]]; const sj = sById[(f(c, "Sujet") || [])[0]]; const target = tk || sj; return <div key={c.id} onClick={() => { if (tk) openTask(tk.id); else if (sj) openSujet(sj.id); }} className="card lift" style={{ padding: "9px 12px", marginBottom: 6, display: "flex", alignItems: "center", gap: 9, cursor: "pointer" }}>
+                <Avatar u={au} size={26} />
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontSize: 12.5, color: TEXT }}><b>{au ? (f(au, "Prénom") || fullName(au)) : "?"}</b> a commenté{target ? " · " + f(target, "Titre") : ""}</div>
+                  <div style={{ fontSize: 11, color: MUT }}>{f(c, "Date") ? fmtDateTime(f(c, "Date")) : ""}</div>
+                </div>
+              </div>; })}
+          </Section>
         </div>
       </div>
     </div>
@@ -431,6 +445,8 @@ function TasksView({ me, data, isAdmin, reload, openNewTask, openTask }) {
   const [mode, setMode] = useState("mes");
   const [sel, setSel] = useState(myPole || (poles[0] && poles[0].id) || "");
   const [showSocle, setShowSocle] = useState(true);
+  const [q, setQ] = useState("");
+  const [sortK, setSortK] = useState("urg");
   const subTab = (id, label) => <button className="navb" style={{ color: mode === id ? "#16171B" : "#9aa0a6", background: mode === id ? "#fff" : "none" }} onClick={() => setMode(id)}>{label}</button>;
 
   const mesTaches = tasks.filter((t) => { const pid = (f(t, "Pôle") || [])[0]; return (f(t, "Assignés") || []).includes(me.id) || (f(t, "Créé par") || []).includes(me.id) || (myPole && pid === myPole); }).sort((a, b) => ((dueInfo(f(b, "Échéance")) || {}).urg || 0) - ((dueInfo(f(a, "Échéance")) || {}).urg || 0));
@@ -452,6 +468,16 @@ function TasksView({ me, data, isAdmin, reload, openNewTask, openTask }) {
     if (!confirm("Mettre cette tâche à l'ordre du jour du prochain CA ?")) return;
     try { const nid = nextCAId(data.meetings); const sf = { "Titre": f(t, "Titre"), "Description": f(t, "Description") || "", "Proposé par": [me.id] }; const pid = (f(t, "Pôle") || [])[0]; if (pid) sf["Pôle"] = [pid]; if (nid) { sf["Réunion"] = [nid]; sf["Statut"] = "En cours"; } else { sf["Statut"] = "À traiter"; sf["À l'ordre du prochain CA"] = true; } await db({ action: "create", table: "Sujets CA", fields: sf }); await reload(); alert(nid ? "Ajouté à l'ordre du jour du prochain CA." : "Aucun CA programmé — sera ajouté au prochain CA créé."); } catch (e) { alert("Erreur : " + e.message); }
   };
+  const applyQS = (list) => {
+    let r = q ? list.filter((t) => (String(f(t, "Titre") || "") + " " + String(f(t, "Description") || "")).toLowerCase().includes(q.toLowerCase())) : list;
+    r = r.slice().sort((a, b) => {
+      if (sortK === "titre") return String(f(a, "Titre") || "").localeCompare(String(f(b, "Titre") || ""));
+      if (sortK === "echeance") return String(f(a, "Échéance") || "9999-12-31").localeCompare(String(f(b, "Échéance") || "9999-12-31"));
+      if (sortK === "statut") { const o = { "À faire": 0, "En cours": 1, "Fait": 2 }; return (o[f(a, "Statut")] || 0) - (o[f(b, "Statut")] || 0); }
+      return ((dueInfo(f(b, "Échéance")) || {}).urg || 0) - ((dueInfo(f(a, "Échéance")) || {}).urg || 0);
+    });
+    return r;
+  };
   const TC = (t) => <TaskCard key={t.id} t={t} me={me} uById={uById} pById={pById} users={users} isAdmin={isAdmin} reload={reload} commentaires={data.commentaires || []} openTask={openTask} onODJ={putTaskODJ} />;
 
   return (
@@ -460,12 +486,24 @@ function TasksView({ me, data, isAdmin, reload, openNewTask, openTask }) {
         <div className="display" style={{ fontSize: 22, color: TEXT, marginRight: "auto" }}>Tâches</div>
         <nav style={{ display: "flex", gap: 4, background: "#EEF0F3", borderRadius: 30, padding: 4 }}>{subTab("mes", "Mes tâches")}{subTab("poles", "Tâches par pôle")}</nav>
       </div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
+        <input className="inp" style={{ maxWidth: 340 }} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher une tâche…" />
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 12.5, color: MUT }}>Trier</span>
+          <select className="sel" style={{ width: "auto", padding: "8px 12px" }} value={sortK} onChange={(e) => setSortK(e.target.value)}>
+            <option value="urg">Urgence</option>
+            <option value="echeance">Échéance</option>
+            <option value="titre">Titre (A-Z)</option>
+            <option value="statut">Statut</option>
+          </select>
+        </div>
+      </div>
 
       {mode === "mes" && (
         <div>
           <button className="btn btn-red" style={{ marginBottom: 14 }} onClick={() => openNewTask(myPole || "")}><i className="ti ti-plus" />Nouvelle tâche</button>
           {mesTaches.length === 0 ? <Empty t="Aucune tâche pour toi pour l'instant — passe par « Tâches par pôle » pour en prendre une." /> :
-            <div className="cardgrid">{mesTaches.map(TC)}</div>}
+            <div className="cardgrid">{applyQS(mesTaches).map(TC)}</div>}
         </div>
       )}
 
@@ -508,7 +546,7 @@ function TasksView({ me, data, isAdmin, reload, openNewTask, openTask }) {
                 <span style={{ marginLeft: "auto", color: MUT, fontSize: 12 }}>{showSocle ? "masquer" : "afficher"}</span>
               </div>
               {showSocle && (socle.length === 0 ? <Empty t="Aucune tâche socle." /> :
-                <div className="cardgrid">{socle.map(TC)}</div>)}
+                <div className="cardgrid">{applyQS(socle).map(TC)}</div>)}
 
               <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "22px 0 9px" }}>
                 <span className="cond" style={{ fontSize: 13, fontWeight: 600, color: TEXT }}>Tâches ponctuelles</span>
@@ -516,7 +554,7 @@ function TasksView({ me, data, isAdmin, reload, openNewTask, openTask }) {
                 <button className="btn btn-red" style={{ marginLeft: "auto", fontSize: 12.5, padding: "7px 13px" }} onClick={() => openNewTask(sel)}>+ Ajouter</button>
               </div>
               {ponct.length === 0 ? <Empty t="Aucune tâche ponctuelle pour l'instant — ajoutes-en une !" /> :
-                <div className="cardgrid">{ponct.map(TC)}</div>}
+                <div className="cardgrid">{applyQS(ponct).map(TC)}</div>}
             </div>
           )}
         </div>
@@ -555,7 +593,7 @@ function TaskCard({ t, me, uById, pById, users, isAdmin, reload, commentaires, o
         </div>
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <div style={{ display: "inline-flex", background: "#F1F3F5", borderRadius: 30, padding: 3 }}>
-            {["À faire", "En cours", "Fait"].map((v) => { const on = statut === v; const c = seg(v); return <button key={v} disabled={busy} onClick={() => update({ "Statut": v })} style={{ border: "none", background: on ? "#fff" : "transparent", color: on ? c : MUT, fontWeight: on ? 700 : 500, fontSize: 11.5, padding: "5px 10px", borderRadius: 30, cursor: "pointer", boxShadow: on ? "0 1px 2px rgba(20,22,30,.10)" : "none", fontFamily: "inherit" }}>{v}</button>; })}
+            {["À faire", "En cours", "Fait"].map((v) => { const on = statut === v; const c = seg(v); return <button key={v} disabled={busy} onClick={() => { if (v === "Fait" && statut !== "Fait") celebrate(); update({ "Statut": v }); }} style={{ border: "none", background: on ? "#fff" : "transparent", color: on ? c : MUT, fontWeight: on ? 700 : 500, fontSize: 11.5, padding: "5px 10px", borderRadius: 30, cursor: "pointer", boxShadow: on ? "0 1px 2px rgba(20,22,30,.10)" : "none", fontFamily: "inherit" }}>{v}</button>; })}
           </div>
           {isMine ? <button className="btn btn-ghost" style={{ fontSize: 12, padding: "5px 11px" }} disabled={busy} onClick={() => update({ "Assignés": assignes.filter((id) => id !== me.id) })}>Me retirer</button>
             : <button className="btn btn-dark" style={{ fontSize: 12, padding: "5px 11px" }} disabled={busy} onClick={() => update({ "Assignés": Array.from(new Set([...assignes, me.id])) })}>Je prends</button>}
@@ -829,10 +867,11 @@ function chipF(on) { return { cursor: "pointer", border: "1px solid " + (on ? RE
 function SujetsView({ me, data, isAdmin, reload, openNewSujet, openSujet }) {
   const { sujets, users, poles, meetings } = data;
   const [theme, setTheme] = useState("");
+  const [q, setQ] = useState("");
   const uById = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users]);
   const pById = useMemo(() => Object.fromEntries(poles.map((p) => [p.id, p])), [poles]);
   const themes = ["Finances", "Sportif", "Événements", "Bénévoles", "Communication", "Administratif", "Partenariats", "Divers"];
-  const actifs = sujets.filter((x) => f(x, "Statut") !== "Traité").filter((x) => !theme || f(x, "Thème") === theme);
+  const actifs = sujets.filter((x) => f(x, "Statut") !== "Traité").filter((x) => !theme || f(x, "Thème") === theme).filter((x) => !q || (String(f(x, "Titre") || "") + " " + String(f(x, "Description") || "")).toLowerCase().includes(q.toLowerCase()));
   const traites = sujets.filter((x) => f(x, "Statut") === "Traité");
   const putODJ = async (sj) => {
     const nid = nextCAId(meetings);
@@ -848,12 +887,15 @@ function SujetsView({ me, data, isAdmin, reload, openNewSujet, openSujet }) {
         <div className="display" style={{ fontSize: 22, color: TEXT, marginRight: "auto" }}>Sujets à aborder</div>
         <button className="btn btn-red" onClick={() => openNewSujet()}><i className="ti ti-plus" />Proposer un sujet</button>
       </div>
-      <div style={{ display: "flex", marginBottom: 16, alignItems: "center", gap: 8, justifyContent: "flex-end" }}>
-        <span style={{ fontSize: 12.5, color: MUT }}>Filtrer</span>
-        <select className="sel" style={{ width: "auto", padding: "8px 12px" }} value={theme} onChange={(e) => setTheme(e.target.value)}>
-          <option value="">Tous les thèmes</option>
-          {themes.map((t) => <option key={t} value={t}>{t}</option>)}
-        </select>
+      <div style={{ display: "flex", marginBottom: 16, alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <input className="inp" style={{ maxWidth: 340 }} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher un sujet…" />
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 12.5, color: MUT }}>Filtrer</span>
+          <select className="sel" style={{ width: "auto", padding: "8px 12px" }} value={theme} onChange={(e) => setTheme(e.target.value)}>
+            <option value="">Tous les thèmes</option>
+            {themes.map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </div>
       </div>
       {actifs.length === 0 ? <Empty t="Aucun sujet en attente — propose-en un !" /> :
         [...poles.map((p) => p.id), "_"].map((pid) => {
@@ -1277,7 +1319,7 @@ function TaskDetailPage({ taskId, me, data, isAdmin, onClose, reload }) {
           <div className="card" style={{ padding: "22px 24px" }}>
             <div className="lbl" style={{ marginTop: 0 }}>Statut</div>
             <div style={{ display: "inline-flex", background: "#F1F3F5", borderRadius: 30, padding: 3, marginBottom: 4 }}>
-              {["À faire", "En cours", "Fait"].map((v) => { const on = statut === v; const c = segC(v); return <button key={v} disabled={busy} onClick={() => upd({ "Statut": v })} style={{ border: "none", background: on ? "#fff" : "transparent", color: on ? c : MUT, fontWeight: on ? 700 : 500, fontSize: 12.5, padding: "7px 13px", borderRadius: 30, cursor: "pointer", boxShadow: on ? "0 1px 2px rgba(20,22,30,.10)" : "none", fontFamily: "inherit" }}>{v}</button>; })}
+              {["À faire", "En cours", "Fait"].map((v) => { const on = statut === v; const c = segC(v); return <button key={v} disabled={busy} onClick={() => { if (v === "Fait" && statut !== "Fait") celebrate(); upd({ "Statut": v }); }} style={{ border: "none", background: on ? "#fff" : "transparent", color: on ? c : MUT, fontWeight: on ? 700 : 500, fontSize: 12.5, padding: "7px 13px", borderRadius: 30, cursor: "pointer", boxShadow: on ? "0 1px 2px rgba(20,22,30,.10)" : "none", fontFamily: "inherit" }}>{v}</button>; })}
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 14 }}>
               {isMine ? <button className="btn btn-ghost" disabled={busy} onClick={() => upd({ "Assignés": assignes.filter((id) => id !== me.id) })}>Me retirer</button>
@@ -1355,6 +1397,21 @@ function MonCompte({ me, data, onClose, reload, onLogout, onUsers }) {
       </div>
     </Modal>
   );
+}
+function celebrate() {
+  try {
+    const colors = ["#D62828", "#F5C518", "#2563EB", "#059669", "#DB2777", "#7C3AED"];
+    const box = document.createElement("div");
+    box.style.cssText = "position:fixed;inset:0;pointer-events:none;z-index:9999;overflow:hidden";
+    document.body.appendChild(box);
+    for (let i = 0; i < 90; i++) {
+      const p = document.createElement("div");
+      const size = 6 + Math.random() * 8;
+      p.style.cssText = "position:absolute;top:-16px;left:" + (Math.random() * 100) + "%;width:" + size + "px;height:" + (size * 0.5) + "px;background:" + colors[i % colors.length] + ";border-radius:2px;opacity:.95;transform:rotate(" + (Math.random() * 360) + "deg);animation:vhbfall " + (1400 + Math.random() * 1200) + "ms " + (Math.random() * 250) + "ms cubic-bezier(.3,.6,.5,1) forwards";
+      box.appendChild(p);
+    }
+    setTimeout(() => box.remove(), 3000);
+  } catch (e) {}
 }
 function nextCAId(meetings) { const up = (meetings || []).filter((m) => f(m, "Statut") !== "Passée").sort((a, b) => String(f(a, "Date")).localeCompare(String(f(b, "Date")))); return up[0] ? up[0].id : null; }
 function crDocHtml(m, data, presents, logoSrc, bodyText) {
@@ -1634,7 +1691,7 @@ function SignatureView({ meetingId, me, data, onClose, reload }) {
     const fields = {}; fields[slot] = val;
     const otherSlot = slot === "Signature Président" ? "Signature Secrétaire" : "Signature Président";
     if (f(m, otherSlot)) fields["Validation CR"] = "Signé";
-    try { await db({ action: "update", table: "Réunions", recordId: m.id, fields }); await reload(); alert("Merci ! Ta signature est enregistrée."); } catch (e) { alert("Erreur : " + e.message); }
+    try { await db({ action: "update", table: "Réunions", recordId: m.id, fields }); await reload(); if (fields["Validation CR"] === "Signé") celebrate(); alert("Merci ! Ta signature est enregistrée." + (fields["Validation CR"] === "Signé" ? " Le compte-rendu est désormais signé par tous. 🎉" : "")); } catch (e) { alert("Erreur : " + e.message); }
     setBusy(false);
   };
   return (
