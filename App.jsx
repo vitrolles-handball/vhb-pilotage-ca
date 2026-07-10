@@ -114,6 +114,18 @@ const esc = (s) => String(s || "").replace(/'/g, "\\'");
 const f = (rec, name) => (rec && rec.fields ? rec.fields[name] : undefined);
 const initials = (u) => ((f(u, "Prénom") || "")[0] || "") + ((f(u, "Nom") || "")[0] || (f(u, "Email") || "?")[0] || "");
 const fullName = (u) => [f(u, "Prénom"), f(u, "Nom")].filter(Boolean).join(" ") || f(u, "Email") || "?";
+// Arc-en-ciel des couleurs de pôles (le président chapeaute tous les pôles).
+const RAINBOW_V = "linear-gradient(180deg,#DC2626,#EA580C,#059669,#2563EB,#7C3AED,#DB2777)";
+const RAINBOW_H = "linear-gradient(90deg,#DC2626,#EA580C,#059669,#2563EB,#7C3AED,#DB2777)";
+// Identité "Présidence / Bureau" pour un membre sans pôle mais avec un rôle au bureau.
+function bureauIdentity(u) {
+  if ((f(u, "Pôle") || []).length) return null;
+  const b = f(u, "Bureau");
+  if (!b) return null;
+  return b === "Président"
+    ? { label: "Présidence", icon: "ti-crown", solid: "#7C3AED", bar: RAINBOW_V, tagBg: RAINBOW_H }
+    : { label: b, icon: "ti-award", solid: "#7A5C1E", bar: "#7A5C1E", tagBg: "#7A5C1E" };
+}
 function sendMail(payload) {
   return fetch("/api/sendmail", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }).then(async (r) => { const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || ("Erreur " + r.status)); return j; });
 }
@@ -848,13 +860,18 @@ function NewSujet({ me, data, onClose, reload, meetingId, initialPole }) {
 function AnnuaireCard({ u, pole, poleId, isAdmin, poles, reload }) {
   const [edit, setEdit] = useState(false);
   const [busy, setBusy] = useState(false);
-  const color = POLE_COLORS[poleId] || MUT;
+  const identity = pole ? null : bureauIdentity(u);
+  const color = identity ? identity.solid : (POLE_COLORS[poleId] || MUT);
+  const barBg = identity ? identity.bar : color;
+  const tagBg = identity ? identity.tagBg : color;
+  const wmIcon = identity ? identity.icon : (POLE_ICONS[poleId] || "ti-folder");
   const isResp = f(u, "Fonction") === "Responsable";
   const bureau = f(u, "Bureau");
   const updU = async (fields) => { setBusy(true); try { await db({ action: "update", table: "Utilisateurs", recordId: u.id, fields }); await reload(); } catch (err) { alert("Erreur : " + err.message); } setBusy(false); };
   return (
-    <div className="card lift" style={{ padding: 0, overflow: "hidden", position: "relative", borderLeft: "5px solid " + color }}>
-      <i className={"ti " + (POLE_ICONS[poleId] || "ti-folder")} style={{ position: "absolute", right: -8, bottom: -12, fontSize: 96, color: color, opacity: 0.06, pointerEvents: "none" }} aria-hidden="true" />
+    <div className="card lift" style={{ padding: 0, overflow: "hidden", position: "relative" }}>
+      <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 5, background: barBg }} aria-hidden="true" />
+      <i className={"ti " + wmIcon} style={{ position: "absolute", right: -8, bottom: -12, fontSize: 96, color: color, opacity: 0.06, pointerEvents: "none" }} aria-hidden="true" />
       <div style={{ padding: "18px 20px", display: "flex", gap: 15, position: "relative" }}>
         <div style={{ position: "relative", flex: "0 0 auto" }}>
           <Avatar u={u} size={62} />
@@ -866,9 +883,9 @@ function AnnuaireCard({ u, pole, poleId, isAdmin, poles, reload }) {
             {isAdmin && <button onClick={() => setEdit((v) => !v)} title="Modifier le poste / la fonction" style={{ flex: "0 0 auto", width: 30, height: 30, borderRadius: 9, border: "1px solid " + BORDER, background: edit ? color : "#fff", color: edit ? "#fff" : MUT, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><i className={"ti " + (edit ? "ti-x" : "ti-pencil")} style={{ fontSize: 15 }} aria-hidden="true" /></button>}
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", margin: "7px 0 11px" }}>
-            <span className="tag" style={{ background: color, display: "inline-flex", alignItems: "center", gap: 5 }}><i className={"ti " + (POLE_ICONS[poleId] || "ti-folder")} style={{ fontSize: 12 }} aria-hidden="true" />{pole ? f(pole, "Pôles") : "Sans pôle"}</span>
-            <span style={{ fontSize: 12, fontWeight: 700, color: isResp ? color : MUT }}>{isResp ? "Responsable" : "Membre"}</span>
-            {bureau && <span className="chip" style={{ background: "#16171B", color: YELLOW, fontSize: 10.5 }}><i className="ti ti-award" style={{ fontSize: 11 }} aria-hidden="true" />{bureau}</span>}
+            <span className="tag" style={{ background: tagBg, display: "inline-flex", alignItems: "center", gap: 5 }}><i className={"ti " + wmIcon} style={{ fontSize: 12 }} aria-hidden="true" />{identity ? identity.label : (pole ? f(pole, "Pôles") : "Sans pôle")}</span>
+            {!identity && <span style={{ fontSize: 12, fontWeight: 700, color: isResp ? color : MUT }}>{isResp ? "Responsable" : "Membre"}</span>}
+            {bureau && !identity && <span className="chip" style={{ background: "#16171B", color: YELLOW, fontSize: 10.5 }}><i className="ti ti-award" style={{ fontSize: 11 }} aria-hidden="true" />{bureau}</span>}
             {f(u, "Rôle") === "Admin" && <span className="chip" style={{ background: "#EDE7F6", color: "#5E35B1", fontSize: 10.5 }}>admin</span>}
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -917,8 +934,8 @@ function Annuaire({ data, me, isAdmin, reload }) {
   const { users, poles } = data;
   const pById = Object.fromEntries(poles.map((p) => [p.id, p]));
   const byPole = {};
-  users.filter((u) => f(u, "Profil complété")).forEach((u) => { const pid = (f(u, "Pôle") || [])[0] || "_"; (byPole[pid] = byPole[pid] || []).push(u); });
-  const order = [...poles.map((p) => p.id), "_"];
+  users.filter((u) => f(u, "Profil complété")).forEach((u) => { const pid = (f(u, "Pôle") || [])[0] || (f(u, "Bureau") ? "bureau" : "_"); (byPole[pid] = byPole[pid] || []).push(u); });
+  const order = ["bureau", ...poles.map((p) => p.id), "_"];
   const total = users.filter((u) => f(u, "Profil complété")).length;
   return (
     <div className="fade">
@@ -927,13 +944,18 @@ function Annuaire({ data, me, isAdmin, reload }) {
         <span style={{ fontSize: 13, color: MUT }}>{total} membre{total > 1 ? "s" : ""}</span>
       </div>
       {order.filter((pid) => byPole[pid]).map((pid) => {
-        const p = pById[pid]; const id = p ? f(p, "Identifiant") : null; const color = POLE_COLORS[id] || MUT;
+        const isBureau = pid === "bureau";
+        const p = pById[pid]; const id = p ? f(p, "Identifiant") : null;
+        const color = isBureau ? "#7C3AED" : (POLE_COLORS[id] || MUT);
+        const badgeBg = isBureau ? RAINBOW_H : color;
+        const hIcon = isBureau ? "ti-crown" : (POLE_ICONS[id] || "ti-folder");
+        const hLabel = isBureau ? "Présidence & Bureau" : (p ? f(p, "Pôles") : "Sans pôle");
         const list = byPole[pid].sort((a, b) => (f(a, "Fonction") === "Responsable" ? -1 : 1));
         return <div key={pid} style={{ marginBottom: 26 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 11, marginBottom: 13 }}>
-            <span style={{ width: 30, height: 30, borderRadius: 9, background: color, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}><i className={"ti " + (POLE_ICONS[id] || "ti-folder")} style={{ fontSize: 17 }} aria-hidden="true" /></span>
-            <span style={{ fontSize: 16, fontWeight: 800, color: TEXT }}>{p ? f(p, "Pôles") : "Sans pôle"}</span>
-            <span style={{ fontSize: 12, fontWeight: 700, color: "#fff", background: color, borderRadius: 20, padding: "2px 9px" }}>{list.length}</span>
+            <span style={{ width: 30, height: 30, borderRadius: 9, background: badgeBg, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}><i className={"ti " + hIcon} style={{ fontSize: 17 }} aria-hidden="true" /></span>
+            <span style={{ fontSize: 16, fontWeight: 800, color: TEXT }}>{hLabel}</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: "#fff", background: badgeBg, borderRadius: 20, padding: "2px 9px" }}>{list.length}</span>
             <div style={{ flex: 1, height: 1, background: BORDER }} />
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(330px,1fr))", gap: 14 }}>
