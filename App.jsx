@@ -292,7 +292,7 @@ function ProfileForm({ me, poles, onSaved }) {
 }
 
 function Header({ me, view, setView, isAdmin, onLogout, unread, onBell, onProfile, onHelp }) {
-  const tabs = [["dash", "Accueil"], ["taches", "Tâches"], ["sujets", "Sujets"], ["ca", "Réunions"], ["cal", "Agenda"], ["annuaire", "Annuaire"]];
+  const tabs = [["dash", "Accueil"], ["taches", "Tâches"], ["sujets", "Sujets"], ["ca", "Réunions"], ["cal", "Agenda"], ["annuaire", "Annuaire"], ["couts", "Coûts"]];
   return (
     <header className="appheader" style={{ backgroundColor: "#E8590C", backgroundImage: "linear-gradient(rgba(28,10,0,.22), rgba(28,10,0,.36)), url(/accent.jpg)", backgroundSize: "cover", backgroundPosition: "center", position: "sticky", top: 0, zIndex: 30, boxShadow: "0 2px 18px rgba(0,0,0,.22)" }}>
       <div className="appbrand">
@@ -2146,8 +2146,407 @@ function HelpView({ onClose }) {
     </Modal>
   );
 }
+/* ===================== MODULE COÛT DE LA PRATIQUE ===================== */
+const CT_SEC = "Coûts – Sections", CT_BAR = "Coûts – Barèmes", CT_EQ = "Coûts – Équipes", CT_PAR = "Coûts – Paramètres";
+const C_NIV = ["École de hand", "Départemental", "Régional", "National", "Loisir"];
+const C_GEN = ["Garçons", "Filles", "Mixte"];
+const C_GENB = ["Tous", "Garçons", "Filles", "Mixte"];
+const cEur = (n) => (isFinite(n) ? n : 0).toLocaleString("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
+const cEur2 = (n) => (isFinite(n) ? n : 0).toLocaleString("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 2 });
+const cNum = (n) => (isFinite(n) ? n : 0).toLocaleString("fr-FR");
+const cPct = (n, t) => (t ? (n / t * 100).toLocaleString("fr-FR", { maximumFractionDigits: 1 }) + " %" : "0 %");
+const EQF = { nom: "Équipe", genre: "Genre", section: "Section", niveau: "Niveau", nbLic: "Nb licenciés", hEduc: "Heures éducateur / sem", sEduc: "Semaines éducateur / an", hEquip: "Heures équipement / sem", sEquip: "Semaines équipement / an", equipGratuit: "Équipement gratuit", nbMatchs: "Nb matchs extérieurs", deplacement: "Déplacement", subRegion: "Subvention Conseil Régional", subDept: "Subvention Conseil Départemental", subMetro: "Subvention Métropole", subCommune: "Subvention Commune", subAutre: "Autres subventions" };
+const SECF = { comite: "Part Comité", ligue: "Part Ligue", ffhb: "Part FFHB", assurance: "Assurance", cotisation: "Cotisation club" };
+const BARF = { niveau: "Niveau", section: "Section", genre: "Genre", engagement: "Frais engagement", deplacement: "Déplacement / match", arbitrage: "Arbitrage / match", educateur: "Coût horaire éducateur" };
+const PARAM_KEY = { "Coût horaire équipement": "equipHoraire", "Textile + ballon + matériel": "textileMateriel", "Autres frais de gestion": "autresGestion" };
+
+function computeEq(t, sections, baremes, params) {
+  const lic = sections.find((s) => s.section === t.section) || {};
+  const licTot = (lic.comite || 0) + (lic.ligue || 0) + (lic.ffhb || 0) + (lic.assurance || 0);
+  const bar = baremes.find((b) => b.niveau === t.niveau && b.section === t.section && b.genre === t.genre)
+    || baremes.find((b) => b.niveau === t.niveau && b.section === t.section && b.genre === "Tous") || {};
+  const E = +t.nbLic || 0;
+  const cotis = E * (lic.cotisation || 0);
+  const cLic = E * licTot;
+  const cEduc = (+t.hEduc || 0) * (+t.sEduc || 0) * (bar.educateur || 0);
+  const cEquip = t.equipGratuit ? 0 : (+t.hEquip || 0) * (+t.sEquip || 0) * (params.equipHoraire || 0);
+  const eng = bar.engagement || 0;
+  const deplT = t.deplacement ? (+t.nbMatchs || 0) * (bar.deplacement || 0) : 0;
+  const arbT = (+t.nbMatchs || 0) * (bar.arbitrage || 0);
+  const cMat = E * ((params.textileMateriel || 0) + (params.autresGestion || 0)) + deplT + arbT + eng;
+  const cTot = cLic + cEduc + cEquip + cMat;
+  const subv = (+t.subRegion || 0) + (+t.subDept || 0) + (+t.subMetro || 0) + (+t.subCommune || 0) + (+t.subAutre || 0);
+  return { E, cotis, cLic, cEduc, cEquip, cMat, cTot, cPar: E ? cTot / E : 0, solde: cTot - cotis, subv, net: cTot - cotis - subv, barMissing: !bar.niveau };
+}
+
+function CoutEditNum({ value, onCommit, style }) {
+  const [v, setV] = useState(value == null ? "" : String(value));
+  useEffect(() => { setV(value == null ? "" : String(value)); }, [value]);
+  return <input className="inp" type="number" value={v} onChange={(e) => setV(e.target.value)}
+    onBlur={() => onCommit(v === "" ? 0 : Number(v))}
+    style={{ padding: "6px 8px", borderRadius: 8, textAlign: "right", ...style }} />;
+}
+function CoutEditTxt({ value, onCommit, style }) {
+  const [v, setV] = useState(value || "");
+  useEffect(() => { setV(value || ""); }, [value]);
+  return <input className="inp" value={v} onChange={(e) => setV(e.target.value)} onBlur={() => onCommit(v)}
+    style={{ padding: "6px 8px", borderRadius: 8, ...style }} />;
+}
+function CoutSel({ value, options, onChange, style }) {
+  return <select className="sel" value={value} onChange={(e) => onChange(e.target.value)}
+    style={{ padding: "6px 8px", borderRadius: 8, ...style }}>
+    {options.map((o) => <option key={o} value={o}>{o}</option>)}
+  </select>;
+}
+function CoutDonut({ items }) {
+  const total = items.reduce((a, i) => a + i.val, 0) || 1;
+  const r = 64, C = 2 * Math.PI * r, cx = 82, cy = 82; let off = 0;
+  return <svg viewBox="0 0 164 164" width={150} height={150} style={{ flex: "0 0 auto" }}>
+    <circle cx={cx} cy={cy} r={r} fill="none" stroke="#EEF0F3" strokeWidth={24} />
+    {items.filter((i) => i.val > 0).map((it, idx) => { const len = it.val / total * C; const el = <circle key={idx} cx={cx} cy={cy} r={r} fill="none" stroke={it.color} strokeWidth={24} strokeDasharray={len + " " + (C - len)} strokeDashoffset={-off} transform={"rotate(-90 " + cx + " " + cy + ")"} />; off += len; return el; })}
+    <text x={82} y={78} textAnchor="middle" fontSize="11" fill="#6E747D">Coût total</text>
+    <text x={82} y={99} textAnchor="middle" fontSize="15" fontWeight="800" fill="#14161A">{cEur(total)}</text>
+  </svg>;
+}
+function CoutKpi({ ic, label, value, color, sub }) {
+  return <div className="card" style={{ borderLeft: "4px solid " + color, display: "flex", gap: 12, alignItems: "center", padding: "14px 16px" }}>
+    <div style={{ width: 42, height: 42, borderRadius: 12, background: color + "18", color, display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}><i className={"ti " + ic} style={{ fontSize: 21 }} /></div>
+    <div style={{ minWidth: 0 }}>
+      <div style={{ fontSize: 11, color: MUT, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".4px" }}>{label}</div>
+      <div className="display" style={{ fontSize: 21, color: sub || TEXT }}>{value}</div>
+    </div>
+  </div>;
+}
+function CoutPill({ genre }) {
+  const c = genre === "Garçons" ? "#2563EB" : genre === "Filles" ? "#DB2777" : "#7C3AED";
+  return <span className="chip" style={{ background: c, color: "#fff" }}>{genre}</span>;
+}
+
+function CoutsView() {
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState("");
+  const [sub, setSub] = useState("synth");
+  const [sections, setSections] = useState([]);
+  const [baremes, setBaremes] = useState([]);
+  const [equipes, setEquipes] = useState([]);
+  const [params, setParams] = useState({ equipHoraire: 0, textileMateriel: 0, autresGestion: 0 });
+  const [paramIds, setParamIds] = useState({});
+
+  const load = useCallback(async () => {
+    setLoading(true); setErr("");
+    try {
+      const [S, B, E, P] = await Promise.all([
+        db({ action: "list", table: CT_SEC, sort: [{ field: "Ordre" }] }),
+        db({ action: "list", table: CT_BAR }),
+        db({ action: "list", table: CT_EQ }),
+        db({ action: "list", table: CT_PAR }),
+      ]);
+      setSections((S.records || []).map((r) => ({ id: r.id, section: f(r, "Section"), ordre: f(r, "Ordre") || 0, comite: f(r, "Part Comité") || 0, ligue: f(r, "Part Ligue") || 0, ffhb: f(r, "Part FFHB") || 0, assurance: f(r, "Assurance") || 0, cotisation: f(r, "Cotisation club") || 0 })));
+      setBaremes((B.records || []).map((r) => ({ id: r.id, niveau: f(r, "Niveau"), section: f(r, "Section"), genre: f(r, "Genre") || "Tous", engagement: f(r, "Frais engagement") || 0, deplacement: f(r, "Déplacement / match") || 0, arbitrage: f(r, "Arbitrage / match") || 0, educateur: f(r, "Coût horaire éducateur") || 0 })));
+      setEquipes((E.records || []).map((r) => ({ id: r.id, nom: f(r, "Équipe") || "", genre: f(r, "Genre") || "Garçons", section: f(r, "Section") || "", niveau: f(r, "Niveau") || "", nbLic: f(r, "Nb licenciés") || 0, hEduc: f(r, "Heures éducateur / sem") || 0, sEduc: f(r, "Semaines éducateur / an") || 0, hEquip: f(r, "Heures équipement / sem") || 0, sEquip: f(r, "Semaines équipement / an") || 0, equipGratuit: !!f(r, "Équipement gratuit"), nbMatchs: f(r, "Nb matchs extérieurs") || 0, deplacement: !!f(r, "Déplacement"), subRegion: f(r, "Subvention Conseil Régional") || 0, subDept: f(r, "Subvention Conseil Départemental") || 0, subMetro: f(r, "Subvention Métropole") || 0, subCommune: f(r, "Subvention Commune") || 0, subAutre: f(r, "Autres subventions") || 0 })));
+      const pv = { equipHoraire: 0, textileMateriel: 0, autresGestion: 0 }, pid = {};
+      (P.records || []).forEach((r) => { const k = PARAM_KEY[f(r, "Paramètre")]; if (k) { pv[k] = f(r, "Valeur") || 0; pid[k] = r.id; } });
+      setParams(pv); setParamIds(pid);
+    } catch (e) { setErr(e.message || String(e)); }
+    setLoading(false);
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const secNames = useMemo(() => sections.map((s) => s.section), [sections]);
+
+  // --- mutations ---
+  const setEqLocal = (id, key, val) => setEquipes((arr) => arr.map((t) => t.id === id ? { ...t, [key]: val } : t));
+  const commitEq = async (id, key, val) => { setEqLocal(id, key, val); try { await db({ action: "update", table: CT_EQ, recordId: id, fields: { [EQF[key]]: val } }); } catch (e) { alert("Erreur d'enregistrement : " + e.message); } };
+  const addEq = async (genre) => {
+    const fields = { "Équipe": "Nouvelle équipe " + genre, "Genre": genre, "Section": secNames[0] || "", "Niveau": C_NIV[1], "Nb licenciés": 0, "Semaines éducateur / an": 36, "Semaines équipement / an": 36 };
+    try { const j = await db({ action: "create", table: CT_EQ, fields }); const r = (j.records || [])[0]; if (r) setEquipes((a) => [...a, { id: r.id, nom: fields["Équipe"], genre, section: fields["Section"], niveau: fields["Niveau"], nbLic: 0, hEduc: 0, sEduc: 36, hEquip: 0, sEquip: 36, equipGratuit: false, nbMatchs: 0, deplacement: false, subRegion: 0, subDept: 0, subMetro: 0, subCommune: 0, subAutre: 0 }]); } catch (e) { alert("Erreur : " + e.message); }
+  };
+  const delEq = async (id) => { if (!confirm("Supprimer cette équipe ?")) return; try { await db({ action: "delete", table: CT_EQ, recordId: id }); setEquipes((a) => a.filter((t) => t.id !== id)); } catch (e) { alert("Erreur : " + e.message); } };
+
+  const commitSec = async (id, key, val) => { setSections((arr) => arr.map((s) => s.id === id ? { ...s, [key]: val } : s)); try { await db({ action: "update", table: CT_SEC, recordId: id, fields: { [SECF[key]]: val } }); } catch (e) { alert("Erreur : " + e.message); } };
+
+  const commitBar = async (id, key, val) => { setBaremes((arr) => arr.map((b) => b.id === id ? { ...b, [key]: val } : b)); try { await db({ action: "update", table: CT_BAR, recordId: id, fields: { [BARF[key]]: val } }); } catch (e) { alert("Erreur : " + e.message); } };
+  const addBar = async () => {
+    const fields = { "Libellé": (C_NIV[1] + " · " + (secNames[0] || "") + " · Tous"), "Niveau": C_NIV[1], "Section": secNames[0] || "", "Genre": "Tous", "Frais engagement": 0, "Déplacement / match": 0, "Arbitrage / match": 0, "Coût horaire éducateur": 15 };
+    try { const j = await db({ action: "create", table: CT_BAR, fields }); const r = (j.records || [])[0]; if (r) setBaremes((a) => [...a, { id: r.id, niveau: fields["Niveau"], section: fields["Section"], genre: "Tous", engagement: 0, deplacement: 0, arbitrage: 0, educateur: 15 }]); } catch (e) { alert("Erreur : " + e.message); }
+  };
+  const delBar = async (id) => { if (!confirm("Supprimer ce barème ?")) return; try { await db({ action: "delete", table: CT_BAR, recordId: id }); setBaremes((a) => a.filter((b) => b.id !== id)); } catch (e) { alert("Erreur : " + e.message); } };
+
+  const commitParam = async (key, val) => { setParams((p) => ({ ...p, [key]: val })); const rid = paramIds[key]; if (rid) { try { await db({ action: "update", table: CT_PAR, recordId: rid, fields: { "Valeur": val } }); } catch (e) { alert("Erreur : " + e.message); } } };
+
+  if (loading) return <div className="rise"><div className="card" style={{ textAlign: "center", color: MUT }}>Chargement du module coût…</div></div>;
+  if (err) return <div className="rise"><div className="card" style={{ borderLeft: "4px solid " + RED }}><b>Erreur de chargement.</b><div style={{ fontSize: 13, color: MUT, marginTop: 6 }}>{err}</div><button className="btn btn-ghost" style={{ marginTop: 10 }} onClick={load}>Réessayer</button></div></div>;
+
+  const subTab = (k, l) => <button className={"navb" + (sub === k ? " on" : "")} style={{ color: sub === k ? BLACK : "#4A4F57" }} onClick={() => setSub(k)}>{l}</button>;
+
+  return <div className="rise">
+    <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 18 }}>
+      <div className="display" style={{ fontSize: 22, color: TEXT, marginRight: "auto" }}>Coût de la pratique</div>
+      <nav style={{ display: "flex", gap: 4, background: "#EEF0F3", borderRadius: 30, padding: 4 }}>{subTab("synth", "Synthèse")}{subTab("equipes", "Équipes")}{subTab("baremes", "Barèmes")}</nav>
+    </div>
+    {sub === "synth" && <CoutsSynthese sections={sections} baremes={baremes} equipes={equipes} params={params} />}
+    {sub === "equipes" && <CoutsEquipes sections={sections} baremes={baremes} equipes={equipes} params={params} secNames={secNames} commitEq={commitEq} addEq={addEq} delEq={delEq} />}
+    {sub === "baremes" && <CoutsBaremes sections={sections} baremes={baremes} params={params} secNames={secNames} commitSec={commitSec} commitBar={commitBar} addBar={addBar} delBar={delBar} commitParam={commitParam} />}
+  </div>;
+}
+
+function CoutsSynthese({ sections, baremes, equipes, params }) {
+  const rows = equipes.map((t) => ({ t, c: computeEq(t, sections, baremes, params) }));
+  const sum = (fn) => rows.reduce((a, r) => a + fn(r.c), 0);
+  const nbEq = rows.length, nbLic = sum((c) => c.E), coutTotal = sum((c) => c.cTot);
+  const cotis = sum((c) => c.cotis), subv = sum((c) => c.subv);
+  const reste = coutTotal - cotis, resteSubv = coutTotal - cotis - subv, coutMoyen = nbLic ? coutTotal / nbLic : 0;
+  const postes = [
+    { label: "Licences", val: sum((c) => c.cLic), color: RED },
+    { label: "Éducateurs", val: sum((c) => c.cEduc), color: ORANGE },
+    { label: "Équipement sportif", val: sum((c) => c.cEquip), color: "#7C3AED" },
+    { label: "Matériel, gestion, déplacement, arbitrage, engagement", val: sum((c) => c.cMat), color: YELLOW },
+  ];
+  const gStats = (g) => { const r = rows.filter((x) => x.t.genre === g); return { nbEq: r.length, nbLic: r.reduce((a, x) => a + x.c.E, 0), cout: r.reduce((a, x) => a + x.c.cTot, 0), cotis: r.reduce((a, x) => a + x.c.cotis, 0) }; };
+  const parSection = sections.map((s) => { const r = rows.filter((x) => x.t.section === s.section); return { k: s.section, cout: r.reduce((a, x) => a + x.c.cTot, 0), nbEq: r.length }; }).filter((x) => x.nbEq > 0);
+  const maxSec = Math.max(1, ...parSection.map((x) => x.cout));
+  const parNiveau = C_NIV.map((n) => { const r = rows.filter((x) => x.t.niveau === n); return { k: n, nbEq: r.length, nbLic: r.reduce((a, x) => a + x.c.E, 0), cout: r.reduce((a, x) => a + x.c.cTot, 0), cotis: r.reduce((a, x) => a + x.c.cotis, 0) }; }).filter((x) => x.nbEq > 0);
+
+  const gCard = (g, grad, ic) => { const s = gStats(g); if (!s.nbEq) return null; return <div style={{ borderRadius: 16, padding: 16, color: "#fff", background: grad, flex: 1, minWidth: 200 }}>
+    <div style={{ fontSize: 13, fontWeight: 800, display: "flex", alignItems: "center", gap: 6 }}><i className={"ti " + ic} />{g}</div>
+    <div className="display" style={{ fontSize: 26, margin: "6px 0 2px" }}>{cEur(s.cout)}</div>
+    <div style={{ fontSize: 12, opacity: .92 }}>coût total · {cNum(s.nbEq)} équipe(s)</div>
+    <div style={{ display: "flex", gap: 16, marginTop: 12, fontSize: 12, flexWrap: "wrap" }}>
+      <div>Licenciés<b style={{ display: "block", fontSize: 15 }}>{cNum(s.nbLic)}</b></div>
+      <div>Cotisations<b style={{ display: "block", fontSize: 15 }}>{cEur(s.cotis)}</b></div>
+      <div>Reste à financer<b style={{ display: "block", fontSize: 15 }}>{cEur(s.cout - s.cotis)}</b></div>
+    </div></div>; };
+
+  const th = { textAlign: "right", padding: "7px 9px", fontSize: 11.5, color: MUT, fontWeight: 700, borderBottom: "1px solid " + BORDER, whiteSpace: "nowrap" };
+  const td = { textAlign: "right", padding: "7px 9px", fontSize: 13, borderBottom: "1px solid " + BORDER, whiteSpace: "nowrap" };
+
+  return <>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 14, marginBottom: 18 }}>
+      <CoutKpi ic="ti-ball-basketball" label="Équipes" value={cNum(nbEq)} color={RED} />
+      <CoutKpi ic="ti-users" label="Licenciés" value={cNum(nbLic)} color="#2563EB" />
+      <CoutKpi ic="ti-coin-euro" label="Coût total du club" value={cEur(coutTotal)} color={ORANGE} />
+      <CoutKpi ic="ti-ticket" label="Cotisations encaissées" value={cEur(cotis)} color={OK} />
+      <CoutKpi ic="ti-scale" label="Reste à financer" value={cEur(reste)} color={reste > 0 ? RED : OK} sub={reste > 0 ? RED : OK} />
+      <CoutKpi ic="ti-chart-pie" label="Coût moyen / licencié" value={cEur(coutMoyen)} color="#7C3AED" />
+    </div>
+
+    <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 18 }} className="cout-grid2">
+      <div className="card">
+        <div className="cond" style={{ fontSize: 15, marginBottom: 12 }}>Répartition par poste de coût</div>
+        <div style={{ display: "flex", gap: 22, alignItems: "center", flexWrap: "wrap" }}>
+          <CoutDonut items={postes} />
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, flex: 1, minWidth: 210 }}>
+            {postes.map((p) => <div key={p.label} style={{ display: "grid", gridTemplateColumns: "13px 1fr auto auto", gap: 10, alignItems: "center", fontSize: 13 }}>
+              <span style={{ width: 13, height: 13, borderRadius: 4, background: p.color }} />
+              <span>{p.label}</span>
+              <span style={{ color: MUT, minWidth: 44, textAlign: "right" }}>{cPct(p.val, coutTotal)}</span>
+              <span style={{ fontWeight: 800, minWidth: 80, textAlign: "right" }}>{cEur(p.val)}</span>
+            </div>)}
+          </div>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="cond" style={{ fontSize: 15, marginBottom: 12 }}>Garçons vs Filles</div>
+        <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+          {gCard("Garçons", "linear-gradient(135deg,#1e40af,#3b82f6)", "ti-gender-male")}
+          {gCard("Filles", "linear-gradient(135deg,#9d174d,#ec4899)", "ti-gender-female")}
+          {gCard("Mixte", "linear-gradient(135deg,#5b21b6,#8b5cf6)", "ti-users-group")}
+        </div>
+      </div>
+    </div>
+
+    <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 18, marginTop: 18 }} className="cout-grid2">
+      <div className="card">
+        <div className="cond" style={{ fontSize: 15, marginBottom: 12 }}>Coût total par section</div>
+        {parSection.length ? <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
+          {parSection.map((x) => <div key={x.k} style={{ display: "grid", gridTemplateColumns: "110px 1fr 90px", gap: 12, alignItems: "center", fontSize: 13 }}>
+            <div>{x.k}</div>
+            <div style={{ background: "#F1F3F5", borderRadius: 8, height: 22, overflow: "hidden" }}><div style={{ width: (x.cout / maxSec * 100).toFixed(1) + "%", height: "100%", borderRadius: 8, background: "linear-gradient(90deg," + RED + "," + ORANGE + ")" }} /></div>
+            <div style={{ textAlign: "right", fontWeight: 800 }}>{cEur(x.cout)}</div>
+          </div>)}
+        </div> : <Empty t="Aucune équipe saisie." />}
+      </div>
+
+      <div className="card">
+        <div className="cond" style={{ fontSize: 15, marginBottom: 12 }}>Financement</div>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <tbody>
+            <tr><td style={{ ...td, textAlign: "left" }}>Coût total brut des équipes</td><td style={td}>{cEur(coutTotal)}</td></tr>
+            <tr><td style={{ ...td, textAlign: "left" }}>− Cotisations encaissées</td><td style={td}>{cEur(cotis)}</td></tr>
+            <tr><td style={{ ...td, textAlign: "left", fontWeight: 800 }}>Reste à financer (sans subventions)</td><td style={{ ...td, fontWeight: 800, color: reste > 0 ? RED : OK }}>{cEur(reste)}</td></tr>
+            <tr><td style={{ ...td, textAlign: "left" }}>− Subventions à percevoir</td><td style={td}>{cEur(subv)}</td></tr>
+            <tr><td style={{ ...td, textAlign: "left", fontWeight: 800 }}>Reste à financer (avec subventions)</td><td style={{ ...td, fontWeight: 800, color: resteSubv > 0 ? RED : OK }}>{cEur(resteSubv)}</td></tr>
+            <tr><td style={{ ...td, textAlign: "left", color: MUT }}>Coût brut / licencié</td><td style={{ ...td, color: MUT }}>{cEur2(coutMoyen)}</td></tr>
+            <tr><td style={{ ...td, textAlign: "left", color: MUT, borderBottom: "none" }}>Coût net / licencié (avec subventions)</td><td style={{ ...td, color: MUT, borderBottom: "none" }}>{cEur2(nbLic ? resteSubv / nbLic : 0)}</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div className="card" style={{ marginTop: 18 }}>
+      <div className="cond" style={{ fontSize: 15, marginBottom: 12 }}>Ventilation par niveau</div>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 560 }}>
+          <thead><tr><th style={{ ...th, textAlign: "left" }}>Niveau</th><th style={th}>Équipes</th><th style={th}>Licenciés</th><th style={th}>Coût total</th><th style={th}>Cotisations</th><th style={th}>Solde net</th></tr></thead>
+          <tbody>
+            {parNiveau.length ? parNiveau.map((x) => <tr key={x.k}><td style={{ ...td, textAlign: "left" }}>{x.k}</td><td style={td}>{cNum(x.nbEq)}</td><td style={td}>{cNum(x.nbLic)}</td><td style={td}>{cEur(x.cout)}</td><td style={td}>{cEur(x.cotis)}</td><td style={{ ...td, color: (x.cout - x.cotis) > 0 ? RED : OK }}>{cEur(x.cout - x.cotis)}</td></tr>)
+              : <tr><td style={{ ...td, textAlign: "left", color: MUT }} colSpan={6}>Aucune équipe</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <style>{".cout-grid2{grid-template-columns:1fr;}@media(min-width:900px){.cout-grid2{grid-template-columns:1fr 1fr;}}"}</style>
+  </>;
+}
+
+function CoutsEquipes({ sections, baremes, equipes, params, secNames, commitEq, addEq, delEq }) {
+  const order = (t) => C_GEN.indexOf(t.genre) * 100 + secNames.indexOf(t.section);
+  const rows = [...equipes].sort((a, b) => order(a) - order(b));
+  const th = { textAlign: "right", padding: "7px 8px", fontSize: 11, color: MUT, fontWeight: 700, background: "#F6F7F9", whiteSpace: "nowrap", position: "sticky", top: 0 };
+  const td = { padding: "3px 5px", borderBottom: "1px solid " + BORDER, whiteSpace: "nowrap", textAlign: "right" };
+  const calc = { padding: "5px 8px", borderBottom: "1px solid " + BORDER, whiteSpace: "nowrap", textAlign: "right", background: "#FAF7F4", fontSize: 13 };
+  return <>
+    <div className="card">
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+        <div style={{ marginRight: "auto" }}>
+          <div className="cond" style={{ fontSize: 15 }}>Saisie et calcul par équipe</div>
+          <div style={{ fontSize: 12, color: MUT }}>Le coût de licence suit la section. ⚠︎ = pas de barème pour ce Niveau × Section.</div>
+        </div>
+        <button className="btn btn-red" onClick={() => addEq("Garçons")}><i className="ti ti-plus" />Équipe Garçons</button>
+        <button className="btn" style={{ background: "#DB2777", color: "#fff" }} onClick={() => addEq("Filles")}><i className="ti ti-plus" />Équipe Filles</button>
+      </div>
+      <div style={{ overflowX: "auto", border: "1px solid " + BORDER, borderRadius: 12 }}>
+        <table style={{ borderCollapse: "collapse", fontSize: 13, minWidth: 1180 }}>
+          <thead><tr>
+            <th style={{ ...th, textAlign: "left" }}>Équipe</th><th style={{ ...th, textAlign: "left" }}>Genre</th><th style={{ ...th, textAlign: "left" }}>Section</th><th style={{ ...th, textAlign: "left" }}>Niveau</th>
+            <th style={th}>Nb lic.</th><th style={th}>H éduc/sem</th><th style={th}>Sem éduc</th><th style={th}>H équip/sem</th><th style={th}>Sem équip</th>
+            <th style={th}>Équip. gratuit</th><th style={th}>Nb matchs</th><th style={th}>Déplac.</th>
+            <th style={th}>Coût licences</th><th style={th}>Coût éduc.</th><th style={th}>Coût équip.</th><th style={th}>Mat.+gestion</th>
+            <th style={th}>Coût total</th><th style={th}>Coût/lic.</th><th style={th}>Cotis.</th><th style={th}>Solde net</th><th style={th}></th>
+          </tr></thead>
+          <tbody>
+            {rows.length ? rows.map((t) => { const c = computeEq(t, sections, baremes, params); return <tr key={t.id}>
+              <td style={{ ...td, textAlign: "left" }}><CoutEditTxt value={t.nom} onCommit={(v) => commitEq(t.id, "nom", v)} style={{ minWidth: 120 }} /></td>
+              <td style={{ ...td, textAlign: "left" }}><CoutSel value={t.genre} options={C_GEN} onChange={(v) => commitEq(t.id, "genre", v)} /></td>
+              <td style={{ ...td, textAlign: "left" }}><CoutSel value={t.section} options={secNames} onChange={(v) => commitEq(t.id, "section", v)} /></td>
+              <td style={{ ...td, textAlign: "left" }}><CoutSel value={t.niveau} options={C_NIV} onChange={(v) => commitEq(t.id, "niveau", v)} /></td>
+              <td style={td}><CoutEditNum value={t.nbLic} onCommit={(v) => commitEq(t.id, "nbLic", v)} style={{ width: 62 }} /></td>
+              <td style={td}><CoutEditNum value={t.hEduc} onCommit={(v) => commitEq(t.id, "hEduc", v)} style={{ width: 62 }} /></td>
+              <td style={td}><CoutEditNum value={t.sEduc} onCommit={(v) => commitEq(t.id, "sEduc", v)} style={{ width: 62 }} /></td>
+              <td style={td}><CoutEditNum value={t.hEquip} onCommit={(v) => commitEq(t.id, "hEquip", v)} style={{ width: 62 }} /></td>
+              <td style={td}><CoutEditNum value={t.sEquip} onCommit={(v) => commitEq(t.id, "sEquip", v)} style={{ width: 62 }} /></td>
+              <td style={{ ...td, textAlign: "center" }}><input type="checkbox" checked={t.equipGratuit} onChange={(e) => commitEq(t.id, "equipGratuit", e.target.checked)} /></td>
+              <td style={td}><CoutEditNum value={t.nbMatchs} onCommit={(v) => commitEq(t.id, "nbMatchs", v)} style={{ width: 62 }} /></td>
+              <td style={{ ...td, textAlign: "center" }}><input type="checkbox" checked={t.deplacement} onChange={(e) => commitEq(t.id, "deplacement", e.target.checked)} /></td>
+              <td style={calc}>{cEur(c.cLic)}</td>
+              <td style={calc}>{cEur(c.cEduc)}</td>
+              <td style={calc}>{cEur(c.cEquip)}</td>
+              <td style={calc}>{cEur(c.cMat)}</td>
+              <td style={{ ...calc, fontWeight: 800 }}>{cEur(c.cTot)}{c.barMissing ? <span title="Pas de barème pour ce Niveau × Section" style={{ color: ORANGE }}> ⚠︎</span> : null}</td>
+              <td style={calc}>{cEur2(c.cPar)}</td>
+              <td style={calc}>{cEur(c.cotis)}</td>
+              <td style={{ ...calc, color: c.solde > 0 ? RED : OK }}>{cEur(c.solde)}</td>
+              <td style={{ ...td, textAlign: "center" }}><span style={{ color: RED, cursor: "pointer", fontWeight: 800 }} onClick={() => delEq(t.id)}>✕</span></td>
+            </tr>; }) : <tr><td style={{ ...td, textAlign: "left", color: MUT }} colSpan={21}>Aucune équipe — ajoutez-en une.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div className="card">
+      <div className="cond" style={{ fontSize: 15, marginBottom: 4 }}>Subventions par équipe</div>
+      <div style={{ fontSize: 12, color: MUT, marginBottom: 12 }}>Coût net = coût total équipe − cotisations − subventions.</div>
+      <div style={{ overflowX: "auto", border: "1px solid " + BORDER, borderRadius: 12 }}>
+        <table style={{ borderCollapse: "collapse", fontSize: 13, minWidth: 900 }}>
+          <thead><tr>
+            <th style={{ ...th, textAlign: "left" }}>Équipe</th><th style={th}>Cons. Régional</th><th style={th}>Cons. Dép.</th><th style={th}>Métropole</th><th style={th}>Commune</th><th style={th}>Autres</th><th style={th}>Total subv.</th><th style={th}>Coût net</th><th style={th}>Net/lic.</th>
+          </tr></thead>
+          <tbody>
+            {rows.map((t) => { const c = computeEq(t, sections, baremes, params); return <tr key={t.id}>
+              <td style={{ ...td, textAlign: "left" }}><CoutPill genre={t.genre} /> {t.nom}</td>
+              <td style={td}><CoutEditNum value={t.subRegion} onCommit={(v) => commitEq(t.id, "subRegion", v)} style={{ width: 90 }} /></td>
+              <td style={td}><CoutEditNum value={t.subDept} onCommit={(v) => commitEq(t.id, "subDept", v)} style={{ width: 90 }} /></td>
+              <td style={td}><CoutEditNum value={t.subMetro} onCommit={(v) => commitEq(t.id, "subMetro", v)} style={{ width: 90 }} /></td>
+              <td style={td}><CoutEditNum value={t.subCommune} onCommit={(v) => commitEq(t.id, "subCommune", v)} style={{ width: 90 }} /></td>
+              <td style={td}><CoutEditNum value={t.subAutre} onCommit={(v) => commitEq(t.id, "subAutre", v)} style={{ width: 90 }} /></td>
+              <td style={{ ...calc, fontWeight: 800 }}>{cEur(c.subv)}</td>
+              <td style={{ ...calc, color: c.net > 0 ? RED : OK }}>{cEur(c.net)}</td>
+              <td style={calc}>{cEur2(c.E ? c.net / c.E : 0)}</td>
+            </tr>; })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </>;
+}
+
+function CoutsBaremes({ sections, baremes, params, secNames, commitSec, commitBar, addBar, delBar, commitParam }) {
+  const th = { textAlign: "right", padding: "7px 8px", fontSize: 11, color: MUT, fontWeight: 700, background: "#F6F7F9", whiteSpace: "nowrap" };
+  const td = { padding: "3px 5px", borderBottom: "1px solid " + BORDER, whiteSpace: "nowrap", textAlign: "right" };
+  return <>
+    <div className="card" style={{ borderLeft: "4px solid " + YELLOW, background: "#FFFDF3" }}>
+      <div style={{ fontSize: 12.5, color: "#7a5b00" }}>💡 Les <b>sections</b> pilotent tout : coût de licence et barèmes s'y rattachent. Le barème « Tous » s'applique aux deux genres ; ajoutez une ligne Garçons ou Filles seulement si un montant diffère. Les niveaux et genres sont gérés dans Airtable (options de champ).</div>
+    </div>
+
+    <div className="card">
+      <div className="cond" style={{ fontSize: 15, marginBottom: 12 }}>Paramètres globaux</div>
+      <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+        <div style={{ flex: 1, minWidth: 170 }}><label className="lbl">Coût horaire équipement (€/h)</label><CoutEditNum value={params.equipHoraire} onCommit={(v) => commitParam("equipHoraire", v)} /></div>
+        <div style={{ flex: 1, minWidth: 170 }}><label className="lbl">Textile + ballon + matériel (€/licencié)</label><CoutEditNum value={params.textileMateriel} onCommit={(v) => commitParam("textileMateriel", v)} /></div>
+        <div style={{ flex: 1, minWidth: 170 }}><label className="lbl">Autres frais de gestion (€/licencié)</label><CoutEditNum value={params.autresGestion} onCommit={(v) => commitParam("autresGestion", v)} /></div>
+      </div>
+    </div>
+
+    <div className="card">
+      <div className="cond" style={{ fontSize: 15, marginBottom: 4 }}>Coût des licences par section</div>
+      <div style={{ fontSize: 12, color: MUT, marginBottom: 12 }}>Total licence = comité + ligue + FFHB + assurance (auto).</div>
+      <div style={{ overflowX: "auto", border: "1px solid " + BORDER, borderRadius: 12 }}>
+        <table style={{ borderCollapse: "collapse", fontSize: 13, minWidth: 720, width: "100%" }}>
+          <thead><tr><th style={{ ...th, textAlign: "left" }}>Section</th><th style={th}>Part Comité</th><th style={th}>Part Ligue</th><th style={th}>Part FFHB</th><th style={th}>Assurance</th><th style={th}>Total licence</th><th style={th}>Cotisation club/lic.</th></tr></thead>
+          <tbody>
+            {sections.map((s) => <tr key={s.id}>
+              <td style={{ ...td, textAlign: "left", fontWeight: 700 }}>{s.section}</td>
+              <td style={td}><CoutEditNum value={s.comite} onCommit={(v) => commitSec(s.id, "comite", v)} style={{ width: 80 }} /></td>
+              <td style={td}><CoutEditNum value={s.ligue} onCommit={(v) => commitSec(s.id, "ligue", v)} style={{ width: 80 }} /></td>
+              <td style={td}><CoutEditNum value={s.ffhb} onCommit={(v) => commitSec(s.id, "ffhb", v)} style={{ width: 80 }} /></td>
+              <td style={td}><CoutEditNum value={s.assurance} onCommit={(v) => commitSec(s.id, "assurance", v)} style={{ width: 80 }} /></td>
+              <td style={{ ...td, fontWeight: 800, background: "#FAF7F4" }}>{cEur2((s.comite || 0) + (s.ligue || 0) + (s.ffhb || 0) + (s.assurance || 0))}</td>
+              <td style={td}><CoutEditNum value={s.cotisation} onCommit={(v) => commitSec(s.id, "cotisation", v)} style={{ width: 90 }} /></td>
+            </tr>)}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div className="card">
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+        <div style={{ marginRight: "auto" }}><div className="cond" style={{ fontSize: 15 }}>Barèmes par Niveau × Section × Genre</div><div style={{ fontSize: 12, color: MUT }}>Engagement, déplacement/match, arbitrage/match, coût horaire éducateur.</div></div>
+        <button className="btn btn-red" onClick={addBar}><i className="ti ti-plus" />Barème</button>
+      </div>
+      <div style={{ overflowX: "auto", border: "1px solid " + BORDER, borderRadius: 12 }}>
+        <table style={{ borderCollapse: "collapse", fontSize: 13, minWidth: 760, width: "100%" }}>
+          <thead><tr><th style={{ ...th, textAlign: "left" }}>Niveau</th><th style={{ ...th, textAlign: "left" }}>Section</th><th style={{ ...th, textAlign: "left" }}>Genre</th><th style={th}>Engagement</th><th style={th}>Déplac./match</th><th style={th}>Arbitrage/match</th><th style={th}>Coût horaire éduc.</th><th style={th}></th></tr></thead>
+          <tbody>
+            {baremes.map((b) => <tr key={b.id}>
+              <td style={{ ...td, textAlign: "left" }}><CoutSel value={b.niveau} options={C_NIV} onChange={(v) => commitBar(b.id, "niveau", v)} /></td>
+              <td style={{ ...td, textAlign: "left" }}><CoutSel value={b.section} options={secNames} onChange={(v) => commitBar(b.id, "section", v)} /></td>
+              <td style={{ ...td, textAlign: "left" }}><CoutSel value={b.genre} options={C_GENB} onChange={(v) => commitBar(b.id, "genre", v)} /></td>
+              <td style={td}><CoutEditNum value={b.engagement} onCommit={(v) => commitBar(b.id, "engagement", v)} style={{ width: 88 }} /></td>
+              <td style={td}><CoutEditNum value={b.deplacement} onCommit={(v) => commitBar(b.id, "deplacement", v)} style={{ width: 88 }} /></td>
+              <td style={td}><CoutEditNum value={b.arbitrage} onCommit={(v) => commitBar(b.id, "arbitrage", v)} style={{ width: 88 }} /></td>
+              <td style={td}><CoutEditNum value={b.educateur} onCommit={(v) => commitBar(b.id, "educateur", v)} style={{ width: 88 }} /></td>
+              <td style={{ ...td, textAlign: "center" }}><span style={{ color: RED, cursor: "pointer", fontWeight: 800 }} onClick={() => delBar(b.id)}>✕</span></td>
+            </tr>)}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </>;
+}
+
 function BottomNav({ view, setView }) {
-  const tabs = [["dash", "Accueil", "ti-home"], ["taches", "Tâches", "ti-checklist"], ["sujets", "Sujets", "ti-clipboard-list"], ["ca", "Réunions", "ti-calendar"], ["cal", "Agenda", "ti-calendar-month"], ["annuaire", "Annuaire", "ti-users"]];
+  const tabs = [["dash", "Accueil", "ti-home"], ["taches", "Tâches", "ti-checklist"], ["sujets", "Sujets", "ti-clipboard-list"], ["ca", "Réunions", "ti-calendar"], ["cal", "Agenda", "ti-calendar-month"], ["annuaire", "Annuaire", "ti-users"], ["couts", "Coûts", "ti-coin-euro"]];
   return (
     <nav className="bottomnav">
       {tabs.map(([v, l, ic]) => <button key={v} className={view === v ? "on" : ""} onClick={() => setView(v)}><i className={"ti " + ic} aria-hidden="true" /><span>{l}</span></button>)}
@@ -2228,6 +2627,7 @@ export default function App() {
         {!rsvpOpen && !signOpen && !taskOpen && !liveOpen && view === "ca" && <ReunionsView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewMeeting={() => setModal({ type: "meeting" })} openMeeting={(id) => setModal({ type: "meetingDetail", id })} openLive={(id) => setLiveOpen(id)} openCR={(id) => setModal({ type: "cr", id })} />}
         {!rsvpOpen && !signOpen && !taskOpen && !liveOpen && view === "cal" && <CalendarView me={me} data={data} openTask={(id) => setTaskOpen(id)} openMeeting={(id) => setModal({ type: "meetingDetail", id })} />}
         {!rsvpOpen && !signOpen && !taskOpen && !liveOpen && view === "annuaire" && <Annuaire data={data} me={me} isAdmin={isAdmin} reload={reload} />}
+        {!rsvpOpen && !signOpen && !taskOpen && !liveOpen && view === "couts" && <CoutsView />}
         {!rsvpOpen && !signOpen && !taskOpen && !liveOpen && view === "admin" && isAdmin && <AdminUsers me={me} data={data} reload={reload} />}
       </div>
       {modal && modal.type === "task" && <NewTask me={me} data={data} isAdmin={isAdmin} initialPole={modal.pole} onClose={() => setModal(null)} reload={reload} />}
