@@ -69,7 +69,7 @@ html{overflow-x:clip;}body{margin:0;font-family:'Manrope',system-ui,sans-serif;o
 .vhb-dot i{width:8px;height:8px;border-radius:50%;background:#D62828;animation:vhbpulsedot 1s ease-in-out infinite;}
 @keyframes vhbpulsedot{0%,100%{opacity:.35;transform:scale(.85);}50%{opacity:1;transform:scale(1.1);}}
 @media(max-width:380px){.hide-xs{display:none;}}
-@media(max-width:760px){.inp,.sel,.ta{font-size:16px;}.appheader{padding:calc(8px + env(safe-area-inset-top)) 12px 10px;}.navb{padding:7px 12px;font-size:12.5px;}.caprep{padding:14px 15px !important;}.caprep .btn{font-size:12.5px;padding:9px 13px;}.appnav{display:none;}.bottomnav{display:flex;}}
+@media(max-width:760px){.inp,.sel,.ta{font-size:16px;}.appheader{padding:calc(8px + env(safe-area-inset-top)) 12px 10px;}.navb{padding:7px 12px;font-size:12.5px;}.caprep{padding:14px 15px !important;}.caprep .btn{font-size:12.5px;padding:9px 13px;}.appnav{display:none;}.bottomnav{display:flex;}.spaceswitch{display:none !important;}}
 @media (max-width:760px){
   .navrow{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
   .navrow::-webkit-scrollbar{display:none;}
@@ -310,7 +310,7 @@ function Header({ me, space, setSpace, view, setView, outilView, setOutilView, i
         {tabs.map(([v, l]) => <button key={v} className={"navb" + (cur === v ? " on" : "")} onClick={() => onTab(v)}>{l}</button>)}
       </nav>
       <div className="appactions">
-        <div style={{ display: "flex", background: "rgba(0,0,0,.26)", borderRadius: 30, padding: 3, flex: "0 0 auto" }} title="Changer d'espace">
+        <div className="spaceswitch" style={{ display: "flex", background: "rgba(0,0,0,.26)", borderRadius: 30, padding: 3, flex: "0 0 auto" }} title="Changer d'espace">
           <button onClick={() => setSpace("ca")} style={{ border: "none", cursor: "pointer", fontFamily: "inherit", fontWeight: 700, fontSize: 12, borderRadius: 30, padding: "6px 11px", display: "flex", alignItems: "center", gap: 6, background: space !== "outils" ? "#fff" : "transparent", color: space !== "outils" ? "#16171B" : "rgba(255,255,255,.85)" }}><i className="ti ti-layout-dashboard" style={{ fontSize: 15 }} /><span className="hide-xs">Pilotage CA</span></button>
           <button onClick={() => setSpace("outils")} style={{ border: "none", cursor: "pointer", fontFamily: "inherit", fontWeight: 700, fontSize: 12, borderRadius: 30, padding: "6px 11px", display: "flex", alignItems: "center", gap: 6, background: space === "outils" ? "#fff" : "transparent", color: space === "outils" ? "#16171B" : "rgba(255,255,255,.85)" }}><i className="ti ti-tools" style={{ fontSize: 15 }} /><span className="hide-xs">Outils</span></button>
         </div>
