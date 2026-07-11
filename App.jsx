@@ -291,21 +291,29 @@ function ProfileForm({ me, poles, onSaved }) {
   );
 }
 
-function Header({ me, view, setView, isAdmin, onLogout, unread, onBell, onProfile, onHelp }) {
-  const tabs = [["dash", "Accueil"], ["taches", "Tâches"], ["sujets", "Sujets"], ["ca", "Réunions"], ["cal", "Agenda"], ["annuaire", "Annuaire"], ["couts", "Coûts"]];
+function Header({ me, space, setSpace, view, setView, outilView, setOutilView, isAdmin, onLogout, unread, onBell, onProfile, onHelp }) {
+  const caTabs = [["dash", "Accueil"], ["taches", "Tâches"], ["sujets", "Sujets"], ["ca", "Réunions"], ["cal", "Agenda"], ["annuaire", "Annuaire"]];
+  const outilTabs = [["couts", "Coût de la pratique"]];
+  const tabs = space === "outils" ? outilTabs : caTabs;
+  const cur = space === "outils" ? outilView : view;
+  const onTab = space === "outils" ? setOutilView : setView;
   return (
     <header className="appheader" style={{ backgroundColor: "#E8590C", backgroundImage: "linear-gradient(rgba(28,10,0,.22), rgba(28,10,0,.36)), url(/accent.jpg)", backgroundSize: "cover", backgroundPosition: "center", position: "sticky", top: 0, zIndex: 30, boxShadow: "0 2px 18px rgba(0,0,0,.22)" }}>
       <div className="appbrand">
-        <img src={LOGO} width={40} height={40} alt="VHB" style={{ cursor: "pointer", flex: "0 0 auto", filter: "drop-shadow(0 4px 10px rgba(214,40,40,.35))" }} onClick={() => setView("dash")} />
+        <img src={LOGO} width={40} height={40} alt="VHB" style={{ cursor: "pointer", flex: "0 0 auto", filter: "drop-shadow(0 4px 10px rgba(214,40,40,.35))" }} onClick={() => { setSpace("ca"); setView("dash"); }} />
         <div style={{ lineHeight: 1.12, minWidth: 0 }}>
           <div style={{ fontSize: 16, color: "#fff", fontWeight: 800, letterSpacing: "-.01em" }}>VHB Pilotage</div>
           <div style={{ fontSize: 10.5, color: "#FFFFFF", fontWeight: 600 }}>Tous Hand'semble</div>
         </div>
       </div>
       <nav className="appnav">
-        {tabs.map(([v, l]) => <button key={v} className={"navb" + (view === v ? " on" : "")} onClick={() => setView(v)}>{l}</button>)}
+        {tabs.map(([v, l]) => <button key={v} className={"navb" + (cur === v ? " on" : "")} onClick={() => onTab(v)}>{l}</button>)}
       </nav>
       <div className="appactions">
+        <div style={{ display: "flex", background: "rgba(0,0,0,.26)", borderRadius: 30, padding: 3, flex: "0 0 auto" }} title="Changer d'espace">
+          <button onClick={() => setSpace("ca")} style={{ border: "none", cursor: "pointer", fontFamily: "inherit", fontWeight: 700, fontSize: 12, borderRadius: 30, padding: "6px 11px", display: "flex", alignItems: "center", gap: 6, background: space !== "outils" ? "#fff" : "transparent", color: space !== "outils" ? "#16171B" : "rgba(255,255,255,.85)" }}><i className="ti ti-layout-dashboard" style={{ fontSize: 15 }} /><span className="hide-xs">Pilotage CA</span></button>
+          <button onClick={() => setSpace("outils")} style={{ border: "none", cursor: "pointer", fontFamily: "inherit", fontWeight: 700, fontSize: 12, borderRadius: 30, padding: "6px 11px", display: "flex", alignItems: "center", gap: 6, background: space === "outils" ? "#fff" : "transparent", color: space === "outils" ? "#16171B" : "rgba(255,255,255,.85)" }}><i className="ti ti-tools" style={{ fontSize: 15 }} /><span className="hide-xs">Outils</span></button>
+        </div>
         <button onClick={onHelp} title="Aide / Guide" style={{ background: YELLOW, color: BLACK, border: "none", borderRadius: 30, padding: "7px 14px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontFamily: "inherit", fontWeight: 700, fontSize: 12.5, flex: "0 0 auto", boxShadow: "0 2px 8px rgba(0,0,0,.18)" }}><i className="ti ti-help-circle" style={{ fontSize: 17 }} aria-hidden="true" />Aide</button>
         <button onClick={onBell} title="Notifications" style={{ position: "relative", background: "rgba(255,255,255,.08)", border: "none", color: "#E9EAEC", width: 36, height: 36, borderRadius: 11, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}><i className="ti ti-bell" style={{ fontSize: 18 }} />{unread > 0 && <span style={{ position: "absolute", top: -5, right: -5, background: RED, color: "#fff", fontSize: 10, fontWeight: 700, borderRadius: 10, minWidth: 17, height: 17, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>{unread}</span>}</button>
         <div style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", flex: "0 0 auto" }} onClick={onProfile} title="Mon espace">
@@ -2545,8 +2553,16 @@ function CoutsBaremes({ sections, baremes, params, secNames, commitSec, commitBa
   </>;
 }
 
-function BottomNav({ view, setView }) {
-  const tabs = [["dash", "Accueil", "ti-home"], ["taches", "Tâches", "ti-checklist"], ["sujets", "Sujets", "ti-clipboard-list"], ["ca", "Réunions", "ti-calendar"], ["cal", "Agenda", "ti-calendar-month"], ["annuaire", "Annuaire", "ti-users"], ["couts", "Coûts", "ti-coin-euro"]];
+function BottomNav({ space, view, setView, outilView, setOutilView, setSpace }) {
+  if (space === "outils") {
+    const outilTabs = [["__ca", "Pilotage CA", "ti-arrow-left"], ["couts", "Coût pratique", "ti-coin-euro"]];
+    return (
+      <nav className="bottomnav">
+        {outilTabs.map(([v, l, ic]) => <button key={v} className={v === outilView ? "on" : ""} onClick={() => v === "__ca" ? setSpace("ca") : setOutilView(v)}><i className={"ti " + ic} aria-hidden="true" /><span>{l}</span></button>)}
+      </nav>
+    );
+  }
+  const tabs = [["dash", "Accueil", "ti-home"], ["taches", "Tâches", "ti-checklist"], ["sujets", "Sujets", "ti-clipboard-list"], ["ca", "Réunions", "ti-calendar"], ["cal", "Agenda", "ti-calendar-month"], ["annuaire", "Annuaire", "ti-users"]];
   return (
     <nav className="bottomnav">
       {tabs.map(([v, l, ic]) => <button key={v} className={view === v ? "on" : ""} onClick={() => setView(v)}><i className={"ti " + ic} aria-hidden="true" /><span>{l}</span></button>)}
@@ -2557,6 +2573,8 @@ export default function App() {
   const [status, setStatus] = useState("loading");
   const [me, setMe] = useState(null);
   const [view, setView] = useState("dash");
+  const [space, setSpace] = useState("ca");
+  const [outilView, setOutilView] = useState("couts");
   const [data, setData] = useState({ poles: [], users: [], tasks: [], meetings: [], sujets: [], commentaires: [] });
   const [modal, setModal] = useState(null);
   const [taskOpen, setTaskOpen] = useState(null);
@@ -2615,8 +2633,9 @@ export default function App() {
     <div style={{ minHeight: "100vh", backgroundColor: "#F4F5F8", backgroundImage: "radial-gradient(720px circle at 100% -6%, rgba(214,40,40,.06), transparent 58%), radial-gradient(620px circle at -6% 112%, rgba(245,197,24,.07), transparent 58%)", backgroundAttachment: "fixed", color: TEXT, fontFamily: "'Manrope',system-ui,sans-serif" }}>
       <style>{CSS}</style>
       <BusyOverlay />
-      <Header me={me} view={view} setView={(v) => { setTaskOpen(null); setLiveOpen(null); setSignOpen(null); setRsvpOpen(null); setView(v); }} isAdmin={isAdmin} onLogout={logout} unread={unread} onBell={() => setModal({ type: "notifs" })} onProfile={() => setModal({ type: "profile" })} onHelp={() => setModal({ type: "help" })} />
+      <Header me={me} space={space} setSpace={setSpace} outilView={outilView} setOutilView={setOutilView} view={view} setView={(v) => { setTaskOpen(null); setLiveOpen(null); setSignOpen(null); setRsvpOpen(null); setView(v); }} isAdmin={isAdmin} onLogout={logout} unread={unread} onBell={() => setModal({ type: "notifs" })} onProfile={() => setModal({ type: "profile" })} onHelp={() => setModal({ type: "help" })} />
       <div className="wrap">
+        {space === "outils" ? <div className="rise">{outilView === "couts" && <CoutsView />}</div> : <>
         {rsvpOpen && <RSVPView meetingId={rsvpOpen} me={me} data={data} onClose={() => { setRsvpOpen(null); try { window.history.replaceState({}, "", window.location.pathname); } catch (e) {} }} reload={reload} openNewSujet={(opts) => setModal({ type: "sujet", ...(opts || {}) })} />}
         {!rsvpOpen && signOpen && <SignatureView meetingId={signOpen} me={me} data={data} onClose={() => { setSignOpen(null); try { window.history.replaceState({}, "", window.location.pathname); } catch (e) {} }} reload={reload} />}
         {!rsvpOpen && !signOpen && taskOpen && <TaskDetailPage taskId={taskOpen} me={me} data={data} isAdmin={isAdmin} onClose={() => setTaskOpen(null)} reload={reload} />}
@@ -2627,8 +2646,8 @@ export default function App() {
         {!rsvpOpen && !signOpen && !taskOpen && !liveOpen && view === "ca" && <ReunionsView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewMeeting={() => setModal({ type: "meeting" })} openMeeting={(id) => setModal({ type: "meetingDetail", id })} openLive={(id) => setLiveOpen(id)} openCR={(id) => setModal({ type: "cr", id })} />}
         {!rsvpOpen && !signOpen && !taskOpen && !liveOpen && view === "cal" && <CalendarView me={me} data={data} openTask={(id) => setTaskOpen(id)} openMeeting={(id) => setModal({ type: "meetingDetail", id })} />}
         {!rsvpOpen && !signOpen && !taskOpen && !liveOpen && view === "annuaire" && <Annuaire data={data} me={me} isAdmin={isAdmin} reload={reload} />}
-        {!rsvpOpen && !signOpen && !taskOpen && !liveOpen && view === "couts" && <CoutsView />}
         {!rsvpOpen && !signOpen && !taskOpen && !liveOpen && view === "admin" && isAdmin && <AdminUsers me={me} data={data} reload={reload} />}
+        </>}
       </div>
       {modal && modal.type === "task" && <NewTask me={me} data={data} isAdmin={isAdmin} initialPole={modal.pole} onClose={() => setModal(null)} reload={reload} />}
       {modal && modal.type === "sujet" && <NewSujet me={me} data={data} meetingId={modal.meetingId} initialPole={modal.pole} onClose={() => setModal(null)} reload={reload} />}
@@ -2639,7 +2658,7 @@ export default function App() {
       {modal && modal.type === "cr" && <CRView meetingId={modal.id} data={data} onClose={() => setModal(null)} />}
       {modal && modal.type === "sujetDetail" && <SujetDetail sujetId={modal.id} me={me} data={data} isAdmin={isAdmin} reload={reload} onClose={() => setModal(null)} />}
       {modal && modal.type === "help" && <HelpView onClose={() => setModal(null)} />}
-      <BottomNav view={view} setView={(v) => { setTaskOpen(null); setLiveOpen(null); setSignOpen(null); setRsvpOpen(null); setView(v); }} />
+      <BottomNav space={space} setSpace={setSpace} outilView={outilView} setOutilView={setOutilView} view={view} setView={(v) => { setTaskOpen(null); setLiveOpen(null); setSignOpen(null); setRsvpOpen(null); setView(v); }} />
     </div>
   );
 }
