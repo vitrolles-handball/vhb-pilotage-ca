@@ -2680,6 +2680,16 @@ export default function App() {
   }, [loadData]);
   useEffect(() => { try { const sid = new URLSearchParams(window.location.search).get("sign"); if (sid) setSignOpen(sid); } catch (e) {} }, []);
   useEffect(() => { try { const rid = new URLSearchParams(window.location.search).get("rsvp"); if (rid) setRsvpOpen(rid); } catch (e) {} }, []);
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !("setAppBadge" in navigator)) return;
+    try {
+      if (!me) { navigator.clearAppBadge(); return; }
+      const n = (data.commentaires || []).filter((c) => (f(c, "Mentions") || []).includes(me.id) && !String(f(c, "Lu par") || "").includes(me.id)).length
+        + (data.meetings || []).filter((m) => f(m, "Statut") !== "Passée" && !((f(m, "Répondu présent") || []).includes(me.id) || (f(m, "Répondu absent") || []).includes(me.id))).length
+        + (() => { const role = f(me, "Bureau"); const slot = role === "Président" ? "Signature Président" : role === "Secrétaire" ? "Signature Secrétaire" : null; return slot ? (data.meetings || []).filter((m) => f(m, "Validation CR") === "En attente de signature" && !f(m, slot)).length : 0; })();
+      if (n > 0) navigator.setAppBadge(n); else navigator.clearAppBadge();
+    } catch (e) {}
+  }, [me, data]);
 
   const onLogin = async (u) => { setMe(u); await loadData(); setStatus(f(u, "Profil complété") ? "app" : "profile"); };
   const onProfileSaved = async (u) => { setMe(u); await loadData(); setStatus("app"); };
