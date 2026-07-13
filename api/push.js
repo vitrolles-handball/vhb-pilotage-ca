@@ -35,10 +35,10 @@ export default async function handler(req, res) {
 
   let b = req.body;
   if (typeof b === "string") { try { b = JSON.parse(b); } catch (e) { b = {}; } }
-  const { userIds, title, body, url } = b || {};
+  const { userIds, title, body, url, badge } = b || {};
   if (!Array.isArray(userIds) || !userIds.length) { res.status(400).json({ error: "userIds requis" }); return; }
 
-  const payload = JSON.stringify({ title: title || "VHB Pilotage", body: body || "", url: url || "/" });
+  const payload = JSON.stringify(Object.assign({ title: title || "VHB Pilotage", body: body || "", url: url || "/" }, typeof badge === "number" ? { badge } : {}));
   let sent = 0;
   try {
     for (const uid of userIds) {
