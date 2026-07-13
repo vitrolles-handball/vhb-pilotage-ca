@@ -21,6 +21,13 @@ async function saveSubs(recId, list) {
     body: JSON.stringify({ fields: { [FIELD]: JSON.stringify(list) } }),
   });
 }
+async function logNotif(uid, title, body, url) {
+  await fetch("https://api.airtable.com/v0/" + BASE + "/" + encodeURIComponent("Notifications"), {
+    method: "POST",
+    headers: { Authorization: "Bearer " + TOKEN, "Content-Type": "application/json" },
+    body: JSON.stringify({ records: [{ fields: { "Titre": title, "Corps": body, "Lien": url, "Date": new Date().toISOString(), "Destinataire": [uid], "Lu": false } }], typecast: true }),
+  });
+}
 
 export default async function handler(req, res) {
   if (req.method !== "POST") { res.status(405).json({ error: "POST uniquement" }); return; }
@@ -39,9 +46,10 @@ export default async function handler(req, res) {
   if (!Array.isArray(userIds) || !userIds.length) { res.status(400).json({ error: "userIds requis" }); return; }
 
   const payload = JSON.stringify(Object.assign({ title: title || "VHB Pilotage", body: body || "", url: url || "/" }, typeof badge === "number" ? { badge } : {}));
-  let sent = 0;
+  let sent = 0, logged = 0;
   try {
     for (const uid of userIds) {
+      try { await logNotif(uid, title || "VHB Pilotage", body || "", url || "/"); logged++; } catch (e) {}
       const rec = await getUser(uid);
       if (!rec) continue;
       let list = [];
@@ -58,7 +66,7 @@ export default async function handler(req, res) {
       }
       if (keep.length !== list.length) { try { await saveSubs(uid, keep); } catch (e) {} }
     }
-    res.status(200).json({ ok: true, sent });
+    res.status(200).json({ ok: true, sent, logged });
   } catch (e) {
     res.status(500).json({ error: String((e && e.message) || e) });
   }
