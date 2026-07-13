@@ -1552,6 +1552,70 @@ function TaskDetailPage({ taskId, me, data, isAdmin, onClose, reload }) {
   );
 }
 
+/* ===================== NOTIFICATIONS PUSH ===================== */
+const VAPID_PUBLIC_KEY = "BHbKYLu760QFip01ES9vmmrIaxO-8kfKFO1pBYh2lOwMQtOc15suGcnL8Im5hy5qkyrLqnHNgTv9RQ1mcg4s8tw";
+function urlB64ToUint8(base64String) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(base64);
+  const arr = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+  return arr;
+}
+function pushSupported() { return typeof navigator !== "undefined" && "serviceWorker" in navigator && typeof window !== "undefined" && "PushManager" in window && "Notification" in window; }
+function isIOSDevice() { return typeof navigator !== "undefined" && /iphone|ipad|ipod/i.test(navigator.userAgent); }
+function isStandalone() { return (typeof window !== "undefined" && window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || (typeof navigator !== "undefined" && navigator.standalone === true); }
+
+function PushToggle({ me, reload }) {
+  const [state, setState] = useState("checking");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (isIOSDevice() && !isStandalone()) { setState("needsInstall"); return; }
+    if (!pushSupported()) { setState("unsupported"); return; }
+    const perm = Notification.permission;
+    setState(perm === "granted" ? "granted" : perm === "denied" ? "denied" : "prompt");
+  }, []);
+  const saveSub = async (sub) => {
+    let list = [];
+    try { list = JSON.parse(f(me, "Push abonnements") || "[]"); } catch (e) { list = []; }
+    if (!Array.isArray(list)) list = [];
+    const j = sub.toJSON ? sub.toJSON() : sub;
+    if (!list.some((s) => s && s.endpoint === j.endpoint)) list.push(j);
+    await db({ action: "update", table: "Utilisateurs", recordId: me.id, fields: { "Push abonnements": JSON.stringify(list) } });
+  };
+  const activate = async () => {
+    setBusy(true);
+    try {
+      const perm = await Notification.requestPermission();
+      if (perm !== "granted") { setState(perm === "denied" ? "denied" : "prompt"); setBusy(false); return; }
+      const reg = await navigator.serviceWorker.register("/sw.js");
+      await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64ToUint8(VAPID_PUBLIC_KEY) });
+      await saveSub(sub);
+      if (reload) await reload();
+      setState("granted");
+      alert("Notifications activées sur cet appareil ✅");
+    } catch (e) { alert("Impossible d'activer : " + (e && e.message ? e.message : e)); }
+    setBusy(false);
+  };
+  const test = async () => {
+    setBusy(true);
+    try {
+      const r = await fetch("/api/push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userIds: [me.id], title: "VHB Pilotage", body: "Test réussi — les notifications fonctionnent 🎉", url: "/" }) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || ("Erreur " + r.status));
+      alert("Notification test envoyée (" + (j.sent || 0) + "). Elle arrive dans quelques secondes.");
+    } catch (e) { alert("Erreur d'envoi : " + (e && e.message ? e.message : e)); }
+    setBusy(false);
+  };
+  if (state === "checking") return <div style={{ fontSize: 13, color: MUT }}>Vérification…</div>;
+  if (state === "unsupported") return <div style={{ fontSize: 13, color: MUT }}>Cet appareil/navigateur ne gère pas les notifications.</div>;
+  if (state === "needsInstall") return <div style={{ fontSize: 13, color: MUT, lineHeight: 1.5 }}>Sur iPhone : ajoute d'abord l'app à ton écran d'accueil (bouton <b>Partager</b> → « Sur l'écran d'accueil »), rouvre-la depuis l'icône, puis reviens ici pour activer les notifications.</div>;
+  if (state === "denied") return <div style={{ fontSize: 13, color: MUT, lineHeight: 1.5 }}>Notifications bloquées sur cet appareil. Autorise-les dans les réglages (Réglages → l'app → Notifications) puis réessaie.</div>;
+  if (state === "granted") return <div style={{ display: "flex", gap: 9, flexWrap: "wrap", alignItems: "center" }}><span className="chip" style={{ background: "#E4F6E9", color: OK }}><i className="ti ti-bell-check" />Activées sur cet appareil</span><button className="btn btn-ghost" style={{ fontSize: 12.5 }} disabled={busy} onClick={test}><i className="ti ti-send" />Envoyer un test</button></div>;
+  return <button className="btn btn-red" style={{ justifyContent: "center" }} disabled={busy} onClick={activate}><i className="ti ti-bell" />{busy ? "Activation…" : "Activer les notifications"}</button>;
+}
+
 function MonCompte({ me, data, onClose, reload, onLogout, onUsers, onHelp }) {
   const { poles } = data;
   const [prenom, setPrenom] = useState(f(me, "Prénom") || "");
@@ -1592,6 +1656,10 @@ function MonCompte({ me, data, onClose, reload, onLogout, onUsers, onHelp }) {
           <label className="btn btn-ghost" style={{ cursor: "pointer" }}>Changer la photo<input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => e.target.files[0] && resizeImage(e.target.files[0], setPhoto)} /></label>
           {photo && <button className="btn btn-ghost" style={{ fontSize: 12.5, color: RED, borderColor: "#F0C7C3" }} onClick={() => setPhoto("")}>Retirer</button>}
         </div>
+      </div>
+      <div style={{ marginTop: 16, borderTop: "1px solid " + BORDER, paddingTop: 16 }}>
+        <div className="lbl" style={{ marginTop: 0 }}>Notifications sur cet appareil</div>
+        <PushToggle me={me} reload={reload} />
       </div>
       {f(me, "Rôle") === "Admin" && <div style={{ marginTop: 16, borderTop: "1px solid " + BORDER, paddingTop: 16 }}>
         <div className="lbl" style={{ marginTop: 0 }}>Administration</div>
