@@ -1409,6 +1409,11 @@ function NotifsModal({ me, data, onClose, reload, openTask, openSujet, openRSVP,
   </div>;
   const myNotifs = (data.notifs || []).filter((n) => (f(n, "Destinataire") || []).includes(me.id)).sort((a, b) => String(f(b, "Date")).localeCompare(String(f(a, "Date")))).slice(0, 30);
   const readNotif = async (n) => { if (!f(n, "Lu")) { try { await db({ action: "update", table: "Notifications", recordId: n.id, fields: { "Lu": true } }); } catch (e) {} await reload(); } const url = f(n, "Lien"); if (url && url !== "/") { try { window.location.href = url; } catch (e) {} } };
+  useEffect(() => {
+    const unreadIds = (data.notifs || []).filter((n) => (f(n, "Destinataire") || []).includes(me.id) && !f(n, "Lu")).map((n) => n.id);
+    if (!unreadIds.length) return;
+    (async () => { try { for (const id of unreadIds) { await db({ action: "update", table: "Notifications", recordId: id, fields: { "Lu": true } }); } await reload(); } catch (e) {} })();
+  }, []);
   const empty = mentions.length + rsvpPending.length + toSign.length + deadlines.length + helps.length + myNotifs.length === 0;
   const head = (t) => <div className="cond" style={{ fontSize: 11.5, color: MUT, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em", margin: "16px 0 8px" }}>{t}</div>;
   return (
@@ -1609,6 +1614,7 @@ function PushToggle({ me, reload }) {
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || ("Erreur " + r.status));
       alert("Notification test envoyée (" + (j.sent || 0) + "). Elle arrive dans quelques secondes.");
+      if (reload) { try { await reload(); } catch (e) {} }
     } catch (e) { alert("Erreur d'envoi : " + (e && e.message ? e.message : e)); }
     setBusy(false);
   };
