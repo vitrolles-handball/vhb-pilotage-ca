@@ -1407,7 +1407,9 @@ function NotifsModal({ me, data, onClose, reload, openTask, openSujet, openRSVP,
     <div style={{ minWidth: 0, flex: 1 }}><div style={{ fontSize: 13.5, fontWeight: 600, color: TEXT }}>{title}</div>{sub && <div style={{ fontSize: 12, color: MUT, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sub}</div>}</div>
     <i className="ti ti-chevron-right" style={{ color: "#C9CCD2", fontSize: 16 }} aria-hidden="true" />
   </div>;
-  const empty = mentions.length + rsvpPending.length + toSign.length + deadlines.length + helps.length === 0;
+  const myNotifs = (data.notifs || []).filter((n) => (f(n, "Destinataire") || []).includes(me.id)).sort((a, b) => String(f(b, "Date")).localeCompare(String(f(a, "Date")))).slice(0, 30);
+  const readNotif = async (n) => { if (!f(n, "Lu")) { try { await db({ action: "update", table: "Notifications", recordId: n.id, fields: { "Lu": true } }); } catch (e) {} await reload(); } const url = f(n, "Lien"); if (url && url !== "/") { try { window.location.href = url; } catch (e) {} } };
+  const empty = mentions.length + rsvpPending.length + toSign.length + deadlines.length + helps.length + myNotifs.length === 0;
   const head = (t) => <div className="cond" style={{ fontSize: 11.5, color: MUT, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em", margin: "16px 0 8px" }}>{t}</div>;
   return (
     <Modal onClose={onClose}>
@@ -1423,6 +1425,8 @@ function NotifsModal({ me, data, onClose, reload, openTask, openSujet, openRSVP,
       {deadlines.map((t) => { const d = dueInfo(f(t, "Échéance")); return <Row key={t.id} icon="ti-flame" color="#C99700" bg="#FCF3D6" title={f(t, "Titre")} sub={d ? d.label : ""} onClick={() => openTask(t.id)} />; })}
       {helps.length > 0 && head("Coups de main demandés")}
       {helps.map((t) => <Row key={t.id} icon="ti-urgent" color="#DC2626" bg="#FBEDEC" title={f(t, "Titre")} sub={f(t, "Message aide") || "Besoin d'aide"} onClick={() => openTask(t.id)} />)}
+      {myNotifs.length > 0 && head("Récentes")}
+      {myNotifs.map((n) => <Row key={n.id} icon={f(n, "Lu") ? "ti-bell" : "ti-bell-ringing"} color={f(n, "Lu") ? "#9aa0a6" : "#D62828"} bg={f(n, "Lu") ? "#F1F3F5" : "#FBEDEC"} title={f(n, "Titre")} sub={f(n, "Corps")} onClick={() => readNotif(n)} />)}
     </Modal>
   );
 }
@@ -2645,7 +2649,7 @@ export default function App() {
   const [view, setView] = useState("dash");
   const [space, setSpace] = useState("ca");
   const [outilView, setOutilView] = useState("couts");
-  const [data, setData] = useState({ poles: [], users: [], tasks: [], meetings: [], sujets: [], commentaires: [] });
+  const [data, setData] = useState({ poles: [], users: [], tasks: [], meetings: [], sujets: [], commentaires: [], notifs: [] });
   const [modal, setModal] = useState(null);
   const [taskOpen, setTaskOpen] = useState(null);
   const [liveOpen, setLiveOpen] = useState(null);
@@ -2653,15 +2657,16 @@ export default function App() {
   const [rsvpOpen, setRsvpOpen] = useState(null);
 
   const loadData = useCallback(async () => {
-    const [poles, users, tasks, meetings, sujets, commentaires] = await Promise.all([
+    const [poles, users, tasks, meetings, sujets, commentaires, notifs] = await Promise.all([
       db({ action: "list", table: "Pôles" }),
       db({ action: "list", table: "Utilisateurs" }),
       db({ action: "list", table: "Tâches" }),
       db({ action: "list", table: "Réunions" }),
       db({ action: "list", table: "Sujets CA" }),
       db({ action: "list", table: "Commentaires" }),
+      db({ action: "list", table: "Notifications" }),
     ]);
-    setData({ poles: poles.records || [], users: users.records || [], tasks: tasks.records || [], meetings: meetings.records || [], sujets: sujets.records || [], commentaires: commentaires.records || [] });
+    setData({ poles: poles.records || [], users: users.records || [], tasks: tasks.records || [], meetings: meetings.records || [], sujets: sujets.records || [], commentaires: commentaires.records || [], notifs: notifs.records || [] });
   }, []);
 
   useEffect(() => {
@@ -2686,7 +2691,8 @@ export default function App() {
       if (!me) { navigator.clearAppBadge(); return; }
       const n = (data.commentaires || []).filter((c) => (f(c, "Mentions") || []).includes(me.id) && !String(f(c, "Lu par") || "").includes(me.id)).length
         + (data.meetings || []).filter((m) => f(m, "Statut") !== "Passée" && !((f(m, "Répondu présent") || []).includes(me.id) || (f(m, "Répondu absent") || []).includes(me.id))).length
-        + (() => { const role = f(me, "Bureau"); const slot = role === "Président" ? "Signature Président" : role === "Secrétaire" ? "Signature Secrétaire" : null; return slot ? (data.meetings || []).filter((m) => f(m, "Validation CR") === "En attente de signature" && !f(m, slot)).length : 0; })();
+        + (() => { const role = f(me, "Bureau"); const slot = role === "Président" ? "Signature Président" : role === "Secrétaire" ? "Signature Secrétaire" : null; return slot ? (data.meetings || []).filter((m) => f(m, "Validation CR") === "En attente de signature" && !f(m, slot)).length : 0; })()
+        + (data.notifs || []).filter((x) => (f(x, "Destinataire") || []).includes(me.id) && !f(x, "Lu")).length;
       if (n > 0) navigator.setAppBadge(n); else navigator.clearAppBadge();
     } catch (e) {}
   }, [me, data]);
@@ -2708,7 +2714,8 @@ export default function App() {
   const isAdmin = f(me, "Rôle") === "Admin";
   const unread = (data.commentaires || []).filter((c) => (f(c, "Mentions") || []).includes(me.id) && !String(f(c, "Lu par") || "").includes(me.id)).length
     + (data.meetings || []).filter((m) => f(m, "Statut") !== "Passée" && !((f(m, "Répondu présent") || []).includes(me.id) || (f(m, "Répondu absent") || []).includes(me.id))).length
-    + (() => { const role = f(me, "Bureau"); const slot = role === "Président" ? "Signature Président" : role === "Secrétaire" ? "Signature Secrétaire" : null; return slot ? (data.meetings || []).filter((m) => f(m, "Validation CR") === "En attente de signature" && !f(m, slot)).length : 0; })();
+    + (() => { const role = f(me, "Bureau"); const slot = role === "Président" ? "Signature Président" : role === "Secrétaire" ? "Signature Secrétaire" : null; return slot ? (data.meetings || []).filter((m) => f(m, "Validation CR") === "En attente de signature" && !f(m, slot)).length : 0; })()
+    + (data.notifs || []).filter((x) => (f(x, "Destinataire") || []).includes(me.id) && !f(x, "Lu")).length;
   return (
     <div style={{ minHeight: "100vh", backgroundColor: "#F4F5F8", backgroundImage: "radial-gradient(720px circle at 100% -6%, rgba(214,40,40,.06), transparent 58%), radial-gradient(620px circle at -6% 112%, rgba(245,197,24,.07), transparent 58%)", backgroundAttachment: "fixed", color: TEXT, fontFamily: "'Manrope',system-ui,sans-serif" }}>
       <style>{CSS}</style>
