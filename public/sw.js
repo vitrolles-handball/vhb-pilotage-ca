@@ -11,6 +11,9 @@ self.addEventListener("push", (event) => {
     data: { url: data.url || "/" },
   };
   event.waitUntil(self.registration.showNotification(title, options));
+  if (typeof data.badge === "number" && self.navigator && "setAppBadge" in self.navigator) {
+    try { self.navigator.setAppBadge(data.badge); } catch (e) {}
+  }
 });
 
 self.addEventListener("notificationclick", (event) => {
