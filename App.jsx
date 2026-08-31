@@ -81,7 +81,7 @@ function __vhbSetBusy(delta) {
   __vhbBusy = Math.max(0, __vhbBusy + delta);
   if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("vhb-busy", { detail: __vhbBusy }));
 }
-function db(payload) {
+function __vhbEnvoyer(payload) {
   __vhbSetBusy(1);
   return fetch("/api/db", {
     method: "POST",
@@ -92,6 +92,68 @@ function db(payload) {
     if (!r.ok) throw new Error(j.error || ("Erreur " + r.status));
     return j;
   }).finally(() => __vhbSetBusy(-1));
+}
+
+// ---------------------------------------------------------------------------
+// CACHE DES LECTURES — économie du quota d'appels API Airtable.
+//
+// Airtable limite l'offre gratuite à 1000 appels par mois pour tout l'espace de
+// travail. Sans cache, la moindre action de l'appli relisait les 7 tables
+// (≈ 9 appels par clic) et le quota était épuisé en quelques semaines.
+//
+// Règles appliquées ici :
+//  • une lecture ("list") n'est refaite que si son résultat date de plus de TTL ;
+//  • toute écriture (create / update / delete) efface aussitôt le cache de la
+//    table concernée → nos propres modifications restent visibles immédiatement ;
+//  • deux lectures identiques lancées en même temps ne font qu'UN seul appel ;
+//  • revenir sur l'appli (onglet/PWA réaffiché) efface le cache court.
+//
+// Seul décalage possible : une modification faite par QUELQU'UN D'AUTRE peut
+// mettre jusqu'à TTL_COURT (1 min) à apparaître, ou TTL_LONG (15 min) pour les
+// tables de référence (pôles, membres, barèmes) qui ne bougent quasiment jamais.
+// ---------------------------------------------------------------------------
+const TTL_COURT = 60 * 1000;
+const TTL_LONG = 15 * 60 * 1000;
+const TABLES_STABLES = ["Pôles", "Utilisateurs", "Coûts – Sections", "Coûts – Barèmes", "Coûts – Paramètres"];
+const __vhbCache = new Map();    // clé -> { time, table, data }
+const __vhbEnCours = new Map();  // clé -> appel déjà en vol
+
+const __vhbTTL = (table) => (TABLES_STABLES.indexOf(table) >= 0 ? TTL_LONG : TTL_COURT);
+const __vhbCle = (p) => [p.table, p.filterByFormula || "", JSON.stringify(p.sort || "")].join("|");
+const __vhbCopie = (j) => (j && j.records ? { records: j.records.slice() } : j);
+function __vhbOublier(table) {
+  if (!table) { __vhbCache.clear(); return; }
+  __vhbCache.forEach((v, k) => { if (v.table === table) __vhbCache.delete(k); });
+}
+if (typeof document !== "undefined") {
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible") return;
+    __vhbCache.forEach((v, k) => { if (__vhbTTL(v.table) === TTL_COURT) __vhbCache.delete(k); });
+  });
+}
+
+function db(payload) {
+  const p = payload || {};
+  if (p.action !== "list") {
+    // Écriture : on invalide la table avant ET après, pour ne jamais servir
+    // une version périmée à cause d'une lecture arrivée pendant l'écriture.
+    __vhbOublier(p.table);
+    return __vhbEnvoyer(p).then(
+      (j) => { __vhbOublier(p.table); return j; },
+      (e) => { __vhbOublier(p.table); throw e; }
+    );
+  }
+  const cle = __vhbCle(p);
+  const enCache = __vhbCache.get(cle);
+  if (enCache && Date.now() - enCache.time < __vhbTTL(p.table)) return Promise.resolve(__vhbCopie(enCache.data));
+  const dejaEnVol = __vhbEnCours.get(cle);
+  if (dejaEnVol) return dejaEnVol.then(__vhbCopie);
+  const appel = __vhbEnvoyer(p).then(
+    (j) => { __vhbCache.set(cle, { time: Date.now(), table: p.table, data: j }); __vhbEnCours.delete(cle); return j; },
+    (e) => { __vhbEnCours.delete(cle); throw e; }
+  );
+  __vhbEnCours.set(cle, appel);
+  return appel.then(__vhbCopie);
 }
 function BusyOverlay() {
   const [n, setN] = useState(0);
@@ -113,6 +175,14 @@ function BusyOverlay() {
 const esc = (s) => String(s || "").replace(/'/g, "\\'");
 const f = (rec, name) => (rec && rec.fields ? rec.fields[name] : undefined);
 const initials = (u) => ((f(u, "Prénom") || "")[0] || "") + ((f(u, "Nom") || "")[0] || (f(u, "Email") || "?")[0] || "");
+// Retrouve un membre par son email SANS appel dédié : on lit la table
+// Utilisateurs complète (petite, et de toute façon chargée par loadData), donc
+// le cache mutualise cette lecture au lieu de consommer un appel de plus.
+async function trouverMembre(mail) {
+  const j = await db({ action: "list", table: "Utilisateurs" });
+  const m = String(mail || "").trim().toLowerCase();
+  return (j.records || []).find((u) => String(f(u, "Email") || "").trim().toLowerCase() === m) || null;
+}
 const fullName = (u) => [f(u, "Prénom"), f(u, "Nom")].filter(Boolean).join(" ") || f(u, "Email") || "?";
 // Arc-en-ciel des couleurs de pôles (le président chapeaute tous les pôles).
 const RAINBOW_V = "linear-gradient(180deg,#DC2626,#EA580C,#059669,#2563EB,#7C3AED,#DB2777)";
@@ -2680,8 +2750,7 @@ export default function App() {
       const mail = localStorage.getItem("vhb_email");
       if (!mail) { setStatus("login"); return; }
       try {
-        const j = await db({ action: "list", table: "Utilisateurs", filterByFormula: "LOWER({Email})='" + esc(mail) + "'" });
-        const u = (j.records || [])[0];
+        const u = await trouverMembre(mail);
         if (!u || f(u, "Actif") === false) { localStorage.removeItem("vhb_email"); setStatus("login"); return; }
         setMe(u);
         await loadData();
@@ -2708,8 +2777,7 @@ export default function App() {
   const logout = () => { if (!confirm("Se déconnecter ?")) return; localStorage.removeItem("vhb_email"); setMe(null); setStatus("login"); };
   const refreshMe = useCallback(async () => {
     const mail = localStorage.getItem("vhb_email"); if (!mail) return;
-    const j = await db({ action: "list", table: "Utilisateurs", filterByFormula: "LOWER({Email})='" + esc(mail) + "'" });
-    const u = (j.records || [])[0]; if (u) setMe(u);
+    const u = await trouverMembre(mail); if (u) setMe(u);
   }, []);
   const reload = useCallback(async () => { await loadData(); await refreshMe(); }, [loadData, refreshMe]);
 
