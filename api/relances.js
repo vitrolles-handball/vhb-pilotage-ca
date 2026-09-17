@@ -10,6 +10,7 @@ const APP = process.env.APP_URL || "https://vhb-pilotage-ca.vercel.app";
 
 const T_REUNIONS = "tbl0i3NT6K1SjZHmz";
 const T_UTILISATEURS = "tblyXO6nxbMSl2Qh5";
+const T_REGLAGES = "tblpH4TRohqkOZJvx";
 
 async function at(path) {
   let all = [], offset;
@@ -52,7 +53,32 @@ export default async function handler(req, res) {
     const reunions = await at(T_REUNIONS);
     const users = await at(T_UTILISATEURS);
     const actifs = users.filter((u) => u.fields["Actif"] !== false && u.fields["Email"]);
-    let sign = 0, rsvp = 0;
+
+    // Délai d'envoi des invitations, réglé dans l'appli (Réunions > Planificateur).
+    let joursAvant = 10;
+    try {
+      const regl = await at(T_REGLAGES);
+      const r = regl.find((x) => x.fields["Clé"] === "planificateur");
+      if (r && r.fields["Valeur"]) { const v = JSON.parse(r.fields["Valeur"]); if (Number(v.inviterJoursAvant) > 0) joursAvant = Number(v.inviterJoursAvant); }
+    } catch (e) {}
+    const dansNjours = (d) => (new Date(String(d) + "T00:00:00").getTime() - Date.now()) / 86400000;
+
+    let sign = 0, rsvp = 0, invit = 0;
+
+    // 0) Invitation initiale, envoyée une seule fois, à l'approche de la réunion.
+    // Les CA créés par le planificateur sont silencieux jusqu'à ce moment-là :
+    // c'est ce qui évite d'envoyer toute la saison de mails en une fois.
+    for (const m of reunions) {
+      if (m.fields["Statut"] === "Passée" || m.fields["Invitation envoyée"] || !m.fields["Date"]) continue;
+      const j = dansNjours(m.fields["Date"]);
+      if (j > joursAvant || j < 0) continue;
+      const titre = m.fields["Titre"] || "Réunion du CA";
+      for (const u of actifs) {
+        const html = wrap("Un CA est programmé", '<p>Bonjour ' + (u.fields["Prénom"] || "") + ',</p><p>Une réunion du CA est prévue le <b>' + frDate(m.fields["Date"]) + '</b>' + (m.fields["Heure"] ? ' à <b>' + m.fields["Heure"] + '</b>' : '') + (m.fields["Lieu"] ? ' · ' + m.fields["Lieu"] : '') + '.</p><p>Merci d\'indiquer si tu seras présent :</p><p style="margin-top:14px">' + btn(APP + "/?rsvp=" + m.id + "&r=present", "Je serai présent", "#2E8B57") + btn(APP + "/?rsvp=" + m.id + "&r=absent", "Je serai absent", "#D62828") + '</p>');
+        try { await sendMail(u.fields["Email"], "CA du " + frDate(m.fields["Date"]) + " — " + titre, html); invit++; } catch (e) {}
+      }
+      try { await patch(T_REUNIONS, m.id, { "Invitation envoyée": true }); } catch (e) {}
+    }
 
     // 1) Signatures manquantes
     for (const m of reunions) {
@@ -69,7 +95,12 @@ export default async function handler(req, res) {
 
     // 2) Réponses de présence manquantes (réunions à venir)
     for (const m of reunions) {
-      if (m.fields["Statut"] === "Passée") continue;
+      if (m.fields["Statut"] === "Passée" || !m.fields["Date"]) continue;
+      // Uniquement dans les 3 derniers jours, et seulement si l'invitation est partie.
+      // Sans cette borne, chaque réunion de la saison générait un rappel PAR JOUR.
+      if (!m.fields["Invitation envoyée"]) continue;
+      const jr = dansNjours(m.fields["Date"]);
+      if (jr > 3 || jr < 0) continue;
       const titre = m.fields["Titre"] || "Réunion du CA";
       const rep = [].concat(m.fields["Répondu présent"] || [], m.fields["Répondu absent"] || []);
       for (const u of actifs) {
@@ -94,7 +125,7 @@ export default async function handler(req, res) {
       try { await patch(T_REUNIONS, m.id, { "Relance ODJ envoyée": true }); } catch (e) {}
     }
 
-    res.status(200).json({ ok: true, signatures_relancees: sign, presences_relancees: rsvp, odj_relances: odj });
+    res.status(200).json({ ok: true, invitations_envoyees: invit, signatures_relancees: sign, presences_relancees: rsvp, odj_relances: odj });
   } catch (e) {
     res.status(500).json({ error: String((e && e.message) || e) });
   }
