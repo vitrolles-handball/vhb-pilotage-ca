@@ -1167,7 +1167,308 @@ function SujetsView({ me, data, isAdmin, reload, openNewSujet, openSujet }) {
     </div>
   );
 }
-function ReunionsView({ me, data, isAdmin, reload, openNewMeeting, openMeeting, openLive, openCR }) {
+// ===========================================================================
+// PLANIFICATEUR DE RÉUNIONS
+// Règle de récurrence entièrement paramétrable : « le [dernier] [vendredi] de
+// chaque [1] mois, à 18h30 ». L'appli calcule les dates de toute la saison,
+// décale celles qui tombent pendant les vacances scolaires, et crée les CA.
+// Les réglages sont stockés dans la table Airtable « Réglages » (clé JSON) :
+// ils sont lus uniquement à l'ouverture de cet écran, pour ne pas consommer
+// d'appel API au démarrage de l'appli.
+// ===========================================================================
+const T_REGL = "Réglages";
+const PLANIF_CLE = "planificateur";
+const JOURS_SEM = [["1", "lundi"], ["2", "mardi"], ["3", "mercredi"], ["4", "jeudi"], ["5", "vendredi"], ["6", "samedi"], ["7", "dimanche"]];
+const RANGS_SEM = [["1", "1er"], ["2", "2e"], ["3", "3e"], ["4", "4e"], ["dernier", "dernier"]];
+
+// Vacances scolaires de la zone B (académie d'Aix-Marseille), année 2026-2027.
+// À mettre à jour chaque saison — c'est modifiable directement dans l'écran.
+const VACANCES_DEFAUT = [
+  { nom: "Toussaint", du: "2026-10-17", au: "2026-11-01" },
+  { nom: "Noël", du: "2026-12-19", au: "2027-01-03" },
+  { nom: "Hiver", du: "2027-02-20", au: "2027-03-07" },
+  { nom: "Printemps", du: "2027-04-17", au: "2027-05-02" },
+  { nom: "Été", du: "2027-07-03", au: "2027-08-31" },
+];
+const PLANIF_DEFAUT = {
+  rang: "dernier", jour: "5", tousLesNMois: 1,
+  heure: "18:30", lieu: "Bureau Club",
+  titreAuto: true, titreFixe: "Réunion du CA",
+  eviterVacances: true, sensDecalage: "avant",
+  vacances: VACANCES_DEFAUT,
+  inviterJoursAvant: 10,
+};
+
+const ymd = (d) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+function dateLocale(s) { const p = String(s || "").slice(0, 10).split("-"); return p.length === 3 && p[0] ? new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2])) : null; }
+const capi = (s) => (s ? String(s).charAt(0).toUpperCase() + String(s).slice(1) : "");
+function dateLongue(s) { const d = dateLocale(s); return d ? capi(d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })) : ""; }
+function moisLong(y, m0) { return new Date(y, m0, 1).toLocaleDateString("fr-FR", { month: "long", year: "numeric" }); }
+// (la majuscule initiale est appliquée à l'affichage par capi)
+function joursAvant(s) { const d = dateLocale(s); if (!d) return null; const t = new Date(); t.setHours(0, 0, 0, 0); return Math.round((d.getTime() - t.getTime()) / 86400000); }
+function labelJours(n) { return n == null ? "" : n < 0 ? "Passée" : n === 0 ? "Aujourd'hui" : n === 1 ? "Demain" : "Dans " + n + " jours"; }
+
+// n-ième jour de la semaine dans un mois. jour : 1 = lundi … 7 = dimanche.
+function jourDuMois(y, m0, rang, jour) {
+  const cible = Number(jour) % 7; // 1 = lundi … 0 = dimanche, comme Date.getDay()
+  if (rang === "dernier") {
+    const d = new Date(y, m0 + 1, 0);
+    d.setDate(d.getDate() - ((d.getDay() - cible + 7) % 7));
+    return d;
+  }
+  const d = new Date(y, m0, 1);
+  d.setDate(1 + ((cible - d.getDay() + 7) % 7) + (Number(rang) - 1) * 7);
+  return d.getMonth() === m0 ? d : null; // ex. un 5e vendredi qui n'existe pas
+}
+function vacanceDe(dateStr, vacances) { return (vacances || []).find((v) => v && v.du && v.au && dateStr >= v.du && dateStr <= v.au) || null; }
+
+// Calcule toutes les dates de la règle entre deux mois (format "AAAA-MM").
+function genererDates(cfg, moisDebut, moisFin) {
+  const a = String(moisDebut || "").split("-"), b = String(moisFin || "").split("-");
+  if (a.length !== 2 || b.length !== 2) return [];
+  const pas = Math.max(1, Number(cfg.tousLesNMois) || 1);
+  const finRang = Number(b[0]) * 12 + (Number(b[1]) - 1);
+  const out = [];
+  let y = Number(a[0]), m0 = Number(a[1]) - 1, garde = 0;
+  while (y * 12 + m0 <= finRang && garde++ < 120) {
+    const d = jourDuMois(y, m0, cfg.rang, cfg.jour);
+    if (d) {
+      const initiale = ymd(d);
+      let date = initiale, vac = null;
+      if (cfg.eviterVacances) {
+        const pasJ = cfg.sensDecalage === "apres" ? 7 : -7;
+        let v = vacanceDe(date, cfg.vacances), essais = 0;
+        if (v) vac = v.nom;
+        while (v && essais++ < 5) { const nd = dateLocale(date); nd.setDate(nd.getDate() + pasJ); date = ymd(nd); v = vacanceDe(date, cfg.vacances); }
+      }
+      out.push({ date, initiale, vacance: vac });
+    }
+    m0 += pas; while (m0 > 11) { m0 -= 12; y++; }
+  }
+  return out;
+}
+function titreCA(cfg, dateStr) {
+  if (!cfg.titreAuto) return (cfg.titreFixe || "Réunion du CA").trim() || "Réunion du CA";
+  const d = dateLocale(dateStr);
+  return d ? "CA de " + d.toLocaleDateString("fr-FR", { month: "long", year: "numeric" }) : "Réunion du CA";
+}
+// Liste de mois sélectionnables : de 2 mois en arrière à 24 mois en avant.
+function moisOptions() {
+  const out = []; const n = new Date();
+  for (let i = -2; i <= 24; i++) { const d = new Date(n.getFullYear(), n.getMonth() + i, 1); out.push([d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"), moisLong(d.getFullYear(), d.getMonth())]); }
+  return out;
+}
+
+// Bandeau « Prochaine réunion » affiché en haut de l'écran Réunions.
+function ProchaineReunion({ m, me, data, onOpen, reload }) {
+  const [busy, setBusy] = useState(false);
+  if (!m) return null;
+  const date = f(m, "Date"), heure = f(m, "Heure"), lieu = f(m, "Lieu");
+  const n = joursAvant(date);
+  const rPres = f(m, "Répondu présent") || [], rAbs = f(m, "Répondu absent") || [];
+  const mien = rPres.includes(me.id) ? "present" : rAbs.includes(me.id) ? "absent" : null;
+  const nbSujets = (data.sujets || []).filter((s) => (f(s, "Réunion") || []).includes(m.id)).length;
+  const rsvp = async (r) => {
+    setBusy(true);
+    try {
+      await db({ action: "update", table: "Réunions", recordId: m.id, fields: {
+        "Répondu présent": r === "present" ? Array.from(new Set([...rPres, me.id])) : rPres.filter((id) => id !== me.id),
+        "Répondu absent": r === "absent" ? Array.from(new Set([...rAbs, me.id])) : rAbs.filter((id) => id !== me.id),
+      } });
+      await reload();
+    } catch (e) { alert("Erreur : " + e.message); }
+    setBusy(false);
+  };
+  const pill = (r, label, icon, on) => <button className="btn" disabled={busy} onClick={() => rsvp(r)} style={{ background: on ? (r === "present" ? OK : RED) : "rgba(255,255,255,.14)", color: "#fff", border: "1px solid " + (on ? "transparent" : "rgba(255,255,255,.3)"), fontWeight: 700 }}><i className={"ti " + icon} />{label}</button>;
+  return (
+    <div className="card rise" style={{ marginBottom: 20, padding: 0, overflow: "hidden", background: "linear-gradient(120deg,#16171B 0%,#2A1512 55%,#8E1F1F 100%)", border: "none" }}>
+      <div style={{ padding: "20px 24px", display: "flex", gap: 20, flexWrap: "wrap", alignItems: "center" }}>
+        <div style={{ minWidth: 200, flex: 1 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7 }}>
+            <i className="ti ti-calendar-star" style={{ color: YELLOW, fontSize: 16 }} aria-hidden="true" />
+            <span style={{ fontSize: 11, fontWeight: 800, color: YELLOW, letterSpacing: ".08em" }}>PROCHAINE RÉUNION</span>
+            {n != null && <span className="chip" style={{ background: "rgba(255,255,255,.16)", color: "#fff", fontWeight: 700 }}>{labelJours(n)}</span>}
+          </div>
+          <div className="display" style={{ fontSize: 21, color: "#FBF6EF", lineHeight: 1.2 }}>{f(m, "Titre") || "Réunion du CA"}</div>
+          <div style={{ fontSize: 13.5, color: "rgba(255,255,255,.8)", marginTop: 6 }}>
+            {dateLongue(date)}{heure ? " · " + heure : ""}{lieu ? " · " + lieu : ""}
+          </div>
+          <div style={{ fontSize: 12.5, color: "rgba(255,255,255,.62)", marginTop: 4 }}>
+            {nbSujets === 0 ? "Aucun sujet à l'ordre du jour pour l'instant" : nbSujets + " sujet" + (nbSujets > 1 ? "s" : "") + " à l'ordre du jour"} · {rPres.length} présent{rPres.length > 1 ? "s" : ""}, {rAbs.length} absent{rAbs.length > 1 ? "s" : ""}
+          </div>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 9, alignItems: "stretch" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,.55)", letterSpacing: ".05em" }}>{mien ? "TA RÉPONSE" : "SERAS-TU LÀ ?"}</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            {pill("present", "Présent", "ti-check", mien === "present")}
+            {pill("absent", "Absent", "ti-x", mien === "absent")}
+          </div>
+          <button className="btn" onClick={() => onOpen(m.id)} style={{ background: "#fff", color: BLACK, fontWeight: 700, justifyContent: "center" }}><i className="ti ti-arrow-right" />Préparer ce CA</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PlanificateurCA({ data, onClose, reload }) {
+  const [cfg, setCfg] = useState(PLANIF_DEFAUT);
+  const [recId, setRecId] = useState(null);
+  const [pret, setPret] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const mois = useMemo(() => moisOptions(), []);
+  const auj = new Date();
+  const [debut, setDebut] = useState(auj.getFullYear() + "-" + String(auj.getMonth() + 1).padStart(2, "0"));
+  const [fin, setFin] = useState((auj.getMonth() >= 6 ? auj.getFullYear() + 1 : auj.getFullYear()) + "-06");
+  const [exclues, setExclues] = useState({});
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const j = await db({ action: "list", table: T_REGL });
+        const rec = (j.records || []).find((r) => f(r, "Clé") === PLANIF_CLE);
+        if (rec) { setRecId(rec.id); try { const v = JSON.parse(f(rec, "Valeur") || "{}"); setCfg({ ...PLANIF_DEFAUT, ...v, vacances: (v.vacances && v.vacances.length ? v.vacances : VACANCES_DEFAUT) }); } catch (e) {} }
+      } catch (e) { setMsg("Impossible de lire les réglages : " + e.message); }
+      setPret(true);
+    })();
+  }, []);
+
+  const set = (k, v) => setCfg((c) => ({ ...c, [k]: v }));
+  const setVac = (i, k, v) => setCfg((c) => ({ ...c, vacances: c.vacances.map((x, j) => (j === i ? { ...x, [k]: v } : x)) }));
+  const addVac = () => setCfg((c) => ({ ...c, vacances: [...c.vacances, { nom: "", du: "", au: "" }] }));
+  const delVac = (i) => setCfg((c) => ({ ...c, vacances: c.vacances.filter((_, j) => j !== i) }));
+
+  const dejaPrises = useMemo(() => new Set((data.meetings || []).map((m) => String(f(m, "Date") || "").slice(0, 10))), [data.meetings]);
+  const apercu = useMemo(() => genererDates(cfg, debut, fin), [cfg, debut, fin]);
+  const aCreer = apercu.filter((x) => !dejaPrises.has(x.date) && !exclues[x.date]);
+
+  const enregistrer = async () => {
+    const fields = { "Clé": PLANIF_CLE, "Valeur": JSON.stringify(cfg) };
+    if (recId) await db({ action: "update", table: T_REGL, recordId: recId, fields });
+    else { const j = await db({ action: "create", table: T_REGL, fields }); const r = (j.records || [])[0]; if (r) setRecId(r.id); }
+  };
+  const enregistrerSeul = async () => { setBusy(true); setMsg(""); try { await enregistrer(); setMsg("Réglages enregistrés."); } catch (e) { setMsg("Erreur : " + e.message); } setBusy(false); };
+
+  const generer = async () => {
+    if (!aCreer.length) return;
+    if (!confirm("Créer " + aCreer.length + " réunion" + (aCreer.length > 1 ? "s" : "") + " ?\n\nAucun mail ne part maintenant : l'invitation présent/absent est envoyée automatiquement " + (Number(cfg.inviterJoursAvant) || 10) + " jours avant chaque CA.")) return;
+    setBusy(true); setMsg("");
+    try {
+      await enregistrer();
+      const crees = [];
+      for (const x of aCreer) {
+        const j = await db({ action: "create", table: "Réunions", fields: { "Titre": titreCA(cfg, x.date), "Date": x.date, "Heure": (cfg.heure || "").trim(), "Lieu": (cfg.lieu || "").trim(), "Statut": "À venir" } });
+        const r = (j.records || [])[0]; if (r) crees.push({ id: r.id, date: x.date });
+      }
+      // Les sujets en attente rejoignent le premier CA créé, comme à la création manuelle.
+      const premier = crees.sort((a, b) => a.date.localeCompare(b.date))[0];
+      if (premier) {
+        for (const sj of (data.sujets || []).filter((x) => f(x, "À l'ordre du prochain CA"))) {
+          try { await db({ action: "update", table: "Sujets CA", recordId: sj.id, fields: { "Réunion": Array.from(new Set([...(f(sj, "Réunion") || []), premier.id])), "Statut": "En cours", "À l'ordre du prochain CA": false } }); } catch (e) {}
+        }
+      }
+      await reload();
+      setMsg(crees.length + " réunion" + (crees.length > 1 ? "s créées" : " créée") + " ✓");
+    } catch (e) { setMsg("Erreur : " + e.message); }
+    setBusy(false);
+  };
+
+  const titreSection = (t, s) => <div style={{ marginTop: 24, marginBottom: 10 }}><div style={{ fontSize: 13, fontWeight: 800, color: TEXT, letterSpacing: ".02em" }}>{t}</div>{s && <div style={{ fontSize: 12, color: MUT, marginTop: 3 }}>{s}</div>}</div>;
+
+  return (
+    <Modal onClose={onClose} wide>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+        <span style={{ width: 30, height: 30, borderRadius: 9, background: RED, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}><i className="ti ti-calendar-repeat" style={{ fontSize: 17 }} aria-hidden="true" /></span>
+        <div style={{ fontSize: 18, fontWeight: 700 }}>Planificateur de réunions</div>
+      </div>
+      <div style={{ fontSize: 12.5, color: MUT, marginBottom: 4 }}>Définis une fois la règle de récurrence du CA, l'appli crée les réunions de toute la saison.</div>
+
+      {!pret && <div style={{ color: MUT, fontSize: 13, padding: "18px 0" }}>Chargement des réglages…</div>}
+      {pret && <>
+        {titreSection("La règle", "Elle se lit comme une phrase.")}
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, background: "#F7F8FA", border: "1px solid " + BORDER, borderRadius: 12, padding: "14px 16px", fontSize: 14 }}>
+          <span>Le</span>
+          <select className="sel" style={{ width: "auto" }} value={cfg.rang} onChange={(e) => set("rang", e.target.value)}>{RANGS_SEM.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
+          <select className="sel" style={{ width: "auto" }} value={cfg.jour} onChange={(e) => set("jour", e.target.value)}>{JOURS_SEM.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
+          <span>de chaque</span>
+          <select className="sel" style={{ width: "auto" }} value={String(cfg.tousLesNMois)} onChange={(e) => set("tousLesNMois", Number(e.target.value))}>
+            <option value="1">mois</option><option value="2">2 mois</option><option value="3">trimestre</option><option value="6">semestre</option>
+          </select>
+          <span>à</span>
+          <input className="inp" style={{ width: 120 }} type="time" value={cfg.heure} onChange={(e) => set("heure", e.target.value)} />
+          <span>·</span>
+          <span>lieu</span>
+          <input className="inp" style={{ width: 180 }} placeholder="Bureau Club" value={cfg.lieu} onChange={(e) => set("lieu", e.target.value)} />
+        </div>
+
+        {titreSection("Titre des réunions")}
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 14 }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 13.5, cursor: "pointer" }}><input type="checkbox" checked={!!cfg.titreAuto} onChange={(e) => set("titreAuto", e.target.checked)} />Titre automatique daté <span style={{ color: MUT }}>(« CA de septembre 2026 »)</span></label>
+          {!cfg.titreAuto && <input className="inp" style={{ width: 240 }} value={cfg.titreFixe} onChange={(e) => set("titreFixe", e.target.value)} />}
+        </div>
+
+        {titreSection("Vacances scolaires", "Une date qui tombe dans l'une de ces périodes est décalée d'une semaine. Zone B (Aix-Marseille) pré-remplie pour 2026-2027 — à actualiser chaque saison.")}
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 14, marginBottom: 10 }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 13.5, cursor: "pointer" }}><input type="checkbox" checked={!!cfg.eviterVacances} onChange={(e) => set("eviterVacances", e.target.checked)} />Éviter les vacances</label>
+          {cfg.eviterVacances && <select className="sel" style={{ width: "auto" }} value={cfg.sensDecalage} onChange={(e) => set("sensDecalage", e.target.value)}>
+            <option value="avant">décaler à la semaine précédente</option><option value="apres">décaler à la semaine suivante</option>
+          </select>}
+        </div>
+        {cfg.eviterVacances && <>
+          {(cfg.vacances || []).map((v, i) => <div key={i} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 7, flexWrap: "wrap" }}>
+            <input className="inp" style={{ width: 150 }} placeholder="Nom" value={v.nom || ""} onChange={(e) => setVac(i, "nom", e.target.value)} />
+            <span style={{ fontSize: 12.5, color: MUT }}>du</span>
+            <input className="inp" style={{ width: 160 }} type="date" value={v.du || ""} onChange={(e) => setVac(i, "du", e.target.value)} />
+            <span style={{ fontSize: 12.5, color: MUT }}>au</span>
+            <input className="inp" style={{ width: 160 }} type="date" value={v.au || ""} onChange={(e) => setVac(i, "au", e.target.value)} />
+            <button className="btn btn-ghost" onClick={() => delVac(i)} title="Supprimer"><i className="ti ti-trash" /></button>
+          </div>)}
+          <button className="btn btn-ghost" onClick={addVac}><i className="ti ti-plus" />Ajouter une période</button>
+        </>}
+
+        {titreSection("Invitations par mail")}
+        <div style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 13.5, flexWrap: "wrap" }}>
+          <span>Envoyer l'invitation présent/absent</span>
+          <input className="inp" style={{ width: 80 }} type="number" min="1" max="60" value={cfg.inviterJoursAvant} onChange={(e) => set("inviterJoursAvant", Number(e.target.value))} />
+          <span>jours avant chaque réunion.</span>
+        </div>
+        <div style={{ fontSize: 12, color: MUT, marginTop: 5 }}>L'envoi est fait par la relance automatique quotidienne. Aucun mail ne part au moment de la création des réunions.</div>
+
+        {titreSection("Période à générer")}
+        <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap", fontSize: 13.5 }}>
+          <span>De</span>
+          <select className="sel" style={{ width: "auto" }} value={debut} onChange={(e) => setDebut(e.target.value)}>{mois.map(([v, l]) => <option key={v} value={v}>{capi(l)}</option>)}</select>
+          <span>à</span>
+          <select className="sel" style={{ width: "auto" }} value={fin} onChange={(e) => setFin(e.target.value)}>{mois.map(([v, l]) => <option key={v} value={v}>{capi(l)}</option>)}</select>
+        </div>
+
+        {titreSection("Aperçu", "Décoche une date pour ne pas la créer. Une réunion déjà programmée à cette date n'est jamais dupliquée.")}
+        {apercu.length === 0 && <Empty t="Aucune date ne correspond à cette règle sur la période choisie." />}
+        {apercu.map((x) => {
+          const deja = dejaPrises.has(x.date);
+          const off = deja || !!exclues[x.date];
+          return <div key={x.date} style={{ display: "flex", alignItems: "center", gap: 11, padding: "9px 12px", border: "1px solid " + BORDER, borderRadius: 10, marginBottom: 7, background: deja ? "#F7F8FA" : "#fff", opacity: off ? 0.62 : 1 }}>
+            <input type="checkbox" disabled={deja} checked={!off} onChange={(e) => setExclues((s) => ({ ...s, [x.date]: !e.target.checked }))} />
+            <span style={{ fontSize: 13.5, fontWeight: 600, color: TEXT, minWidth: 210 }}>{dateLongue(x.date)}</span>
+            <span style={{ fontSize: 12.5, color: MUT }}>{cfg.heure}{cfg.lieu ? " · " + cfg.lieu : ""}</span>
+            {x.vacance && <span className="chip" style={{ background: "#FFF3D6", color: "#7A5C1E" }}><i className="ti ti-beach" style={{ marginRight: 4 }} />décalée ({x.vacance})</span>}
+            {deja && <span className="chip" style={{ background: "#E7F3EC", color: OK }}><i className="ti ti-check" style={{ marginRight: 4 }} />déjà programmée</span>}
+            <span style={{ marginLeft: "auto", fontSize: 12, color: MUT }}>{titreCA(cfg, x.date)}</span>
+          </div>;
+        })}
+
+        {msg && <div style={{ marginTop: 14, fontSize: 13, fontWeight: 600, color: msg.indexOf("Erreur") === 0 ? RED : OK }}>{msg}</div>}
+        <div style={{ display: "flex", gap: 9, marginTop: 20, flexWrap: "wrap" }}>
+          <button className="btn btn-ghost" style={{ flex: 1, justifyContent: "center" }} onClick={onClose}>Fermer</button>
+          <button className="btn btn-ghost" style={{ flex: 1, justifyContent: "center" }} disabled={busy} onClick={enregistrerSeul}><i className="ti ti-device-floppy" />Enregistrer la règle</button>
+          <button className="btn btn-red" style={{ flex: 2, justifyContent: "center" }} disabled={busy || !aCreer.length} onClick={generer}>{busy ? "…" : "Créer " + aCreer.length + " réunion" + (aCreer.length > 1 ? "s" : "")}</button>
+        </div>
+      </>}
+    </Modal>
+  );
+}
+
+function ReunionsView({ me, data, isAdmin, reload, openNewMeeting, openPlanif, openMeeting, openLive, openCR }) {
   const { sujets, meetings } = data;
   const aVenir = meetings.filter((m) => f(m, "Statut") !== "Passée").sort((a, b) => String(f(a, "Date")).localeCompare(String(f(b, "Date"))));
   const passees = meetings.filter((m) => f(m, "Statut") === "Passée").sort((a, b) => String(f(b, "Date")).localeCompare(String(f(a, "Date"))));
@@ -1190,8 +1491,10 @@ function ReunionsView({ me, data, isAdmin, reload, openNewMeeting, openMeeting, 
     <div className="fade">
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
         <div className="display" style={{ fontSize: 22, color: TEXT, marginRight: "auto" }}>Réunions du CA</div>
+        {isAdmin && <button className="btn btn-ghost" onClick={openPlanif} title="Créer les CA de toute la saison à partir d'une règle de récurrence"><i className="ti ti-calendar-repeat" />Planificateur</button>}
         {isAdmin && <button className="btn btn-red" onClick={openNewMeeting}><i className="ti ti-calendar-plus" />Planifier un CA</button>}
       </div>
+      <ProchaineReunion m={aVenir[0]} me={me} data={data} onOpen={openMeeting} reload={reload} />
       {aVenir.length === 0 && passees.length === 0 && <Empty t="Aucune réunion programmée." />}
       {aVenir.length > 0 && <div style={{ display: "flex", alignItems: "center", gap: 9, margin: "8px 0 12px" }}><span style={{ width: 26, height: 26, borderRadius: 8, background: RED, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}><i className="ti ti-calendar-up" style={{ fontSize: 15 }} aria-hidden="true" /></span><span style={{ fontSize: 14, fontWeight: 800, color: TEXT, letterSpacing: ".03em" }}>À VENIR</span><div style={{ flex: 1, height: 1, background: BORDER }} /></div>}
       {aVenir.map((m) => <MeetingRow key={m.id} m={m} sujets={sujets} onClick={() => openMeeting(m.id)} onStart={openLive} />)}
@@ -1282,15 +1585,18 @@ function NewMeeting({ onClose, reload, data }) {
   const [date, setDate] = useState("");
   const [heure, setHeure] = useState("");
   const [lieu, setLieu] = useState("");
+  const [prevenir, setPrevenir] = useState(true);
   const [busy, setBusy] = useState(false);
   const save = async () => {
     if (!date) return; setBusy(true);
     try {
-      const jr = await db({ action: "create", table: "Réunions", fields: { "Titre": titre.trim() || "Réunion du CA", "Date": date, "Heure": heure.trim(), "Lieu": lieu.trim(), "Statut": "À venir" } });
+      // « Invitation envoyée » évite que la relance automatique renvoie l'invitation
+      // quelques jours avant le CA alors qu'elle vient de partir à la création.
+      const jr = await db({ action: "create", table: "Réunions", fields: { "Titre": titre.trim() || "Réunion du CA", "Date": date, "Heure": heure.trim(), "Lieu": lieu.trim(), "Statut": "À venir", "Invitation envoyée": !!prevenir } });
       const recId = ((jr.records || [])[0] || {}).id;
       if (recId) { for (const sj of ((data && data.sujets) || []).filter((x) => f(x, "À l'ordre du prochain CA"))) { try { await db({ action: "update", table: "Sujets CA", recordId: sj.id, fields: { "Réunion": Array.from(new Set([...(f(sj, "Réunion") || []), recId])), "Statut": "En cours", "À l'ordre du prochain CA": false } }); } catch (e) {} } }
       await reload();
-      ((data && data.users) || []).filter((u) => f(u, "Actif") !== false && f(u, "Email")).forEach((u) => sendMail({ to: f(u, "Email"), subject: "Nouveau CA programmé — VHB Pilotage", html: mailWrap("Un CA est programmé", '<p style="color:#444;line-height:1.55">Une réunion du CA est prévue le <b>' + escapeHtml(fmtDate(date)) + (heure.trim() ? " à " + escapeHtml(heure.trim()) : "") + "</b>" + (lieu.trim() ? " · " + escapeHtml(lieu.trim()) : "") + '.</p><p style="color:#444;line-height:1.55">Merci de répondre à l\'invitation :</p><div style="text-align:center;margin:14px 0"><a href="' + APP_URL + '/?rsvp=' + recId + '&r=present" style="background:#2E8B57;color:#fff;text-decoration:none;padding:11px 18px;border-radius:10px;font-weight:700;display:inline-block;margin:4px">Je serai présent</a> <a href="' + APP_URL + '/?rsvp=' + recId + '&r=absent" style="background:#D62828;color:#fff;text-decoration:none;padding:11px 18px;border-radius:10px;font-weight:700;display:inline-block;margin:4px">Je serai absent</a></div>', { url: APP_URL, label: "Préparer le CA" }) }).catch(() => {}));
+      if (prevenir) ((data && data.users) || []).filter((u) => f(u, "Actif") !== false && f(u, "Email")).forEach((u) => sendMail({ to: f(u, "Email"), subject: "Nouveau CA programmé — VHB Pilotage", html: mailWrap("Un CA est programmé", '<p style="color:#444;line-height:1.55">Une réunion du CA est prévue le <b>' + escapeHtml(fmtDate(date)) + (heure.trim() ? " à " + escapeHtml(heure.trim()) : "") + "</b>" + (lieu.trim() ? " · " + escapeHtml(lieu.trim()) : "") + '.</p><p style="color:#444;line-height:1.55">Merci de répondre à l\'invitation :</p><div style="text-align:center;margin:14px 0"><a href="' + APP_URL + '/?rsvp=' + recId + '&r=present" style="background:#2E8B57;color:#fff;text-decoration:none;padding:11px 18px;border-radius:10px;font-weight:700;display:inline-block;margin:4px">Je serai présent</a> <a href="' + APP_URL + '/?rsvp=' + recId + '&r=absent" style="background:#D62828;color:#fff;text-decoration:none;padding:11px 18px;border-radius:10px;font-weight:700;display:inline-block;margin:4px">Je serai absent</a></div>', { url: APP_URL, label: "Préparer le CA" }) }).catch(() => {}));
       onClose();
     } catch (e) { alert("Erreur : " + e.message); setBusy(false); }
   };
@@ -1303,6 +1609,11 @@ function NewMeeting({ onClose, reload, data }) {
         <div style={{ flex: 1 }}><label className="lbl">Heure</label><input className="inp" type="time" value={heure} onChange={(e) => setHeure(e.target.value)} /></div>
       </div>
       <div style={{ marginTop: 11 }}><label className="lbl">Lieu (facultatif)</label><input className="inp" value={lieu} onChange={(e) => setLieu(e.target.value)} /></div>
+      <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 14, fontSize: 13.5, cursor: "pointer" }}>
+        <input type="checkbox" checked={prevenir} onChange={(e) => setPrevenir(e.target.checked)} />
+        Prévenir le bureau tout de suite par mail
+      </label>
+      <div style={{ fontSize: 12, color: MUT, marginTop: 4 }}>{prevenir ? "L'invitation présent/absent part dès la création." : "L'invitation sera envoyée automatiquement quelques jours avant la réunion."}</div>
       <div style={{ display: "flex", gap: 9, marginTop: 18 }}>
         <button className="btn btn-ghost" style={{ flex: 1, justifyContent: "center" }} onClick={onClose}>Annuler</button>
         <button className="btn btn-red" style={{ flex: 2, justifyContent: "center" }} disabled={busy} onClick={save}>{busy ? "…" : "Planifier"}</button>
@@ -2804,7 +3115,7 @@ export default function App() {
         {!rsvpOpen && !signOpen && !taskOpen && !liveOpen && view === "dash" && <Dashboard me={me} data={data} setView={setView} openNewTask={() => setModal({ type: "task", pole: (f(me, "Pôle") || [])[0] || "" })} openNewSujet={(opts) => setModal({ type: "sujet", ...(opts || {}) })} openTask={(id) => setTaskOpen(id)} reload={reload} openMeeting={(id) => setModal({ type: "meetingDetail", id })} openSujet={(id) => setModal({ type: "sujetDetail", id })} />}
         {!rsvpOpen && !signOpen && !taskOpen && !liveOpen && view === "taches" && <TasksView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewTask={(pole) => setModal({ type: "task", pole })} openTask={(id) => setTaskOpen(id)} />}
         {!rsvpOpen && !signOpen && !taskOpen && !liveOpen && view === "sujets" && <SujetsView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewSujet={(opts) => setModal({ type: "sujet", ...(opts || {}) })} openSujet={(id) => setModal({ type: "sujetDetail", id })} />}
-        {!rsvpOpen && !signOpen && !taskOpen && !liveOpen && view === "ca" && <ReunionsView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewMeeting={() => setModal({ type: "meeting" })} openMeeting={(id) => setModal({ type: "meetingDetail", id })} openLive={(id) => setLiveOpen(id)} openCR={(id) => setModal({ type: "cr", id })} />}
+        {!rsvpOpen && !signOpen && !taskOpen && !liveOpen && view === "ca" && <ReunionsView me={me} data={data} isAdmin={isAdmin} reload={reload} openNewMeeting={() => setModal({ type: "meeting" })} openPlanif={() => setModal({ type: "planif" })} openMeeting={(id) => setModal({ type: "meetingDetail", id })} openLive={(id) => setLiveOpen(id)} openCR={(id) => setModal({ type: "cr", id })} />}
         {!rsvpOpen && !signOpen && !taskOpen && !liveOpen && view === "cal" && <CalendarView me={me} data={data} openTask={(id) => setTaskOpen(id)} openMeeting={(id) => setModal({ type: "meetingDetail", id })} />}
         {!rsvpOpen && !signOpen && !taskOpen && !liveOpen && view === "annuaire" && <Annuaire data={data} me={me} isAdmin={isAdmin} reload={reload} />}
         {!rsvpOpen && !signOpen && !taskOpen && !liveOpen && view === "admin" && isAdmin && <AdminUsers me={me} data={data} reload={reload} />}
@@ -2814,6 +3125,7 @@ export default function App() {
       {modal && modal.type === "sujet" && <NewSujet me={me} data={data} meetingId={modal.meetingId} initialPole={modal.pole} onClose={() => setModal(null)} reload={reload} />}
       {modal && modal.type === "notifs" && <NotifsModal me={me} data={data} onClose={() => setModal(null)} reload={reload} openTask={(id) => { setModal(null); setTaskOpen(id); }} openSujet={(id) => setModal({ type: "sujetDetail", id })} openRSVP={(id) => { setModal(null); setRsvpOpen(id); }} openSign={(id) => { setModal(null); setSignOpen(id); }} />}
       {modal && modal.type === "meeting" && <NewMeeting onClose={() => setModal(null)} reload={reload} data={data} />}
+      {modal && modal.type === "planif" && <PlanificateurCA data={data} onClose={() => setModal(null)} reload={reload} />}
       {modal && modal.type === "meetingDetail" && <MeetingDetail meetingId={modal.id} me={me} data={data} isAdmin={isAdmin} onClose={() => setModal(null)} reload={reload} onStart={() => { setModal(null); setLiveOpen(modal.id); }} onSign={() => { setModal(null); setSignOpen(modal.id); }} />}
       {modal && modal.type === "profile" && <MonCompte me={me} data={data} onClose={() => setModal(null)} reload={reload} onLogout={logout} onUsers={() => { setModal(null); setView("admin"); }} onHelp={() => setModal({ type: "help" })} />}
       {modal && modal.type === "cr" && <CRView meetingId={modal.id} data={data} onClose={() => setModal(null)} />}
