@@ -1259,8 +1259,26 @@ function moisOptions() {
   return out;
 }
 
+// Envoi (ou renvoi) manuel de la convocation d'une réunion.
+// cible "tous" = tous les membres actifs ; "sansReponse" = seulement ceux qui
+// n'ont ni accepté ni décliné. Pose « Invitation envoyée » pour que la relance
+// automatique quotidienne ne renvoie pas la même chose le lendemain.
+async function envoyerConvocation(m, data, cible) {
+  const rep = [].concat(f(m, "Répondu présent") || [], f(m, "Répondu absent") || []);
+  const dest = (data.users || []).filter((u) => f(u, "Actif") !== false && f(u, "Email") && (cible === "tous" || !rep.includes(u.id)));
+  if (!dest.length) return 0;
+  const date = f(m, "Date"), heure = f(m, "Heure"), lieu = f(m, "Lieu");
+  const lien = (r, label, couleur) => '<a href="' + APP_URL + '/?rsvp=' + m.id + '&r=' + r + '" style="background:' + couleur + ';color:#fff;text-decoration:none;padding:11px 18px;border-radius:10px;font-weight:700;display:inline-block;margin:4px">' + label + '</a>';
+  const corps = '<p style="color:#444;line-height:1.55">Une réunion du CA est prévue le <b>' + escapeHtml(fmtDate(date)) + (heure ? " à " + escapeHtml(heure) : "") + "</b>" + (lieu ? " · " + escapeHtml(lieu) : "") + '.</p><p style="color:#444;line-height:1.55">Merci de répondre à l\'invitation :</p><div style="text-align:center;margin:14px 0">' + lien("present", "Je serai présent", "#2E8B57") + lien("absent", "Je serai absent", "#D62828") + '</div>';
+  const html = mailWrap("Un CA est programmé", corps, { url: APP_URL, label: "Préparer le CA" });
+  const sujet = "CA du " + fmtDate(date) + " — " + (f(m, "Titre") || "Réunion du CA");
+  for (const u of dest) { try { await sendMail({ to: f(u, "Email"), subject: sujet, html }); } catch (e) {} }
+  await db({ action: "update", table: "Réunions", recordId: m.id, fields: { "Invitation envoyée": true } });
+  return dest.length;
+}
+
 // Bandeau « Prochaine réunion » affiché en haut de l'écran Réunions.
-function ProchaineReunion({ m, me, data, onOpen, reload }) {
+function ProchaineReunion({ m, me, data, isAdmin, onOpen, reload }) {
   const [busy, setBusy] = useState(false);
   if (!m) return null;
   const date = f(m, "Date"), heure = f(m, "Heure"), lieu = f(m, "Lieu");
@@ -1277,6 +1295,17 @@ function ProchaineReunion({ m, me, data, onOpen, reload }) {
       } });
       await reload();
     } catch (e) { alert("Erreur : " + e.message); }
+    setBusy(false);
+  };
+  const envoyer = async () => {
+    const dejaEnvoyee = !!f(m, "Invitation envoyée");
+    const sansRep = (data.users || []).filter((u) => f(u, "Actif") !== false && f(u, "Email") && !rPres.includes(u.id) && !rAbs.includes(u.id)).length;
+    const cible = dejaEnvoyee && sansRep > 0 ? "sansReponse" : "tous";
+    const quoi = cible === "sansReponse" ? "Relancer les " + sansRep + " membre(s) sans réponse ?" : "Envoyer la convocation à tout le bureau ?";
+    if (!confirm(quoi)) return;
+    setBusy(true);
+    try { const n = await envoyerConvocation(m, data, cible); await reload(); alert(n > 0 ? "Convocation envoyée à " + n + " personne(s)." : "Aucun destinataire."); }
+    catch (e) { alert("Erreur : " + e.message); }
     setBusy(false);
   };
   const pill = (r, label, icon, on) => <button className="btn" disabled={busy} onClick={() => rsvp(r)} style={{ background: on ? (r === "present" ? OK : RED) : "rgba(255,255,255,.14)", color: "#fff", border: "1px solid " + (on ? "transparent" : "rgba(255,255,255,.3)"), fontWeight: 700 }}><i className={"ti " + icon} />{label}</button>;
@@ -1303,6 +1332,7 @@ function ProchaineReunion({ m, me, data, onOpen, reload }) {
             {pill("present", "Présent", "ti-check", mien === "present")}
             {pill("absent", "Absent", "ti-x", mien === "absent")}
           </div>
+          {isAdmin && <button className="btn" disabled={busy} onClick={envoyer} style={{ background: "rgba(255,255,255,.14)", color: "#fff", border: "1px solid rgba(255,255,255,.3)", fontWeight: 700, justifyContent: "center" }}><i className="ti ti-mail-forward" />{f(m, "Invitation envoyée") ? "Relancer la convocation" : "Envoyer la convocation"}</button>}
           <button className="btn" onClick={() => onOpen(m.id)} style={{ background: "#fff", color: BLACK, fontWeight: 700, justifyContent: "center" }}><i className="ti ti-arrow-right" />Préparer ce CA</button>
         </div>
       </div>
@@ -1494,7 +1524,7 @@ function ReunionsView({ me, data, isAdmin, reload, openNewMeeting, openPlanif, o
         {isAdmin && <button className="btn btn-ghost" onClick={openPlanif} title="Créer les CA de toute la saison à partir d'une règle de récurrence"><i className="ti ti-calendar-repeat" />Planificateur</button>}
         {isAdmin && <button className="btn btn-red" onClick={openNewMeeting}><i className="ti ti-calendar-plus" />Planifier un CA</button>}
       </div>
-      <ProchaineReunion m={aVenir[0]} me={me} data={data} onOpen={openMeeting} reload={reload} />
+      <ProchaineReunion m={aVenir[0]} me={me} data={data} isAdmin={isAdmin} onOpen={openMeeting} reload={reload} />
       {aVenir.length === 0 && passees.length === 0 && <Empty t="Aucune réunion programmée." />}
       {aVenir.length > 0 && <div style={{ display: "flex", alignItems: "center", gap: 9, margin: "8px 0 12px" }}><span style={{ width: 26, height: 26, borderRadius: 8, background: RED, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}><i className="ti ti-calendar-up" style={{ fontSize: 15 }} aria-hidden="true" /></span><span style={{ fontSize: 14, fontWeight: 800, color: TEXT, letterSpacing: ".03em" }}>À VENIR</span><div style={{ flex: 1, height: 1, background: BORDER }} /></div>}
       {aVenir.map((m) => <MeetingRow key={m.id} m={m} sujets={sujets} onClick={() => openMeeting(m.id)} onStart={openLive} />)}
@@ -1644,6 +1674,14 @@ function MeetingDetail({ meetingId, me, data, isAdmin, onClose, reload, onStart,
   const myRSVP = rPres.includes(me.id) ? "present" : rAbs.includes(me.id) ? "absent" : null;
   const setRSVP = (r) => updM({ "Répondu présent": r === "present" ? Array.from(new Set([...rPres, me.id])) : rPres.filter((id) => id !== me.id), "Répondu absent": r === "absent" ? Array.from(new Set([...rAbs, me.id])) : rAbs.filter((id) => id !== me.id) });
   const uById = Object.fromEntries(data.users.map((u) => [u.id, u]));
+  const convoquer = async (cible) => {
+    const n0 = cible === "tous" ? data.users.filter((u) => f(u, "Actif") !== false && f(u, "Email")).length : enAtt.filter((u) => f(u, "Email")).length;
+    if (!confirm((cible === "tous" ? "Envoyer la convocation à " : "Relancer ") + n0 + " personne(s) ?")) return;
+    setBusy(true);
+    try { const n = await envoyerConvocation(m, data, cible); await reload(); alert(n > 0 ? "Convocation envoyée à " + n + " personne(s)." : "Aucun destinataire."); }
+    catch (e) { alert("Erreur : " + e.message); }
+    setBusy(false);
+  };
   const presenceGroup = (label, ids, color, bg) => ids.length ? <div style={{ marginTop: 10 }}>
     <div style={{ fontSize: 11, fontWeight: 700, color: color, marginBottom: 6, textTransform: "uppercase", letterSpacing: ".03em" }}>{label} ({ids.length})</div>
     <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
@@ -1707,6 +1745,13 @@ function MeetingDetail({ meetingId, me, data, isAdmin, onClose, reload, onStart,
         {presenceGroup("Absents", rAbs, RED, "#FBEDEC")}
         {presenceGroup("En attente", enAtt.map((u) => u.id), "#8A6D00", "#FEF3D6")}
         {rPres.length + rAbs.length + enAtt.length === 0 && <div style={{ fontSize: 12.5, color: MUT, marginTop: 8 }}>Aucun membre.</div>}
+        {isAdmin && !past && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 14, paddingTop: 12, borderTop: "1px solid " + BORDER }}>
+          <span style={{ fontSize: 12.5, color: MUT, marginRight: "auto" }}>
+            {f(m, "Invitation envoyée") ? "Convocation déjà envoyée." : "Convocation pas encore partie — elle s'enverra seule à l'approche du CA."}
+          </span>
+          <button className="btn btn-ghost" style={{ fontSize: 12.5, padding: "6px 12px" }} disabled={busy} onClick={() => convoquer("tous")}><i className="ti ti-mail" />{f(m, "Invitation envoyée") ? "Renvoyer à tout le monde" : "Envoyer maintenant"}</button>
+          <button className="btn btn-ghost" style={{ fontSize: 12.5, padding: "6px 12px" }} disabled={busy || enAtt.length === 0} onClick={() => convoquer("sansReponse")}><i className="ti ti-mail-forward" />Relancer les sans-réponse ({enAtt.length})</button>
+        </div>}
       </div>
       {!past && <button className="btn btn-red" style={{ width: "100%", justifyContent: "center", marginBottom: 14 }} onClick={onStart}><i className="ti ti-player-play" />Commencer la réunion</button>}
       <div className="cond" style={{ fontSize: 12.5, color: MUT, fontWeight: 700, marginBottom: 8 }}>Ordre du jour ({linked.length})</div>
