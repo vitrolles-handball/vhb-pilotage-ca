@@ -7,6 +7,7 @@
 // Les droits sont vérifiés côté serveur (api/db.js) ; l'interface masque seulement
 // ce que la personne ne peut pas faire.
 // ===========================================================================
+import { PaymentsPanel } from "./Primes.jsx";
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { db, f, authApi, fullName, Avatar, RED, YELLOW, BLACK, TEXT, MUT, BORDER, OK, VACANCES_DEFAUT } from "./App.jsx";
 
@@ -19,13 +20,14 @@ export const RIGHT_GROUPS = [
 ];
 const RIGHT_LABEL = Object.fromEntries(RIGHT_GROUPS.flatMap(([, l]) => l));
 export const has = (rights, r) => (rights || []).includes("*") || (rights || []).includes(r);
-export const ADMIN_RIGHTS = ["users", "roles", "eff", "journal", "param", "plan"];
+export const ADMIN_RIGHTS = ["users", "roles", "eff", "journal", "param", "plan", "compta"];
 export const hasAdminAccess = (rights) => ADMIN_RIGHTS.some((r) => has(rights, r));
 export function adminTabsFor(rights) {
   const t = [];
   if (has(rights, "users")) t.push(["users", "Utilisateurs"]);
   if (has(rights, "roles") || has(rights, "users")) t.push(["roles", "Rôles"]);
   if (has(rights, "eff") || has(rights, "param") || has(rights, "plan")) t.push(["equipes", "Équipes"]);
+  if (has(rights, "compta")) t.push(["paiements", "Paiements"]);
   if (has(rights, "journal")) t.push(["journal", "Journal"]);
   return t;
 }
@@ -98,6 +100,7 @@ export default function AdminSpace({ me, rights, view, setView, onSelfChanged })
         {cur === "users" && <UsersPanel d={d} me={me} rights={rights} reload={reload} onSelfChanged={onSelfChanged} />}
         {cur === "roles" && <RolesPanel d={d} rights={rights} reload={reload} />}
         {cur === "equipes" && <TeamsPanel d={d} rights={rights} reload={reload} />}
+        {cur === "paiements" && <PaymentsPanel rights={rights} />}
         {cur === "journal" && <JournalPanel d={d} />}
       </>}
     </div>
@@ -456,7 +459,7 @@ function TeamsPanel({ d, rights, reload }) {
 function TeamDetail({ team, d, rights, reload }) {
   const canEff = has(rights, "eff"), canParam = has(rights, "param");
   const [edit, setEdit] = useState(false);
-  const [form, setForm] = useState({ nom: f(team, "Nom") || "", cat: f(team, "Catégorie") || "", primes: !!f(team, "Primes actives"), pp: f(team, "Prime présence") ?? "", pv: f(team, "Prime victoire") ?? "" });
+  const [form, setForm] = useState({ nom: f(team, "Nom") || "", cat: f(team, "Catégorie") || "", primes: !!f(team, "Primes actives"), pp: f(team, "Prime présence") ?? "", pv: f(team, "Prime victoire") ?? "", exc: f(team, "Excusé compte comme") || "Absence" });
   const [filter, setFilter] = useState("all");
   const [q, setQ] = useState("");
   const [adding, setAdding] = useState(false);
@@ -477,8 +480,8 @@ function TeamDetail({ team, d, rights, reload }) {
   }).sort((a, b) => norm(a.p && f(a.p, "Nom")).localeCompare(norm(b.p && f(b.p, "Nom"))));
   const saveTeam = async () => {
     setBusy(true);
-    const fields = { "Nom": form.nom.trim() || f(team, "Nom"), "Catégorie": form.cat.trim() };
-    if (canParam) Object.assign(fields, { "Primes actives": form.primes, "Prime présence": form.pp === "" ? null : Number(form.pp), "Prime victoire": form.pv === "" ? null : Number(form.pv) });
+    const fields = canEff ? { "Nom": form.nom.trim() || f(team, "Nom"), "Catégorie": form.cat.trim() } : {};
+    if (canParam) Object.assign(fields, { "Primes actives": form.primes, "Prime présence": form.pp === "" ? null : Number(form.pp), "Prime victoire": form.pv === "" ? null : Number(form.pv), "Excusé compte comme": form.exc });
     try { await db({ action: "update", table: "Équipes", recordId: team.id, fields }); setEdit(false); await reload(); } catch (e) { alert("Erreur : " + e.message); }
     setBusy(false);
   };
@@ -513,6 +516,7 @@ function TeamDetail({ team, d, rights, reload }) {
             <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, minHeight: 44, cursor: "pointer" }}><input type="checkbox" checked={form.primes} onChange={(e) => setForm({ ...form, primes: e.target.checked })} style={{ width: 18, height: 18, accentColor: RED }} />Primes actives</label>
             <div style={{ flex: "1 1 120px" }}><label className="lbl" htmlFor="tm-pp">Prime de présence (€ / mois)</label><input id="tm-pp" className="inp" type="number" min="0" step="0.5" value={form.pp} disabled={!form.primes} onChange={(e) => setForm({ ...form, pp: e.target.value })} /></div>
             <div style={{ flex: "1 1 120px" }}><label className="lbl" htmlFor="tm-pv">Prime de victoire (€)</label><input id="tm-pv" className="inp" type="number" min="0" step="0.5" value={form.pv} disabled={!form.primes} onChange={(e) => setForm({ ...form, pv: e.target.value })} /></div>
+            <div style={{ flex: "1 1 200px" }}><label className="lbl" htmlFor="tm-exc">Une absence excusée compte comme</label><select id="tm-exc" className="sel" value={form.exc} disabled={!form.primes} onChange={(e) => setForm({ ...form, exc: e.target.value })}><option value="Absence">Une absence</option><option value="Séance non comptée">Une séance non comptée</option></select></div>
           </div>}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button className="btn btn-red" disabled={busy} onClick={saveTeam}>Enregistrer</button>
