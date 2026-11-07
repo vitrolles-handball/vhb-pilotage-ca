@@ -117,11 +117,12 @@ function appendCookie(res, value) {
   const list = prev ? (Array.isArray(prev) ? prev : [prev]) : [];
   res.setHeader("Set-Cookie", list.concat(value));
 }
-export function setSessionCookie(res, user, remember) {
+export async function setSessionCookie(res, user, remember) {
   const stored = (user.fields || {})["Mot de passe (chiffré)"];
   const now = Date.now();
   const life = remember ? 30 * DAY : 12 * 3600000;
-  const payload = { u: user.id, ro: (user.fields || {})["Rôle"] || "", pv: pwdVersion(stored), rm: !!remember, ck: now, exp: now + life };
+  const acc = await computeAccess(user);
+  const payload = { u: user.id, ri: acc.rights, sc: acc.scope, tm: acc.teams, pv: pwdVersion(stored), rm: !!remember, ck: now, exp: now + life };
   const parts = [COOKIE + "=" + encodeURIComponent(sign(payload)), "Path=/", "HttpOnly", "Secure", "SameSite=Lax"];
   if (remember) parts.push("Max-Age=" + Math.floor(life / 1000));
   appendCookie(res, parts.join("; "));
@@ -130,12 +131,12 @@ export function setSessionCookie(res, user, remember) {
 export function clearSessionCookie(res) {
   appendCookie(res, COOKIE + "=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0");
 }
-// Renvoie la session valide ({ uid, role, rights }) ou null.
+// Renvoie la session valide ({ uid, rights, scope, teams }) ou null.
 export async function getSession(req, res) {
   const tok = parseCookies(req)[COOKIE];
   const p = verify(tok);
   if (!p || !p.u) return null;
-  let role = p.ro;
+  let acc = { rights: p.ri || [], scope: p.sc || "mine", teams: p.tm || [] };
   if (Date.now() - (p.ck || 0) > RECHECK_MS) {
     const u = await getUser(p.u);
     const fl = (u && u.fields) || {};
@@ -143,25 +144,62 @@ export async function getSession(req, res) {
       clearSessionCookie(res);
       return null;
     }
-    role = fl["Rôle"] || "";
+    acc = await computeAccess(u);
     // Prolonge la vérification sans changer la date de fin de session.
-    const np = { ...p, ro: role, ck: Date.now() };
+    const np = { ...p, ri: acc.rights, sc: acc.scope, tm: acc.teams, ck: Date.now() };
     const parts = [COOKIE + "=" + encodeURIComponent(sign(np)), "Path=/", "HttpOnly", "Secure", "SameSite=Lax"];
     if (p.rm) parts.push("Max-Age=" + Math.max(0, Math.floor((p.exp - Date.now()) / 1000)));
     appendCookie(res, parts.join("; "));
   }
-  return { uid: p.u, role, rights: rightsFor(role) };
+  return { uid: p.u, rights: acc.rights, scope: acc.scope, teams: acc.teams };
 }
 
 // ---------------------------------------------------------------- Droits
-// Étape 1 : on part des deux rôles existants. Les rôles personnalisables
-// (table Rôles) arrivent à l'étape 2 et se brancheront ici.
-export function rightsFor(role) {
-  if (role === "Admin") return ["*"];
-  return ["ca"];
+// Codes de droits (identiques aux choix des champs Airtable « Droits » et « Droits ajoutés »).
+export const RIGHTS = ["ca", "point", "eff", "plan", "param", "corr", "valid", "compta", "msg", "msgall", "users", "roles", "support", "journal"];
+const byIds = (ids) => "OR(" + ids.map((id) => "RECORD_ID()='" + String(id).replace(/'/g, "") + "'").join(",") + ")";
+async function listByIds(table, ids) {
+  if (!ids || !ids.length) return [];
+  const q = new URLSearchParams({ filterByFormula: byIds(ids.slice(0, 50)), pageSize: "100" });
+  try { const j = await at("GET", encodeURIComponent(table) + "?" + q.toString()); return j.records || []; }
+  catch (e) { return []; }
+}
+// Droits d'une personne = droits de ses rôles + droits ajoutés à la main.
+// Rôle verrouillé (Administrateur) ou ancien rôle « Admin » → tous les droits ("*").
+// Portée : « Toutes » si un de ses rôles le prévoit ; sinon ses équipes (table Staff).
+export async function computeAccess(user) {
+  const fl = (user && user.fields) || {};
+  const roles = await listByIds("Rôles", fl["Rôles"] || []);
+  const extra = (fl["Droits ajoutés"] || []).filter((r) => RIGHTS.includes(r));
+  let rights;
+  if (fl["Rôle"] === "Admin" || roles.some((r) => r.fields && r.fields["Verrouillé"])) rights = ["*"];
+  else {
+    const set = new Set(extra);
+    roles.forEach((r) => ((r.fields && r.fields["Droits"]) || []).forEach((d) => set.add(d)));
+    // Transition : un membre sans rôle attribué garde l'accès au Pilotage du CA, comme avant.
+    if (!roles.length && !set.size && fl["Rôle"] === "Équipier") set.add("ca");
+    rights = [...set];
+  }
+  const scope = rights.includes("*") || roles.some((r) => r.fields && r.fields["Portée"] === "Toutes") ? "all" : "mine";
+  const staff = await listByIds("Staff", fl["Staff"] || []);
+  const teams = [...new Set(staff.flatMap((s) => (s.fields && s.fields["Équipe"]) || []))];
+  return { rights, scope, teams };
 }
 export const can = (sess, right) => !!sess && (sess.rights.includes("*") || sess.rights.includes(right));
-export const isAdmin = (sess) => can(sess, "*");
+export const canAny = (sess, list) => list.some((r) => can(sess, r));
+export const isAdmin = (sess) => !!sess && sess.rights.includes("*");
+export const seesTeam = (sess, teamId) => !!sess && (sess.scope === "all" || (sess.teams || []).includes(teamId));
+
+// Journal des actions sensibles (n'empêche jamais l'action si l'écriture échoue).
+export async function logAction(sess, action, table, recordId, detail) {
+  try {
+    await at("POST", encodeURIComponent("Journal"), { records: [{ fields: {
+      "Action": action, "Table": table || "", "Enregistrement": recordId || "",
+      "Détail": typeof detail === "string" ? detail : JSON.stringify(detail || {}),
+      "Auteur": sess && sess.uid ? [sess.uid] : [], "Date": new Date().toISOString(),
+    } }], typecast: true });
+  } catch (e) {}
+}
 
 // ---------------------------------------------------------------- Mails
 export async function sendMail(to, subject, html) {

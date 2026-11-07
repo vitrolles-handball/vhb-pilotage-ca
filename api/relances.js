@@ -41,6 +41,43 @@ function wrap(title, bodyHtml) {
 }
 const btn = (href, label, color) => '<a href="' + href + '" style="background:' + color + ';color:#fff;text-decoration:none;padding:11px 18px;border-radius:10px;font-weight:700;display:inline-block;margin:4px">' + label + '</a>';
 
+const enc = encodeURIComponent;
+async function relancePointages(users) {
+  const formula = "AND({Statut}='Prévue', IS_BEFORE({Date}, TODAY()), IS_AFTER({Date}, DATEADD(TODAY(), -31, 'days')))";
+  const late = await at(enc("Séances") + "?filterByFormula=" + enc(formula));
+  if (!late.length) return 0;
+  const [staff, roles, teams] = await Promise.all([at(enc("Staff")), at(enc("Rôles")), at(enc("Équipes"))]);
+  const dsRoles = roles.filter((r) => r.fields["Portée"] === "Toutes" && (r.fields["Droits"] || []).includes("valid") && !r.fields["Verrouillé"]).map((r) => r.id);
+  const actif = (u) => u && u.fields["Actif"] !== false && u.fields["Email"];
+  const ds = users.filter((u) => actif(u) && (u.fields["Rôles"] || []).some((id) => dsRoles.includes(id)));
+  const byTeam = {};
+  late.forEach((s) => { const t = (s.fields["Équipe"] || [])[0]; if (t) (byTeam[t] = byTeam[t] || []).push(s); });
+  const today = new Date(); today.setHours(12, 0, 0, 0);
+  const daysLate = (d) => Math.round((today - new Date(String(d) + "T12:00:00")) / 86400000);
+  let sent = 0;
+  for (const [teamId, list] of Object.entries(byTeam)) {
+    const team = teams.find((t) => t.id === teamId);
+    const tName = (team && team.fields["Nom"]) || "ton équipe";
+    const staffUsers = staff.filter((s) => (s.fields["Équipe"] || []).includes(teamId)).map((s) => users.find((u) => u.id === (s.fields["Personne"] || [])[0])).filter(actif);
+    const max = Math.max(...list.map((s) => daysLate(s.fields["Date"])));
+    const dest = [...new Map(staffUsers.concat(max >= 3 ? ds : []).map((u) => [u.fields["Email"].toLowerCase(), u])).values()];
+    if (!dest.length) continue;
+    list.sort((a, b) => String(a.fields["Date"]).localeCompare(String(b.fields["Date"])));
+    const items = list.map((s) => '<li style="margin:4px 0"><b>' + frDate(s.fields["Date"]) + '</b>' + (s.fields["Heure"] ? ' à ' + s.fields["Heure"] : '') + ' · ' + (s.fields["Type"] || "Séance") + (s.fields["Adversaire"] ? ' contre ' + s.fields["Adversaire"] : '') + ' <span style="color:#9E1B1B">(il y a ' + daysLate(s.fields["Date"]) + ' j)</span></li>').join("");
+    const n = list.length;
+    for (const u of dest) {
+      const isStaff = staffUsers.includes(u);
+      const html = wrap(n > 1 ? n + " séances à pointer" : "Une séance à pointer",
+        '<p>Bonjour ' + (u.fields["Prénom"] || "") + ',</p><p>' + (isStaff ? "Il reste à pointer pour <b>" + tName + "</b> :" : "Pour information, ces séances de <b>" + tName + "</b> ne sont toujours pas pointées :") + '</p><ul style="padding-left:18px">' + items + '</ul>'
+        + '<p style="color:#666;font-size:13px">Dix secondes par séance : tout le monde est présent par défaut, il suffit de toucher les absents. Une séance qui n\'a pas eu lieu se déclare « annulée ».</p>'
+        + '<p style="margin-top:14px">' + btn(APP, "Pointer maintenant", "#D62828") + '</p>');
+      try { await sendMail(u.fields["Email"], "À pointer — " + tName + (n > 1 ? " · " + n + " séances" : ""), html); sent++; } catch (e) {}
+    }
+    for (const s of list) { try { await patch(enc("Séances"), s.id, { "Relances": (s.fields["Relances"] || 0) + 1 }); } catch (e) {} }
+  }
+  return sent;
+}
+
 export default async function handler(req, res) {
   if (!TOKEN || !BASE || !KEY) { res.status(500).json({ error: "Configuration manquante." }); return; }
   const secret = process.env.CRON_SECRET;
@@ -121,7 +158,12 @@ export default async function handler(req, res) {
       try { await patch(T_REUNIONS, m.id, { "Relance ODJ envoyée": true }); } catch (e) {}
     }
 
-    res.status(200).json({ ok: true, invitations_envoyees: invit, signatures_relancees: sign, presences_relancees: rsvp, odj_relances: odj });
+    // 5) Séances passées non pointées → une seule relance par équipe et par jour.
+    //    J+1 et J+2 : staff de l'équipe ; à partir de J+3 : + directeur sportif.
+    let pointage = 0;
+    try { pointage = await relancePointages(users); } catch (e) { /* tables pas encore créées : on ignore */ }
+
+    res.status(200).json({ ok: true, invitations_envoyees: invit, signatures_relancees: sign, presences_relancees: rsvp, odj_relances: odj, pointages_relances: pointage });
   } catch (e) {
     res.status(500).json({ error: String((e && e.message) || e) });
   }
