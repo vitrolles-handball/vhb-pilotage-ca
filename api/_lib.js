@@ -49,6 +49,8 @@ export async function updateUser(id, fields) {
 export function stripRecord(rec) {
   if (!rec || !rec.fields) return rec;
   const fields = { ...rec.fields };
+  // Le navigateur sait seulement SI un mot de passe existe, jamais lequel.
+  if ("Email" in fields) fields["_aMotDePasse"] = !!fields["Mot de passe (chiffré)"];
   SENSITIVE.forEach((k) => { delete fields[k]; });
   return { ...rec, fields };
 }
