@@ -3485,4 +3485,4 @@ function Splash() {
 }
 
 // Outils partagés avec la console Administration (Admin.jsx).
-export { db, f, authApi, fullName, Avatar, RED, YELLOW, BLACK, TEXT, MUT, BORDER, OK, VACANCES_DEFAUT };
+export { db, __vhbOublier as dbForget, f, authApi, fullName, Avatar, RED, YELLOW, BLACK, TEXT, MUT, BORDER, OK, VACANCES_DEFAUT };

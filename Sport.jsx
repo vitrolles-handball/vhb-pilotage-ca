@@ -7,7 +7,7 @@
 //  • Hors ligne : les pointages attendent sur le téléphone et partent au retour du réseau
 // ===========================================================================
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { db, f, RED, YELLOW, BLACK, TEXT, MUT, BORDER, OK } from "./App.jsx";
+import { db, dbForget, f, RED, YELLOW, BLACK, TEXT, MUT, BORDER, OK } from "./App.jsx";
 
 const QUEUE_KEY = "vhb_pointage_attente";
 const SNAP_KEY = "vhb_sport_cache";
@@ -25,7 +25,8 @@ const TYPE_ICON = { "Entraînement": "ti-run", "Match": "ti-trophy", "Entraînem
 const readQueue = () => { try { return JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]"); } catch (e) { return []; } };
 const writeQueue = (q) => { try { localStorage.setItem(QUEUE_KEY, JSON.stringify(q)); } catch (e) {} window.dispatchEvent(new Event("vhb-queue")); };
 async function callPointage(payload) {
-  const r = await fetch("/api/pointage", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+  dbForget("Séances"); dbForget("Pointages");
+  const r = await fetch("/api/pointage", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }).finally(() => { dbForget("Séances"); dbForget("Pointages"); });
   const j = await r.json().catch(() => ({}));
   if (r.status === 401) window.dispatchEvent(new Event("vhb-auth-lost"));
   if (!r.ok) { const e = new Error(j.error || ("Erreur " + r.status)); e.status = r.status; throw e; }
