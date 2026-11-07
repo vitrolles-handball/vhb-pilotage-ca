@@ -9,7 +9,7 @@
 import {
   TOKEN, BASE, ENFORCE, T_USERS, getUser, findUserByEmail, updateUser, stripRecord,
   sign, verify, randomId, hashPassword, checkPassword, setSessionCookie, clearSessionCookie,
-  getSession, isAdmin, sendMail, appUrl, mailWrap, readBody, tooMany, noteFailure, clearFailures,
+  getSession, isAdmin, can, sendMail, appUrl, mailWrap, readBody, tooMany, noteFailure, clearFailures,
 } from "./_lib.js";
 
 const MIN_LEN = 8;
@@ -52,7 +52,7 @@ export default async function handler(req, res) {
       if (!s) { res.status(401).json({ error: "Non connecté.", enforce: ENFORCE }); return; }
       const u = await getUser(s.uid);
       if (!u || (u.fields || {})["Actif"] === false) { clearSessionCookie(res); res.status(401).json({ error: "Non connecté.", enforce: ENFORCE }); return; }
-      res.status(200).json({ user: stripRecord(u), rights: s.rights, enforce: ENFORCE });
+      res.status(200).json({ user: stripRecord(u), rights: s.rights, scope: s.scope, teams: s.teams, enforce: ENFORCE });
       return;
     }
 
@@ -81,8 +81,8 @@ export default async function handler(req, res) {
         return;
       }
       clearFailures(key);
-      setSessionCookie(res, u, !!b.remember);
-      res.status(200).json({ user: stripRecord(u), enforce: ENFORCE });
+      const acc = await setSessionCookie(res, u, !!b.remember);
+      res.status(200).json({ user: stripRecord(u), rights: acc.ri, scope: acc.sc, teams: acc.tm, enforce: ENFORCE });
       return;
     }
 
@@ -112,8 +112,8 @@ export default async function handler(req, res) {
       const hash = await hashPassword(pwd);
       const j = await updateUser(u.id, { "Mot de passe (chiffré)": hash, "Jeton réinitialisation": "" });
       const fresh = (j.records || [])[0] || u;
-      setSessionCookie(res, fresh, true);
-      res.status(200).json({ user: stripRecord(fresh), enforce: ENFORCE });
+      const acc = await setSessionCookie(res, fresh, true);
+      res.status(200).json({ user: stripRecord(fresh), rights: acc.ri, scope: acc.sc, teams: acc.tm, enforce: ENFORCE });
       return;
     }
 
@@ -121,7 +121,7 @@ export default async function handler(req, res) {
       const s = await getSession(req, res);
       // Pendant la transition (verrou éteint), un admin connecté « à l'ancienne »
       // n'a pas encore de session : on accepte alors l'invitation, comme avant.
-      if (ENFORCE ? !isAdmin(s) : s && !isAdmin(s)) { res.status(403).json({ error: "Réservé aux administrateurs." }); return; }
+      if (ENFORCE ? !can(s, "users") : s && !can(s, "users")) { res.status(403).json({ error: "Réservé aux administrateurs." }); return; }
       const u = await getUser(b.userId);
       if (!u || !(u.fields || {})["Email"]) { res.status(404).json({ error: "Utilisateur introuvable." }); return; }
       await sendLink(req, u, "invite");
