@@ -9,6 +9,7 @@
 // ===========================================================================
 import { PaymentsPanel } from "./Primes.jsx";
 import { PlayerCard } from "./Fiche.jsx";
+import { SupportPanel } from "./Comms.jsx";
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { db, f, authApi, fullName, Avatar, RED, YELLOW, BLACK, TEXT, MUT, BORDER, OK, VACANCES_DEFAUT } from "./App.jsx";
 
@@ -21,7 +22,7 @@ export const RIGHT_GROUPS = [
 ];
 const RIGHT_LABEL = Object.fromEntries(RIGHT_GROUPS.flatMap(([, l]) => l));
 export const has = (rights, r) => (rights || []).includes("*") || (rights || []).includes(r);
-export const ADMIN_RIGHTS = ["users", "roles", "eff", "journal", "param", "plan", "compta"];
+export const ADMIN_RIGHTS = ["users", "roles", "eff", "journal", "param", "plan", "compta", "support"];
 export const hasAdminAccess = (rights) => ADMIN_RIGHTS.some((r) => has(rights, r));
 export function adminTabsFor(rights) {
   const t = [];
@@ -29,6 +30,7 @@ export function adminTabsFor(rights) {
   if (has(rights, "roles") || has(rights, "users")) t.push(["roles", "Rôles"]);
   if (has(rights, "eff") || has(rights, "param") || has(rights, "plan")) t.push(["equipes", "Équipes"]);
   if (has(rights, "compta")) t.push(["paiements", "Paiements"]);
+  if (has(rights, "support")) t.push(["support", "Support"]);
   if (has(rights, "journal")) t.push(["journal", "Journal"]);
   return t;
 }
@@ -85,7 +87,7 @@ function effectiveRights(u, roles) {
 const isLocked = (r) => !!f(r, "Verrouillé");
 
 // ---------------------------------------------------------------- Espace
-export default function AdminSpace({ me, rights, view, setView, onSelfChanged }) {
+export default function AdminSpace({ me, rights, view, setView, onSelfChanged, supportFocus }) {
   const [d, reload] = useAdminData(rights);
   const tabs = adminTabsFor(rights);
   const cur = tabs.some(([k]) => k === view) ? view : (tabs[0] || [])[0];
@@ -102,6 +104,7 @@ export default function AdminSpace({ me, rights, view, setView, onSelfChanged })
         {cur === "roles" && <RolesPanel d={d} rights={rights} reload={reload} />}
         {cur === "equipes" && <TeamsPanel d={d} rights={rights} reload={reload} />}
         {cur === "paiements" && <PaymentsPanel rights={rights} />}
+        {cur === "support" && <SupportPanel focusId={supportFocus} />}
         {cur === "journal" && <JournalPanel d={d} />}
       </>}
     </div>

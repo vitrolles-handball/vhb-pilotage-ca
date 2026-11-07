@@ -46,7 +46,7 @@ function Sheet({ title, onClose, children, wide }) {
   useEffect(() => { const h = (e) => { if (e.key === "Escape") onClose(); }; window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h); }, [onClose]);
   return createPortal(<div role="dialog" aria-modal="true" aria-label={title} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{ position: "fixed", inset: 0, background: "rgba(16,17,20,.55)", zIndex: 200, display: "flex", alignItems: "flex-end", justifyContent: "center", padding: 12 }}>
     <div className="card" style={{ position: "relative", width: "100%", maxWidth: wide ? 760 : 520, maxHeight: "88vh", overflowY: "auto", display: "flex", flexDirection: "column", gap: 12, marginBottom: "env(safe-area-inset-bottom)" }}>
-      <button aria-label="Fermer" onClick={onClose} style={{ position: "absolute", top: 10, right: 10, width: 40, height: 40, borderRadius: 20, border: "none", background: "#EEF0F3", cursor: "pointer", fontSize: 20, lineHeight: 1 }}><i className="ti ti-x" aria-hidden="true" />{"×".slice(0, 0)}</button>
+      <div style={{ position: "sticky", top: 0, alignSelf: "flex-end", height: 0, zIndex: 3 }}><button aria-label="Fermer" onClick={onClose} style={{ position: "relative", top: -4, right: -6, boxShadow: "0 2px 8px rgba(0,0,0,.12)", width: 40, height: 40, borderRadius: 20, border: "none", background: "#EEF0F3", cursor: "pointer", fontSize: 20, lineHeight: 1 }}><i className="ti ti-x" aria-hidden="true" />{"×".slice(0, 0)}</button></div>
       <div style={{ fontSize: 18, fontWeight: 800, color: TEXT, paddingRight: 48 }}>{title}</div>
       {children}
     </div>

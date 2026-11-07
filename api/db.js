@@ -39,6 +39,9 @@ const RULES = {
   // Les primes passent par /api/primes (calcul, validation, paiements). Lecture limitée à ses équipes.
   "Primes – Mois": { read: READ_PRIMES, write: NOBODY, strict: true, teamRead: "Équipe" },
   "Primes – Lignes": { read: READ_PRIMES, write: NOBODY, strict: true, teamRead: "Équipe" },
+  // Annonces et support passent par /api/annonces et /api/support.
+  "Annonces": { read: NOBODY, write: NOBODY, strict: true },
+  "Support": { read: NOBODY, write: NOBODY, strict: true },
 };
 // Champs de la fiche Utilisateurs réservés au droit « Gérer les utilisateurs ».
 const ADMIN_FIELDS = ["Rôle", "Actif", "Email", "Rôles", "Droits ajoutés"];

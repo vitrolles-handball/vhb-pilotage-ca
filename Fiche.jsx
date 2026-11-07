@@ -34,7 +34,7 @@ export function PlayerCard({ joueurId, onClose }) {
   const initials = d ? ((d.joueur.prenom[0] || "") + (d.joueur.nom[0] || "")).toUpperCase() : "";
   return createPortal(<div role="dialog" aria-modal="true" aria-label="Fiche joueur" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{ position: "fixed", inset: 0, background: "rgba(16,17,20,.55)", zIndex: 210, display: "flex", justifyContent: "center", alignItems: "flex-start", overflowY: "auto", padding: "calc(12px + env(safe-area-inset-top)) 12px 40px" }}>
     <div className="card" style={{ position: "relative", width: "100%", maxWidth: 760, display: "flex", flexDirection: "column", gap: 14 }}>
-      <button aria-label="Fermer" onClick={onClose} style={{ position: "absolute", top: 10, right: 10, width: 40, height: 40, borderRadius: 20, border: "none", background: "#EEF0F3", cursor: "pointer", fontSize: 22, lineHeight: 1 }}><span aria-hidden="true">×</span></button>
+      <div style={{ position: "sticky", top: 0, alignSelf: "flex-end", height: 0, zIndex: 3 }}><button aria-label="Fermer" onClick={onClose} style={{ position: "relative", top: -4, right: -6, boxShadow: "0 2px 8px rgba(0,0,0,.12)", width: 40, height: 40, borderRadius: 20, border: "none", background: "#EEF0F3", cursor: "pointer", fontSize: 22, lineHeight: 1 }}><span aria-hidden="true">×</span></button></div>
       {err && <div style={{ color: "#9E1B1B", paddingRight: 48 }}>{err}</div>}
       {!d && !err && <div style={{ color: MUT }}>Chargement de la fiche…</div>}
       {d && <>

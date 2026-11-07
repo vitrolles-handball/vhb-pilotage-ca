@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import AdminSpace, { hasAdminAccess, adminTabsFor, has as hasRight } from "./Admin.jsx";
 import SportSpace from "./Sport.jsx";
+import { AnnoncesPanel, useAnnonces, HelpCenter, NotifPrefs } from "./Comms.jsx";
 const hasSport = (r) => ["point", "eff", "plan", "corr", "valid"].some((x) => hasRight(r, x));
 const canPrimes = (r) => ["corr", "valid", "param", "compta"].some((x) => hasRight(r, x));
 
@@ -526,7 +527,7 @@ function ProfileForm({ me, poles, onSaved }) {
   );
 }
 
-function Header({ me, space, setSpace, view, setView, outilView, setOutilView, adminView, setAdminView, sportView, setSportView, rights, isAdmin, onLogout, unread, onBell, onProfile, onHelp }) {
+function Header({ me, space, setSpace, view, setView, outilView, setOutilView, adminView, setAdminView, sportView, setSportView, rights, isAdmin, onLogout, unread, onBell, onProfile, onHelp, onAnnonces, annUnread }) {
   const caTabs = [["dash", "Accueil"], ["taches", "Tâches"], ["sujets", "Sujets"], ["ca", "Réunions"], ["cal", "Agenda"], ["annuaire", "Annuaire"]];
   const outilTabs = [["couts", "Coût de la pratique"]];
   const sportTabs = [["accueil", "Aujourd'hui"], ["seances", "Séances"], ["joueurs", "Joueurs"]].concat(canPrimes(rights) ? [["primes", "Primes"]] : []);
@@ -551,6 +552,7 @@ function Header({ me, space, setSpace, view, setView, outilView, setOutilView, a
           {spaces.map(([k, l, ic]) => <button key={k} onClick={() => setSpace(k)} aria-pressed={space === k} style={{ border: "none", cursor: "pointer", fontFamily: "inherit", fontWeight: 700, fontSize: 12, borderRadius: 30, padding: "6px 11px", display: "flex", alignItems: "center", gap: 6, background: space === k ? "#fff" : "transparent", color: space === k ? "#16171B" : "rgba(255,255,255,.85)" }}><i className={"ti " + ic} style={{ fontSize: 15 }} /><span className="hide-xs">{l}</span></button>)}
         </div>}
         <button onClick={onHelp} title="Aide / Guide" style={{ background: YELLOW, color: BLACK, border: "none", borderRadius: 30, padding: "7px 14px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontFamily: "inherit", fontWeight: 700, fontSize: 12.5, flex: "0 0 auto", boxShadow: "0 2px 8px rgba(0,0,0,.18)" }}><i className="ti ti-help-circle" style={{ fontSize: 17 }} aria-hidden="true" />Aide</button>
+        {onAnnonces && <button onClick={onAnnonces} title="Annonces" aria-label={"Annonces" + (annUnread ? " (" + annUnread + " non lues)" : "")} style={{ position: "relative", background: "rgba(255,255,255,.08)", border: "none", color: "#E9EAEC", width: 36, height: 36, borderRadius: 11, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}><i className="ti ti-speakerphone" style={{ fontSize: 18 }} aria-hidden="true" />{annUnread > 0 && <span style={{ position: "absolute", top: -5, right: -5, background: YELLOW, color: BLACK, fontSize: 10, fontWeight: 800, borderRadius: 10, minWidth: 17, height: 17, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>{annUnread}</span>}</button>}
         <button onClick={onBell} title="Notifications" style={{ position: "relative", background: "rgba(255,255,255,.08)", border: "none", color: "#E9EAEC", width: 36, height: 36, borderRadius: 11, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}><i className="ti ti-bell" style={{ fontSize: 18 }} />{unread > 0 && <span style={{ position: "absolute", top: -5, right: -5, background: RED, color: "#fff", fontSize: 10, fontWeight: 700, borderRadius: 10, minWidth: 17, height: 17, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>{unread}</span>}</button>
         <div style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", flex: "0 0 auto" }} onClick={onProfile} title="Mon espace">
           <Avatar u={me} size={32} />
@@ -2235,7 +2237,7 @@ function PushToggle({ me, reload }) {
 }
 
 function MonCompte({ me, data, onClose, reload, onLogout, onUsers, onHelp }) {
-  const { poles } = data;
+  const poles = (data && data.poles) || [];
   const [prenom, setPrenom] = useState(f(me, "Prénom") || "");
   const [nom, setNom] = useState(f(me, "Nom") || "");
   const [pole, setPole] = useState((f(me, "Pôle") || [])[0] || "");
@@ -2278,6 +2280,10 @@ function MonCompte({ me, data, onClose, reload, onLogout, onUsers, onHelp }) {
       <div style={{ marginTop: 16, borderTop: "1px solid " + BORDER, paddingTop: 16 }}>
         <div className="lbl" style={{ marginTop: 0 }}>Notifications sur cet appareil</div>
         <PushToggle me={me} reload={reload} />
+      </div>
+      <div style={{ marginTop: 16, borderTop: "1px solid " + BORDER, paddingTop: 16 }}>
+        <div className="lbl" style={{ marginTop: 0 }}>Mes notifications</div>
+        <NotifPrefs me={me} />
       </div>
       {f(me, "Rôle") === "Admin" && <div style={{ marginTop: 16, borderTop: "1px solid " + BORDER, paddingTop: 16 }}>
         <div className="lbl" style={{ marginTop: 0 }}>Administration</div>
@@ -3304,7 +3310,7 @@ function BottomNav({ space, view, setView, outilView, setOutilView, setSpace, ad
     );
   }
   if (space === "admin") {
-    const ic = { users: "ti-users", roles: "ti-shield-lock", equipes: "ti-ball-football", paiements: "ti-cash", journal: "ti-history" };
+    const ic = { users: "ti-users", roles: "ti-shield-lock", equipes: "ti-ball-football", paiements: "ti-cash", support: "ti-lifebuoy", journal: "ti-history" };
     const t = adminTabsFor(rights);
     return (
       <nav className="bottomnav">
@@ -3347,6 +3353,8 @@ export default function App() {
   const [outilView, setOutilView] = useState("couts");
   const [data, setData] = useState({ poles: [], users: [], tasks: [], meetings: [], sujets: [], commentaires: [], notifs: [] });
   const [modal, setModal] = useState(null);
+  const [supportFocus, setSupportFocus] = useState(null);
+  const [ann, reloadAnn, annUnread] = useAnnonces(!!me && authMode === "session");
   const [taskOpen, setTaskOpen] = useState(null);
   const [liveOpen, setLiveOpen] = useState(null);
   const [signOpen, setSignOpen] = useState(null);
@@ -3402,6 +3410,18 @@ export default function App() {
   }, []);
   useEffect(() => { try { const sid = new URLSearchParams(window.location.search).get("sign"); if (sid) setSignOpen(sid); } catch (e) {} }, []);
   useEffect(() => { try { const rid = new URLSearchParams(window.location.search).get("rsvp"); if (rid) setRsvpOpen(rid); } catch (e) {} }, []);
+  // Liens des notifications : ?annonce=… · ?aide=demandes · ?support=…
+  useEffect(() => {
+    if (!me) return;
+    try {
+      const q = new URLSearchParams(window.location.search);
+      const an = q.get("annonce"), ai = q.get("aide"), su = q.get("support");
+      if (an) setModal({ type: "annonces", focus: an });
+      else if (ai) setModal({ type: "aide", tab: ai === "demandes" ? "demandes" : "guide" });
+      else if (su && hasAdminAccess(rights)) { setSupportFocus(su); setAdminView("support"); setSpace("admin"); }
+      if (an || ai || su) window.history.replaceState(null, "", window.location.pathname);
+    } catch (e) {}
+  }, [me && me.id, rights.join(",")]);
   useEffect(() => {
     if (typeof navigator === "undefined" || !("setAppBadge" in navigator)) return;
     try {
@@ -3445,12 +3465,12 @@ export default function App() {
     <div style={{ minHeight: "100vh", backgroundColor: "#F4F5F8", backgroundImage: "radial-gradient(720px circle at 100% -6%, rgba(214,40,40,.06), transparent 58%), radial-gradient(620px circle at -6% 112%, rgba(245,197,24,.07), transparent 58%)", backgroundAttachment: "fixed", color: TEXT, fontFamily: "'Manrope',system-ui,sans-serif" }}>
       <style>{CSS}</style>
       <BusyOverlay />
-      <Header me={me} space={space} setSpace={(k) => { try { localStorage.setItem("vhb_space", k); } catch (e) {} setSpace(k); }} outilView={outilView} setOutilView={setOutilView} adminView={adminView} setAdminView={setAdminView} sportView={sportView} setSportView={setSportView} rights={rights} view={view} setView={(v) => { setTaskOpen(null); setLiveOpen(null); setSignOpen(null); setRsvpOpen(null); setView(v); }} isAdmin={isAdmin} onLogout={logout} unread={unread} onBell={() => setModal({ type: "notifs" })} onProfile={() => setModal({ type: "profile" })} onHelp={() => setModal({ type: "help" })} />
+      <Header me={me} space={space} setSpace={(k) => { try { localStorage.setItem("vhb_space", k); } catch (e) {} setSpace(k); }} outilView={outilView} setOutilView={setOutilView} adminView={adminView} setAdminView={setAdminView} sportView={sportView} setSportView={setSportView} rights={rights} view={view} setView={(v) => { setTaskOpen(null); setLiveOpen(null); setSignOpen(null); setRsvpOpen(null); setView(v); }} isAdmin={isAdmin} onLogout={logout} unread={unread} onBell={() => setModal({ type: "notifs" })} onProfile={() => setModal({ type: "profile" })} onHelp={() => setModal({ type: "aide" })} onAnnonces={authMode === "session" ? () => { reloadAnn(); setModal({ type: "annonces" }); } : null} annUnread={annUnread} />
       <div className="wrap">
         {authMode === "legacy" && <PasswordNudge me={me} onRelogin={() => { setMe(null); setAuthMode(null); setStatus("login"); }} />}
         <InstallBanner />
         {space === "sport" ? <SportSpace me={me} rights={rights} scope={access.scope} teams={access.teams} view={sportView} setView={setSportView} />
-        : space === "admin" ? <AdminSpace me={me} rights={rights} view={adminView} setView={setAdminView} onSelfChanged={refreshMe} />
+        : space === "admin" ? <AdminSpace me={me} rights={rights} view={adminView} setView={setAdminView} onSelfChanged={refreshMe} supportFocus={supportFocus} />
         : space === "none" ? <div className="card fade" style={{ borderLeft: "4px solid " + YELLOW, maxWidth: 560 }}><div style={{ fontSize: 17, fontWeight: 800, marginBottom: 6 }}>Bienvenue sur VHB Team</div><div style={{ fontSize: 13.5, color: MUT, lineHeight: 1.55 }}>Ton accès est bien créé. L'espace Sportif (pointage des séances, suivi des joueurs) arrive très bientôt : tu seras prévenu dès qu'il sera ouvert.</div></div>
         : space === "outils" ? <div className="rise">{outilView === "couts" && <CoutsView />}</div> : <>
         {rsvpOpen && <RSVPView meetingId={rsvpOpen} me={me} data={data} onClose={() => { setRsvpOpen(null); try { window.history.replaceState({}, "", window.location.pathname); } catch (e) {} }} reload={reload} openNewSujet={(opts) => setModal({ type: "sujet", ...(opts || {}) })} />}
@@ -3472,10 +3492,12 @@ export default function App() {
       {modal && modal.type === "meeting" && <NewMeeting onClose={() => setModal(null)} reload={reload} data={data} />}
       {modal && modal.type === "planif" && <PlanificateurCA data={data} onClose={() => setModal(null)} reload={reload} />}
       {modal && modal.type === "meetingDetail" && <MeetingDetail meetingId={modal.id} me={me} data={data} isAdmin={isAdmin} onClose={() => setModal(null)} reload={reload} onStart={() => { setModal(null); setLiveOpen(modal.id); }} onSign={() => { setModal(null); setSignOpen(modal.id); }} />}
-      {modal && modal.type === "profile" && <MonCompte me={me} data={data} onClose={() => setModal(null)} reload={reload} onLogout={logout} onUsers={() => { setModal(null); if (hasAdminAccess(rights)) { setAdminView("users"); setSpace("admin"); } else setView("admin"); }} onHelp={() => setModal({ type: "help" })} />}
+      {modal && modal.type === "profile" && <MonCompte me={me} data={data} onClose={() => setModal(null)} reload={reload} onLogout={logout} onUsers={() => { setModal(null); if (hasAdminAccess(rights)) { setAdminView("users"); setSpace("admin"); } else setView("admin"); }} onHelp={() => setModal({ type: "aide" })} />}
       {modal && modal.type === "cr" && <CRView meetingId={modal.id} data={data} onClose={() => setModal(null)} />}
       {modal && modal.type === "sujetDetail" && <SujetDetail sujetId={modal.id} me={me} data={data} isAdmin={isAdmin} reload={reload} onClose={() => setModal(null)} />}
       {modal && modal.type === "help" && <HelpView onClose={() => setModal(null)} />}
+      {modal && modal.type === "aide" && <HelpCenter rights={rights} sessionOk={authMode === "session"} initialTab={modal.tab} page={({ ca: "Pilotage CA", sport: "Sportif", outils: "Outils", admin: "Admin", none: "Accueil" }[space] || space) + " › " + (space === "sport" ? sportView : space === "admin" ? adminView : space === "outils" ? outilView : view)} onClose={() => setModal(null)} onOpenCaGuide={() => setModal({ type: "help" })} />}
+      {modal && modal.type === "annonces" && <AnnoncesPanel rights={rights} data={ann} reload={reloadAnn} focusId={modal.focus} onClose={() => { setModal(null); reloadAnn(); }} />}
       <BottomNav space={space} setSpace={(k) => { try { localStorage.setItem("vhb_space", k); } catch (e) {} setSpace(k); }} outilView={outilView} setOutilView={setOutilView} adminView={adminView} setAdminView={setAdminView} sportView={sportView} setSportView={setSportView} rights={rights} view={view} setView={(v) => { setTaskOpen(null); setLiveOpen(null); setSignOpen(null); setRsvpOpen(null); setView(v); }} />
     </div>
   );
