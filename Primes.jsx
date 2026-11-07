@@ -1,6 +1,8 @@
 // Étape 4 — Primes : tableau du mois (directeur sportif), corrections, validation, paiements (comptabilité).
 // Les calculs et toutes les écritures se font côté serveur (/api/primes) ; ici on affiche et on envoie.
 import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { createPortal } from "react-dom";
+import { PlayerCard } from "./Fiche.jsx";
 import { db, dbForget, f, RED, YELLOW, BLACK, TEXT, MUT, BORDER, OK } from "./App.jsx";
 
 const has = (rights, r) => (rights || []).includes("*") || (rights || []).includes(r);
@@ -42,13 +44,13 @@ function downloadCsv(name, rows) {
 // Fenêtre avec croix de fermeture en haut à droite et touche Échap.
 function Sheet({ title, onClose, children, wide }) {
   useEffect(() => { const h = (e) => { if (e.key === "Escape") onClose(); }; window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h); }, [onClose]);
-  return <div role="dialog" aria-modal="true" aria-label={title} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{ position: "fixed", inset: 0, background: "rgba(16,17,20,.55)", zIndex: 200, display: "flex", alignItems: "flex-end", justifyContent: "center", padding: 12 }}>
+  return createPortal(<div role="dialog" aria-modal="true" aria-label={title} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{ position: "fixed", inset: 0, background: "rgba(16,17,20,.55)", zIndex: 200, display: "flex", alignItems: "flex-end", justifyContent: "center", padding: 12 }}>
     <div className="card" style={{ position: "relative", width: "100%", maxWidth: wide ? 760 : 520, maxHeight: "88vh", overflowY: "auto", display: "flex", flexDirection: "column", gap: 12, marginBottom: "env(safe-area-inset-bottom)" }}>
       <button aria-label="Fermer" onClick={onClose} style={{ position: "absolute", top: 10, right: 10, width: 40, height: 40, borderRadius: 20, border: "none", background: "#EEF0F3", cursor: "pointer", fontSize: 20, lineHeight: 1 }}><i className="ti ti-x" aria-hidden="true" />{"×".slice(0, 0)}</button>
       <div style={{ fontSize: 18, fontWeight: 800, color: TEXT, paddingRight: 48 }}>{title}</div>
       {children}
     </div>
-  </div>;
+  </div>, document.body);
 }
 const Stat = ({ label, value, tone }) => <div className="card" style={{ flex: "1 1 120px", padding: "12px 14px", display: "flex", flexDirection: "column", gap: 2, borderLeft: "4px solid " + (tone || BORDER) }}>
   <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".06em", color: MUT }}>{label}</span><span style={{ fontSize: 22, fontWeight: 800, color: TEXT }}>{value}</span></div>;
@@ -200,6 +202,7 @@ export function PrimesView({ rights, teams, users }) {
 
 function PlayerDetail({ row, data, validated, canCorr, onClose, onChanged, onExtra }) {
   const [busyId, setBusyId] = useState(null);
+  const [card, setCard] = useState(false);
   const seances = validated ? [] : (data.seances || []);
   const stOf = (sid) => ((row.detail || []).find((x) => x.s === sid) || {}).st;
   const excuse = async (sid, on) => {
@@ -235,7 +238,11 @@ function PlayerDetail({ row, data, validated, canCorr, onClose, onChanged, onExt
         {canCorr && !validated && <button aria-label="Retirer" className="btn btn-ghost" onClick={() => delExtra(x)} style={{ minHeight: 34 }}><i className="ti ti-trash" aria-hidden="true" />Retirer</button>}
       </div>)}
     </div>}
-    {canCorr && <button className="btn btn-ghost" onClick={onExtra} style={{ alignSelf: "flex-start" }}><i className="ti ti-plus" aria-hidden="true" />Ajouter une prime ou une régularisation</button>}
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      <button className="btn btn-ghost" onClick={() => setCard(true)}><i className="ti ti-id" aria-hidden="true" />Voir la fiche du joueur</button>
+      {canCorr && <button className="btn btn-ghost" onClick={onExtra}><i className="ti ti-plus" aria-hidden="true" />Ajouter une prime ou une régularisation</button>}
+    </div>
+    {card && <PlayerCard joueurId={row.joueur} onClose={() => setCard(false)} />}
   </Sheet>;
 }
 
