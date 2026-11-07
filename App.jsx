@@ -435,8 +435,17 @@ function InstallBanner() {
 }
 
 // Bandeau de transition : membre connecté « à l'ancienne » (sans mot de passe).
-function PasswordNudge({ me }) {
+function PasswordNudge({ me, onRelogin }) {
   const [state, setState] = useState("idle");
+  // Mot de passe déjà créé (souvent depuis le navigateur, alors que l'appli installée
+  // garde une mémoire séparée) : il suffit de se connecter une fois sur cet appareil.
+  if (f(me, "_aMotDePasse")) return (
+    <div className="fade" style={{ background: "#fff", borderLeft: "4px solid " + YELLOW, borderRadius: 16, padding: "12px 14px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", margin: "0 0 16px", boxShadow: "0 1px 3px rgba(20,22,30,.08)" }}>
+      <i className="ti ti-lock-check" style={{ fontSize: 22, color: "#8A6A00" }} aria-hidden="true" />
+      <div style={{ flex: "1 1 220px", fontSize: 13.5, color: TEXT, lineHeight: 1.45 }}><b>Ton mot de passe est créé.</b> Connecte-toi une fois avec sur cet appareil pour finir de le sécuriser.</div>
+      <button className="btn btn-dark" onClick={onRelogin}>Me connecter</button>
+    </div>
+  );
   const send = async () => {
     setState("busy");
     try { await authApi("forgot", { email: f(me, "Email") }); setState("sent"); } catch (e) { alert("Envoi impossible : " + e.message); setState("idle"); }
@@ -958,7 +967,18 @@ function CommentBox({ task, sujet, me, users, reload }) {
   );
 }
 function Modal({ children, onClose, wide }) {
-  return <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(16,17,20,.55)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "5vh 16px 40px", zIndex: 100, overflowY: "auto" }}>
+  // Fermeture : croix toujours visible en haut à droite, touche Échap, ou clic à côté.
+  useEffect(() => {
+    if (!onClose) return;
+    const h = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [onClose]);
+  return <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(16,17,20,.55)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "calc(5vh + env(safe-area-inset-top)) 16px 40px", zIndex: 100, overflowY: "auto" }}>
+    {onClose && <button type="button" onClick={(e) => { e.stopPropagation(); onClose(); }} aria-label="Fermer" title="Fermer"
+      style={{ position: "fixed", top: "calc(12px + env(safe-area-inset-top))", right: 12, zIndex: 102, width: 44, height: 44, borderRadius: 22, border: "none", background: "#fff", color: "#14161A", boxShadow: "0 4px 14px rgba(0,0,0,.25)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <i className="ti ti-x" style={{ fontSize: 22 }} aria-hidden="true" />
+    </button>}
     <div onClick={(e) => e.stopPropagation()} className="rise card" style={{ maxWidth: wide ? 940 : 680, width: "100%", padding: "30px 34px" }}>{children}</div>
   </div>;
 }
@@ -3403,7 +3423,7 @@ export default function App() {
       <BusyOverlay />
       <Header me={me} space={space} setSpace={setSpace} outilView={outilView} setOutilView={setOutilView} adminView={adminView} setAdminView={setAdminView} rights={rights} view={view} setView={(v) => { setTaskOpen(null); setLiveOpen(null); setSignOpen(null); setRsvpOpen(null); setView(v); }} isAdmin={isAdmin} onLogout={logout} unread={unread} onBell={() => setModal({ type: "notifs" })} onProfile={() => setModal({ type: "profile" })} onHelp={() => setModal({ type: "help" })} />
       <div className="wrap">
-        {authMode === "legacy" && <PasswordNudge me={me} />}
+        {authMode === "legacy" && <PasswordNudge me={me} onRelogin={() => { setMe(null); setAuthMode(null); setStatus("login"); }} />}
         <InstallBanner />
         {space === "admin" ? <AdminSpace me={me} rights={rights} view={adminView} setView={setAdminView} onSelfChanged={refreshMe} />
         : space === "none" ? <div className="card fade" style={{ borderLeft: "4px solid " + YELLOW, maxWidth: 560 }}><div style={{ fontSize: 17, fontWeight: 800, marginBottom: 6 }}>Bienvenue sur VHB Team</div><div style={{ fontSize: 13.5, color: MUT, lineHeight: 1.55 }}>Ton accès est bien créé. L'espace Sportif (pointage des séances, suivi des joueurs) arrive très bientôt : tu seras prévenu dès qu'il sera ouvert.</div></div>

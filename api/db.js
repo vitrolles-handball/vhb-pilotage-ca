@@ -67,6 +67,10 @@ export default async function handler(req, res) {
   if (!TOKEN || !BASE) { res.status(500).json({ error: "Configuration manquante." }); return; }
   if (req.method !== "POST") { res.status(405).json({ error: "POST uniquement" }); return; }
   const b = readBody(req);
+  // Les champs calculés par le serveur (préfixe « _ ») ne s'écrivent jamais.
+  const dropCalc = (fl) => { if (!fl) return fl; const o = { ...fl }; Object.keys(o).forEach((k) => { if (k.startsWith("_")) delete o[k]; }); return o; };
+  if (b.fields) b.fields = dropCalc(b.fields);
+  if (Array.isArray(b.records)) b.records = b.records.map((r) => ({ ...r, fields: dropCalc(r.fields) }));
   const { action, table, recordId, fields, records, filterByFormula, sort, field, file, filename, contentType } = b;
   const isWrite = action !== "list";
 
