@@ -88,7 +88,8 @@ function __vhbEnvoyer(payload) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   }).then(async (r) => {
-    const j = await r.json();
+    const j = await r.json().catch(() => ({}));
+    if (r.status === 401 && typeof window !== "undefined") window.dispatchEvent(new Event("vhb-auth-lost"));
     if (!r.ok) throw new Error(j.error || ("Erreur " + r.status));
     return j;
   }).finally(() => __vhbSetBusy(-1));
@@ -201,7 +202,7 @@ function sendMail(payload) {
 }
 const APP_URL = (typeof window !== "undefined" && window.location && window.location.origin) || "https://vhb-pilotage-ca.vercel.app";
 const escapeHtml = (s) => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-const mailWrap = (title, body, cta) => `<div style="font-family:Arial,Helvetica,sans-serif;max-width:520px;margin:auto;border:1px solid #eee;border-radius:14px;overflow:hidden"><div style="background:#16171B;padding:18px 22px;color:#fff"><span style="font-weight:800;font-size:17px">VHB Pilotage</span> <span style="color:#F5C518;font-size:12px">Tous Hand'semble</span></div><div style="padding:22px">${title ? `<h2 style="margin:0 0 12px;color:#16171B;font-size:18px">${title}</h2>` : ""}${body}${cta ? `<div style="margin-top:18px"><a href="${cta.url}" style="background:#D62828;color:#fff;text-decoration:none;padding:11px 18px;border-radius:10px;font-weight:700;display:inline-block">${cta.label}</a></div>` : ""}</div><div style="padding:14px 22px;color:#9aa0a6;font-size:11px;background:#F7F8FA">Vitrolles Handball Jeunes · email automatique, ne pas répondre</div></div>`;
+const mailWrap = (title, body, cta) => `<div style="font-family:Arial,Helvetica,sans-serif;max-width:520px;margin:auto;border:1px solid #eee;border-radius:14px;overflow:hidden"><div style="background:#16171B;padding:18px 22px;color:#fff"><span style="font-weight:800;font-size:17px">VHB Team</span> <span style="color:#F5C518;font-size:12px">Tous Hand'semble</span></div><div style="padding:22px">${title ? `<h2 style="margin:0 0 12px;color:#16171B;font-size:18px">${title}</h2>` : ""}${body}${cta ? `<div style="margin-top:18px"><a href="${cta.url}" style="background:#D62828;color:#fff;text-decoration:none;padding:11px 18px;border-radius:10px;font-weight:700;display:inline-block">${cta.label}</a></div>` : ""}</div><div style="padding:14px 22px;color:#9aa0a6;font-size:11px;background:#F7F8FA">Vitrolles Handball Jeunes · email automatique, ne pas répondre</div></div>`;
 
 function dueInfo(dateStr) {
   if (!dateStr) return null;
@@ -260,41 +261,192 @@ function Avatar({ u, size = 34 }) {
   );
 }
 
-function Login({ onLogin }) {
-  const [email, setEmail] = useState("");
+// ---------------------------------------------------------------------------
+// CONNEXION — mot de passe + « première connexion / mot de passe oublié ».
+// La session est un cookie HttpOnly posé par /api/auth : la page ne la voit pas.
+// ---------------------------------------------------------------------------
+function authApi(action, payload) {
+  return fetch("/api/auth", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(Object.assign({ action }, payload || {})) })
+    .then(async (r) => { const j = await r.json().catch(() => ({})); if (!r.ok) { const e = new Error(j.error || ("Erreur " + r.status)); e.status = r.status; e.code = j.code; e.enforce = j.enforce; throw e; } return j; });
+}
+
+function Login({ onLogin, resetToken, onResetDone }) {
+  const [mode, setMode] = useState(resetToken ? "reset" : "login"); // login | forgot | sent | reset
+  const [email, setEmail] = useState(() => { try { return localStorage.getItem("vhb_email") || ""; } catch (e) { return ""; } });
+  const [pwd, setPwd] = useState("");
+  const [pwd2, setPwd2] = useState("");
+  const [show, setShow] = useState(false);
+  const [remember, setRemember] = useState(true);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
-  const submit = async () => {
+  const go = (m) => { setErr(""); setPwd(""); setPwd2(""); setMode(m); };
+
+  const login = async () => {
     const mail = email.trim().toLowerCase();
-    if (!mail) return;
+    if (!mail || !pwd) { setErr("Indique ton e-mail et ton mot de passe."); return; }
     setBusy(true); setErr("");
     try {
-      const j = await db({ action: "list", table: "Utilisateurs", filterByFormula: "LOWER({Email})='" + esc(mail) + "'" });
-      const u = (j.records || [])[0];
-      if (!u) { setErr("Cet email n'est pas autorisé. Demande à un administrateur de te créer un accès."); setBusy(false); return; }
-      if (f(u, "Actif") === false) { setErr("Ton accès a été désactivé. Contacte un administrateur."); setBusy(false); return; }
-      localStorage.setItem("vhb_email", mail);
-      onLogin(u);
-    } catch (e) { setErr("Erreur de connexion : " + e.message); setBusy(false); }
+      const j = await authApi("login", { email: mail, password: pwd, remember });
+      try { localStorage.setItem("vhb_email", mail); } catch (e) {}
+      onLogin(j.user);
+    } catch (e) {
+      setErr(e.message);
+      if (e.code === "nopassword") setMode("forgot");
+      setBusy(false);
+    }
   };
+  const forgot = async () => {
+    const mail = email.trim().toLowerCase();
+    if (!mail) { setErr("Indique ton adresse e-mail."); return; }
+    setBusy(true); setErr("");
+    try { await authApi("forgot", { email: mail }); setMode("sent"); } catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+  const reset = async () => {
+    if (pwd.length < 8) { setErr("Le mot de passe doit faire au moins 8 caractères."); return; }
+    if (pwd !== pwd2) { setErr("Les deux mots de passe ne sont pas identiques."); return; }
+    setBusy(true); setErr("");
+    try {
+      const j = await authApi("reset", { token: resetToken, password: pwd });
+      try { localStorage.setItem("vhb_email", String((j.user && j.user.fields && j.user.fields.Email) || "").toLowerCase()); } catch (e) {}
+      if (onResetDone) onResetDone();
+      onLogin(j.user);
+    } catch (e) {
+      setErr(e.message);
+      if (e.code === "badlink") { if (onResetDone) onResetDone(); setMode("forgot"); }
+      setBusy(false);
+    }
+  };
+  const onEnter = (fn) => (e) => { if (e.key === "Enter") fn(); };
+  const pwdField = (value, set, label, id, onKey) => (
+    <div style={{ marginTop: 12 }}>
+      <label className="lbl" htmlFor={id}>{label}</label>
+      <div style={{ position: "relative" }}>
+        <input id={id} className="inp" type={show ? "text" : "password"} value={value} autoComplete={mode === "reset" ? "new-password" : "current-password"}
+          onChange={(e) => set(e.target.value)} onKeyDown={onKey} style={{ paddingRight: 46 }} />
+        <button type="button" onClick={() => setShow(!show)} aria-label={show ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+          style={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", width: 40, height: 40, border: "none", background: "transparent", cursor: "pointer", color: MUT }}>
+          <i className={"ti " + (show ? "ti-eye-off" : "ti-eye")} style={{ fontSize: 19 }} aria-hidden="true" />
+        </button>
+      </div>
+    </div>
+  );
+  const linkBtn = { background: "none", border: "none", color: "#B42318", fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit", padding: "10px 0", width: "100%" };
+
   return (
     <div style={{ minHeight: "100vh", backgroundColor: "#16110f", backgroundImage: "linear-gradient(rgba(16,11,12,.42), rgba(16,11,12,.60)), url(/bandeau.jpg)", backgroundSize: "cover", backgroundPosition: "center", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
       <style>{CSS}</style>
       <div className="fade" style={{ textAlign: "center", maxWidth: 380, width: "100%" }}>
         <img src={LOGO} width={96} height={96} alt="VHB" style={{ marginBottom: 14 }} />
-        <div className="display" style={{ fontSize: 26, color: "#FBF6EF" }}>VHB Pilotage</div>
+        <div className="display" style={{ fontSize: 26, color: "#FBF6EF" }}>VHB Team</div>
         <div className="cond" style={{ fontSize: 13, color: RED, marginBottom: 26 }}>Tous Hand'semble</div>
         <div className="card" style={{ textAlign: "left" }}>
-          <label className="lbl">Ton adresse email</label>
-          <input className="inp" type="email" value={email} placeholder="prenom@exemple.com"
-            onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} />
-          {err && <div style={{ color: RED, fontSize: 12.5, marginTop: 10, lineHeight: 1.5 }}>{err}</div>}
-          <button className="btn btn-red" style={{ width: "100%", justifyContent: "center", marginTop: 14 }} disabled={busy} onClick={submit}>
-            {busy ? "Connexion…" : "Entrer"}
-          </button>
+          {mode === "login" && <>
+            <div style={{ fontSize: 17, fontWeight: 800, color: TEXT, marginBottom: 10 }}>Se connecter</div>
+            <label className="lbl" htmlFor="lg-mail">Adresse e-mail</label>
+            <input id="lg-mail" className="inp" type="email" autoComplete="username" value={email} placeholder="prenom@exemple.com" onChange={(e) => setEmail(e.target.value)} onKeyDown={onEnter(login)} />
+            {pwdField(pwd, setPwd, "Mot de passe", "lg-pwd", onEnter(login))}
+            <label style={{ display: "flex", alignItems: "center", gap: 9, marginTop: 12, fontSize: 13.5, color: TEXT, cursor: "pointer", minHeight: 36 }}>
+              <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} style={{ width: 18, height: 18, accentColor: RED }} />
+              Rester connecté sur cet appareil (30 jours)
+            </label>
+            {err && <div role="alert" style={{ color: RED, fontSize: 12.5, marginTop: 10, lineHeight: 1.5 }}>{err}</div>}
+            <button className="btn btn-red" style={{ width: "100%", justifyContent: "center", marginTop: 14 }} disabled={busy} onClick={login}>{busy ? "Connexion…" : "Se connecter"}</button>
+            <button type="button" style={linkBtn} onClick={() => go("forgot")}>Première connexion ou mot de passe oublié ?</button>
+          </>}
+          {mode === "forgot" && <>
+            <div style={{ fontSize: 17, fontWeight: 800, color: TEXT, marginBottom: 6 }}>Créer ou changer mon mot de passe</div>
+            <div style={{ fontSize: 13, color: MUT, lineHeight: 1.5, marginBottom: 12 }}>Indique l'adresse que le club t'a enregistrée : tu recevras un lien, valable 30 minutes, pour choisir ton mot de passe.</div>
+            <label className="lbl" htmlFor="fg-mail">Adresse e-mail</label>
+            <input id="fg-mail" className="inp" type="email" autoComplete="username" value={email} placeholder="prenom@exemple.com" onChange={(e) => setEmail(e.target.value)} onKeyDown={onEnter(forgot)} />
+            {err && <div role="alert" style={{ color: RED, fontSize: 12.5, marginTop: 10, lineHeight: 1.5 }}>{err}</div>}
+            <button className="btn btn-red" style={{ width: "100%", justifyContent: "center", marginTop: 14 }} disabled={busy} onClick={forgot}>{busy ? "Envoi…" : "Recevoir le lien"}</button>
+            <button type="button" style={linkBtn} onClick={() => go("login")}>← Retour à la connexion</button>
+          </>}
+          {mode === "sent" && <div style={{ textAlign: "center", padding: "6px 0" }}>
+            <i className="ti ti-mail-check" style={{ fontSize: 40, color: OK }} aria-hidden="true" />
+            <div style={{ fontSize: 17, fontWeight: 800, color: TEXT, margin: "8px 0 6px" }}>Regarde tes mails</div>
+            <div style={{ fontSize: 13, color: MUT, lineHeight: 1.55 }}>Si cette adresse est connue du club, un lien vient de partir. Pense à vérifier les courriers indésirables.</div>
+            <button type="button" style={linkBtn} onClick={() => go("login")}>← Retour à la connexion</button>
+          </div>}
+          {mode === "reset" && <>
+            <div style={{ fontSize: 17, fontWeight: 800, color: TEXT, marginBottom: 6 }}>Choisis ton mot de passe</div>
+            <div style={{ fontSize: 13, color: MUT, lineHeight: 1.5 }}>Au moins 8 caractères. Tu resteras connecté sur cet appareil.</div>
+            {pwdField(pwd, setPwd, "Nouveau mot de passe", "rs-pwd")}
+            {pwdField(pwd2, setPwd2, "Confirme le mot de passe", "rs-pwd2", onEnter(reset))}
+            {err && <div role="alert" style={{ color: RED, fontSize: 12.5, marginTop: 10, lineHeight: 1.5 }}>{err}</div>}
+            <button className="btn btn-red" style={{ width: "100%", justifyContent: "center", marginTop: 14 }} disabled={busy} onClick={reset}>{busy ? "Enregistrement…" : "Enregistrer et me connecter"}</button>
+          </>}
         </div>
         <div style={{ fontSize: 11, color: "#E7DDD0", marginTop: 16 }}>1975 — 2025 · 50 ans · Vitrolles Handball Jeunes</div>
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// INSTALLATION DE L'APPLI — bandeau discret, une fois connecté.
+//  • Android / ordinateur (Chrome, Edge) : vrai bouton « Installer ».
+//  • iPhone / iPad : Apple ne permet pas l'installation en un clic → on montre les 2 gestes.
+//  • Masqué si l'appli est déjà installée, ou pendant 30 jours après « Plus tard ».
+// ---------------------------------------------------------------------------
+let __vhbInstallEvt = null;
+if (typeof window !== "undefined") {
+  window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); __vhbInstallEvt = e; window.dispatchEvent(new Event("vhb-installable")); });
+}
+function InstallBanner() {
+  const [can, setCan] = useState(!!__vhbInstallEvt);
+  const [ios] = useState(() => isIOSDevice());
+  const [hidden, setHidden] = useState(() => {
+    if (isStandalone()) return true;
+    try { const t = Number(localStorage.getItem("vhb_install_later") || 0); return Date.now() - t < 30 * 86400000; } catch (e) { return false; }
+  });
+  const [iosHelp, setIosHelp] = useState(false);
+  useEffect(() => {
+    const h = () => setCan(true);
+    const done = () => setHidden(true);
+    window.addEventListener("vhb-installable", h);
+    window.addEventListener("appinstalled", done);
+    try { if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {}); } catch (e) {}
+    return () => { window.removeEventListener("vhb-installable", h); window.removeEventListener("appinstalled", done); };
+  }, []);
+  if (hidden || (!can && !ios)) return null;
+  const later = () => { try { localStorage.setItem("vhb_install_later", String(Date.now())); } catch (e) {} setHidden(true); };
+  const install = async () => {
+    if (ios) { setIosHelp(true); return; }
+    const evt = __vhbInstallEvt; if (!evt) return;
+    evt.prompt();
+    try { const r = await evt.userChoice; if (r && r.outcome === "accepted") setHidden(true); } catch (e) {}
+    __vhbInstallEvt = null; setCan(false);
+  };
+  return (
+    <div className="fade" style={{ background: "#16171B", color: "#fff", borderRadius: 18, padding: "12px 14px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", margin: "0 0 16px" }}>
+      <div style={{ width: 40, height: 40, borderRadius: 12, background: YELLOW, color: BLACK, display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}><i className="ti ti-device-mobile-down" style={{ fontSize: 22 }} aria-hidden="true" /></div>
+      <div style={{ flex: "1 1 200px", minWidth: 0 }}>
+        <div style={{ fontWeight: 800, fontSize: 14 }}>Installe VHB Team sur cet appareil</div>
+        {!iosHelp && <div style={{ fontSize: 12.5, color: "#C9CCD2" }}>Une icône sur ton écran d'accueil, l'appli en plein écran et les notifications.</div>}
+        {iosHelp && <div style={{ fontSize: 12.5, color: "#E3E5E8", lineHeight: 1.55 }}>Dans Safari, touche <b>Partager</b> <i className="ti ti-share-2" aria-hidden="true" /> en bas de l'écran, puis <b>« Sur l'écran d'accueil »</b> et <b>Ajouter</b>.</div>}
+      </div>
+      {!iosHelp && <button className="btn" onClick={install} style={{ background: YELLOW, color: BLACK, border: "none", fontWeight: 800 }}>{ios ? "Comment faire" : "Installer"}</button>}
+      <button className="btn" onClick={later} style={{ background: "transparent", color: "#fff", border: "1px solid rgba(255,255,255,.3)" }}>{iosHelp ? "J'ai compris" : "Plus tard"}</button>
+    </div>
+  );
+}
+
+// Bandeau de transition : membre connecté « à l'ancienne » (sans mot de passe).
+function PasswordNudge({ me }) {
+  const [state, setState] = useState("idle");
+  const send = async () => {
+    setState("busy");
+    try { await authApi("forgot", { email: f(me, "Email") }); setState("sent"); } catch (e) { alert("Envoi impossible : " + e.message); setState("idle"); }
+  };
+  return (
+    <div className="fade" style={{ background: "#fff", borderLeft: "4px solid " + RED, borderRadius: 16, padding: "12px 14px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", margin: "0 0 16px", boxShadow: "0 1px 3px rgba(20,22,30,.08)" }}>
+      <i className="ti ti-lock" style={{ fontSize: 22, color: RED }} aria-hidden="true" />
+      <div style={{ flex: "1 1 220px", fontSize: 13.5, color: TEXT, lineHeight: 1.45 }}>
+        {state === "sent" ? <><b>Lien envoyé</b> à {f(me, "Email")}. Ouvre-le pour choisir ton mot de passe.</> : <><b>Sécurise ton accès :</b> crée ton mot de passe. Bientôt, il sera obligatoire pour se connecter.</>}
+      </div>
+      {state !== "sent" && <button className="btn btn-red" disabled={state === "busy"} onClick={send}>{state === "busy" ? "Envoi…" : "Créer mon mot de passe"}</button>}
     </div>
   );
 }
@@ -372,7 +524,7 @@ function Header({ me, space, setSpace, view, setView, outilView, setOutilView, i
       <div className="appbrand">
         <img src={LOGO} width={40} height={40} alt="VHB" style={{ cursor: "pointer", flex: "0 0 auto", filter: "drop-shadow(0 4px 10px rgba(214,40,40,.35))" }} onClick={() => { setSpace("ca"); setView("dash"); }} />
         <div style={{ lineHeight: 1.12, minWidth: 0 }}>
-          <div style={{ fontSize: 16, color: "#fff", fontWeight: 800, letterSpacing: "-.01em" }}>VHB Pilotage</div>
+          <div style={{ fontSize: 16, color: "#fff", fontWeight: 800, letterSpacing: "-.01em" }}>VHB Team</div>
           <div style={{ fontSize: 10.5, color: "#FFFFFF", fontWeight: 600 }}>Tous Hand'semble</div>
         </div>
       </div>
@@ -785,7 +937,7 @@ function CommentBox({ task, sujet, me, users, reload }) {
       const rec = task || sujet; const linkField = task ? "Tâche" : "Sujet";
       await db({ action: "create", table: "Commentaires", fields: { "Texte": body, [linkField]: [rec.id], "Auteur": [me.id], "Mentions": mIds, "Date": new Date().toISOString(), "Lu par": me.id } });
       setText(""); setMentions([]); await reload();
-      users.filter((u) => mIds.includes(u.id) && f(u, "Email")).forEach((u) => sendMail({ to: f(u, "Email"), subject: fullName(me) + " t'a mentionné — VHB Pilotage", html: mailWrap(fullName(me) + " t'a mentionné sur " + (task ? "une tâche" : "un sujet"), '<p style="color:#16171B;font-weight:700;margin:0 0 6px">' + escapeHtml(f(rec, "Titre") || "") + '</p><p style="color:#444;line-height:1.55;margin:0">' + escapeHtml(body) + '</p>', { url: APP_URL, label: task ? "Voir la tâche" : "Ouvrir VHB Pilotage" }) }).catch(() => {}));
+      users.filter((u) => mIds.includes(u.id) && f(u, "Email")).forEach((u) => sendMail({ to: f(u, "Email"), subject: fullName(me) + " t'a mentionné — VHB Team", html: mailWrap(fullName(me) + " t'a mentionné sur " + (task ? "une tâche" : "un sujet"), '<p style="color:#16171B;font-weight:700;margin:0 0 6px">' + escapeHtml(f(rec, "Titre") || "") + '</p><p style="color:#444;line-height:1.55;margin:0">' + escapeHtml(body) + '</p>', { url: APP_URL, label: task ? "Voir la tâche" : "Ouvrir VHB Team" }) }).catch(() => {}));
     } catch (e) { alert("Erreur : " + e.message); }
     setBusy(false);
   };
@@ -1054,13 +1206,18 @@ function AdminUsers({ me, data, reload }) {
     const mail = email.trim().toLowerCase(); if (!mail) return;
     if (users.some((u) => String(f(u, "Email") || "").toLowerCase() === mail)) { alert("Cet email existe déjà."); return; }
     setBusy(true);
-    try { await db({ action: "create", table: "Utilisateurs", fields: { "Email": mail, "Rôle": role, "Actif": true, "Profil complété": false } }); setEmail(""); await reload(); sendMail({ to: mail, subject: "Bienvenue sur VHB Pilotage — Tous Hand'semble", html: mailWrap("Tu rejoins le CA du club 🤾", '<p style="color:#444;line-height:1.55">Un accès vient de t\'être créé sur <b>VHB Pilotage</b>, l\'outil de pilotage du club. Connecte-toi avec <b>' + escapeHtml(mail) + '</b> pour compléter ton profil et rejoindre ton pôle.</p>', { url: APP_URL, label: "Ouvrir l'outil" }) }).catch(() => {}); } catch (e) { alert("Erreur : " + e.message); }
+    try {
+      const j = await db({ action: "create", table: "Utilisateurs", fields: { "Email": mail, "Rôle": role, "Actif": true, "Profil complété": false } });
+      setEmail(""); await reload();
+      const rec = (j.records || [])[0];
+      if (rec) authApi("invite", { userId: rec.id }).then(() => alert("Accès créé. Un mail d'invitation est parti vers " + mail + " pour qu'il choisisse son mot de passe."), (e) => alert("Accès créé, mais le mail d'invitation n'est pas parti : " + e.message));
+    } catch (e) { alert("Erreur : " + e.message); }
     setBusy(false);
   };
   const toggleRole = async (u) => { await db({ action: "update", table: "Utilisateurs", recordId: u.id, fields: { "Rôle": f(u, "Rôle") === "Admin" ? "Équipier" : "Admin" } }); reload(); };
   const toggleActif = async (u) => { await db({ action: "update", table: "Utilisateurs", recordId: u.id, fields: { "Actif": !(f(u, "Actif") !== false) } }); reload(); };
   const del = async (u) => { if (!confirm("Supprimer définitivement " + fullName(u) + " ?")) return; await db({ action: "delete", table: "Utilisateurs", recordId: u.id }); reload(); };
-  const invite = async (u) => { try { await sendMail({ to: f(u, "Email"), subject: "Ton accès VHB Pilotage — Tous Hand'semble", html: mailWrap("Rejoins le CA du club 🤾", '<p style="color:#444;line-height:1.55">Connecte-toi avec <b>' + escapeHtml(f(u, "Email")) + '</b> pour compléter ton profil sur l\'outil du club.</p>', { url: APP_URL, label: "Ouvrir l'outil" }) }); alert("Invitation envoyée à " + f(u, "Email")); } catch (e) { alert("Envoi impossible : " + e.message); } };
+  const invite = async (u) => { try { await authApi("invite", { userId: u.id }); alert("Invitation envoyée à " + f(u, "Email") + " : le lien lui permet de choisir son mot de passe (valable 7 jours)."); } catch (e) { alert("Envoi impossible : " + e.message); } };
   return (
     <div className="fade">
       <div style={{ fontSize: 20, fontWeight: 700, color: TEXT, marginBottom: 10 }}>Utilisateurs</div>
@@ -1626,7 +1783,7 @@ function NewMeeting({ onClose, reload, data }) {
       const recId = ((jr.records || [])[0] || {}).id;
       if (recId) { for (const sj of ((data && data.sujets) || []).filter((x) => f(x, "À l'ordre du prochain CA"))) { try { await db({ action: "update", table: "Sujets CA", recordId: sj.id, fields: { "Réunion": [recId], "Statut": "En cours", "À l'ordre du prochain CA": false } }); } catch (e) {} } }
       await reload();
-      if (prevenir) ((data && data.users) || []).filter((u) => f(u, "Actif") !== false && f(u, "Email")).forEach((u) => sendMail({ to: f(u, "Email"), subject: "Nouveau CA programmé — VHB Pilotage", html: mailWrap("Un CA est programmé", '<p style="color:#444;line-height:1.55">Une réunion du CA est prévue le <b>' + escapeHtml(fmtDate(date)) + (heure.trim() ? " à " + escapeHtml(heure.trim()) : "") + "</b>" + (lieu.trim() ? " · " + escapeHtml(lieu.trim()) : "") + '.</p><p style="color:#444;line-height:1.55">Merci de répondre à l\'invitation :</p><div style="text-align:center;margin:14px 0"><a href="' + APP_URL + '/?rsvp=' + recId + '&r=present" style="background:#2E8B57;color:#fff;text-decoration:none;padding:11px 18px;border-radius:10px;font-weight:700;display:inline-block;margin:4px">Je serai présent</a> <a href="' + APP_URL + '/?rsvp=' + recId + '&r=absent" style="background:#D62828;color:#fff;text-decoration:none;padding:11px 18px;border-radius:10px;font-weight:700;display:inline-block;margin:4px">Je serai absent</a></div>', { url: APP_URL, label: "Préparer le CA" }) }).catch(() => {}));
+      if (prevenir) ((data && data.users) || []).filter((u) => f(u, "Actif") !== false && f(u, "Email")).forEach((u) => sendMail({ to: f(u, "Email"), subject: "Nouveau CA programmé — VHB Team", html: mailWrap("Un CA est programmé", '<p style="color:#444;line-height:1.55">Une réunion du CA est prévue le <b>' + escapeHtml(fmtDate(date)) + (heure.trim() ? " à " + escapeHtml(heure.trim()) : "") + "</b>" + (lieu.trim() ? " · " + escapeHtml(lieu.trim()) : "") + '.</p><p style="color:#444;line-height:1.55">Merci de répondre à l\'invitation :</p><div style="text-align:center;margin:14px 0"><a href="' + APP_URL + '/?rsvp=' + recId + '&r=present" style="background:#2E8B57;color:#fff;text-decoration:none;padding:11px 18px;border-radius:10px;font-weight:700;display:inline-block;margin:4px">Je serai présent</a> <a href="' + APP_URL + '/?rsvp=' + recId + '&r=absent" style="background:#D62828;color:#fff;text-decoration:none;padding:11px 18px;border-radius:10px;font-weight:700;display:inline-block;margin:4px">Je serai absent</a></div>', { url: APP_URL, label: "Préparer le CA" }) }).catch(() => {}));
       onClose();
     } catch (e) { alert("Erreur : " + e.message); setBusy(false); }
   };
@@ -2036,7 +2193,7 @@ function PushToggle({ me, reload }) {
   const test = async () => {
     setBusy(true);
     try {
-      const r = await fetch("/api/push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userIds: [me.id], title: "VHB Pilotage", body: "Test réussi — les notifications fonctionnent 🎉", url: "/" }) });
+      const r = await fetch("/api/push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userIds: [me.id], title: "VHB Team", body: "Test réussi — les notifications fonctionnent 🎉", url: "/" }) });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || ("Erreur " + r.status));
       alert("Notification test envoyée (" + (j.sent || 0) + "). Elle arrive dans quelques secondes.");
@@ -2161,7 +2318,7 @@ function crDocHtml(m, data, presents, logoSrc, bodyText) {
     + sec('Excusés / Absents (' + absents.length + ')') + '<div style="font-size:12.5px;color:#666">' + (absents.length ? escapeHtml(absents.join(", ")) : "Aucun") + '</div>'
     + sec('Ordre du jour &amp; décisions') + ((bodyText && bodyText.trim()) ? '<div style="white-space:pre-wrap;font-size:12.5px;color:#333;line-height:1.6">' + escapeHtml(bodyText) + '</div>' : rows)
     + '<div style="margin-top:36px;display:flex;justify-content:space-between;gap:40px">' + sigBlock('Le Président', 'Signature Président') + sigBlock('Le / La Secrétaire', 'Signature Secrétaire') + '</div>'
-    + '<div style="margin-top:24px;text-align:center;color:#9aa0a6;font-size:10px;border-top:1px solid #eee;padding-top:8px">Fait à Vitrolles, le ' + escapeHtml(fmtDate(new Date().toISOString())) + ' — Document généré via VHB Pilotage · Tous Hand\'semble.</div>'
+    + '<div style="margin-top:24px;text-align:center;color:#9aa0a6;font-size:10px;border-top:1px solid #eee;padding-top:8px">Fait à Vitrolles, le ' + escapeHtml(fmtDate(new Date().toISOString())) + ' — Document généré via VHB Team · Tous Hand\'semble.</div>'
     + '</div>';
 }
 function printCRdoc(m, data, presents, bodyText) {
@@ -2661,9 +2818,9 @@ function CalendarView({ me, data, openTask, openMeeting }) {
 }
 function HelpView({ onClose }) {
   const S = [
-    ["ti-heart-handshake", "#D62828", "Bienvenue", [["L'outil du CA", "VHB Pilotage réunit au même endroit les tâches, les sujets, les réunions et l'annuaire du Conseil d'Administration."], ["Organisé par pôles", "Gestion, Secrétariat, Développement, Communication, Sportif, Bénévoles — chacun a sa couleur pour se repérer."]]],
+    ["ti-heart-handshake", "#D62828", "Bienvenue", [["L'outil du CA", "VHB Team réunit au même endroit les tâches, les sujets, les réunions et l'annuaire du Conseil d'Administration."], ["Organisé par pôles", "Gestion, Secrétariat, Développement, Communication, Sportif, Bénévoles — chacun a sa couleur pour se repérer."]]],
     ["ti-device-mobile", "#2563EB", "Installer sur ton téléphone", [["iPhone", "Ouvre le lien du club dans Safari → bouton Partager → « Sur l'écran d'accueil » → Ajouter."], ["Android", "Ouvre le lien dans Chrome → menu ⋮ → « Installer l'application » (ou « Ajouter à l'écran d'accueil »)."]]],
-    ["ti-user-circle", "#EA580C", "Première connexion & profil", [["Connexion par email", "Pas de mot de passe : tu te connectes avec ton adresse email (créée par un admin)."], ["Complète ton profil", "Prénom, nom, pôle, fonction, téléphone et photo — modifiables à tout moment dans « Mon espace »."]]],
+    ["ti-user-circle", "#EA580C", "Première connexion & profil", [["Première connexion", "Un admin crée ton accès : tu reçois un mail pour choisir ton mot de passe. Sinon, sur l'écran de connexion, touche « Première connexion ou mot de passe oublié »."], ["Rester connecté", "Coche « Rester connecté » : tu n'auras plus à saisir ton mot de passe pendant 30 jours sur cet appareil."], ["Installer l'appli", "Un bandeau te propose d'installer VHB Team sur ton téléphone ou ton ordinateur. Sur iPhone : Safari → Partager → « Sur l'écran d'accueil »."], ["Complète ton profil", "Prénom, nom, pôle, fonction, téléphone et photo — modifiables à tout moment dans « Mon espace »."]]],
     ["ti-home", "#059669", "Le tableau de bord", [["L'essentiel en un coup d'œil", "Prochain CA, tes chiffres clés, tes tâches, les coups de main demandés et l'activité récente."], ["Sujets du prochain CA", "Clique sur un sujet pour l'ouvrir et le commenter ; le badge permet de l'ajouter/retirer de l'ordre du jour."]]],
     ["ti-checklist", "#DC2626", "Les tâches", [["Deux vues", "« Mes tâches » (les tiennes / ton pôle) et « Tâches par pôle » (tout le club). Recherche et tri disponibles."], ["Agir", "« Je prends » pour t'affecter, change le statut (À faire / En cours / Fait), fixe une échéance, ajoute des documents."], ["Socle & ponctuelles", "Le socle = missions officielles permanentes du pôle. Les ponctuelles = au fil de l'eau."]]],
     ["ti-urgent", "#E8590C", "Demander un coup de main", [["Besoin de renfort ?", "Sur une tâche, « Demander un coup de main » avec un message : une alerte apparaît pour tout le club sur l'accueil."], ["Répondre", "Chacun peut cliquer « Je suis dispo » et préciser ses créneaux en commentaire."]]],
@@ -3127,6 +3284,9 @@ function BottomNav({ space, view, setView, outilView, setOutilView, setSpace }) 
 export default function App() {
   const [status, setStatus] = useState("loading");
   const [me, setMe] = useState(null);
+  // Session : "session" = connecté par mot de passe ; "legacy" = ancien accès (transition).
+  const [authMode, setAuthMode] = useState(null);
+  const [resetToken, setResetToken] = useState(() => { try { return new URLSearchParams(window.location.search).get("reset"); } catch (e) { return null; } });
   const [view, setView] = useState("dash");
   const [space, setSpace] = useState("ca");
   const [outilView, setOutilView] = useState("couts");
@@ -3152,17 +3312,37 @@ export default function App() {
 
   useEffect(() => {
     (async () => {
-      const mail = localStorage.getItem("vhb_email");
-      if (!mail) { setStatus("login"); return; }
+      if (resetToken) { setStatus("login"); return; }
+      // 1) Session par mot de passe (cookie posé par le serveur).
       try {
-        const u = await trouverMembre(mail);
-        if (!u || f(u, "Actif") === false) { localStorage.removeItem("vhb_email"); setStatus("login"); return; }
-        setMe(u);
+        const j = await authApi("me");
+        setAuthMode("session"); setMe(j.user);
         await loadData();
-        setStatus(f(u, "Profil complété") ? "app" : "profile");
-      } catch (e) { setStatus("login"); }
+        setStatus(f(j.user, "Profil complété") ? "app" : "profile");
+        return;
+      } catch (e) {
+        // 2) Transition : tant que le verrou est éteint, l'ancien accès par e-mail reste toléré.
+        const mail = (() => { try { return localStorage.getItem("vhb_email"); } catch (er) { return null; } })();
+        if (e.enforce === false && mail && e.status === 401) {
+          try {
+            const u = await trouverMembre(mail);
+            if (!u || f(u, "Actif") === false) { setStatus("login"); return; }
+            setAuthMode("legacy"); setMe(u);
+            await loadData();
+            setStatus(f(u, "Profil complété") ? "app" : "profile");
+            return;
+          } catch (er) {}
+        }
+        setStatus("login");
+      }
     })();
   }, [loadData]);
+  // Session perdue (expirée, compte désactivé…) → retour à l'écran de connexion.
+  useEffect(() => {
+    const h = () => { setMe(null); setAuthMode(null); setStatus("login"); };
+    window.addEventListener("vhb-auth-lost", h);
+    return () => window.removeEventListener("vhb-auth-lost", h);
+  }, []);
   useEffect(() => { try { const sid = new URLSearchParams(window.location.search).get("sign"); if (sid) setSignOpen(sid); } catch (e) {} }, []);
   useEffect(() => { try { const rid = new URLSearchParams(window.location.search).get("rsvp"); if (rid) setRsvpOpen(rid); } catch (e) {} }, []);
   useEffect(() => {
@@ -3177,17 +3357,19 @@ export default function App() {
     } catch (e) {}
   }, [me, data]);
 
-  const onLogin = async (u) => { setMe(u); await loadData(); setStatus(f(u, "Profil complété") ? "app" : "profile"); };
+  const onLogin = async (u) => { setAuthMode("session"); setMe(u); setStatus("loading"); try { await loadData(); } catch (e) {} setStatus(f(u, "Profil complété") ? "app" : "profile"); };
+  const clearResetParam = () => { setResetToken(null); try { window.history.replaceState({}, "", window.location.pathname); } catch (e) {} };
   const onProfileSaved = async (u) => { setMe(u); await loadData(); setStatus("app"); };
-  const logout = () => { if (!confirm("Se déconnecter ?")) return; localStorage.removeItem("vhb_email"); setMe(null); setStatus("login"); };
+  const logout = async () => { if (!confirm("Se déconnecter ?")) return; try { await authApi("logout"); } catch (e) {} setMe(null); setAuthMode(null); setStatus("login"); };
   const refreshMe = useCallback(async () => {
-    const mail = localStorage.getItem("vhb_email"); if (!mail) return;
+    if (authMode === "session") { try { const j = await authApi("me"); if (j.user) setMe(j.user); } catch (e) {} return; }
+    const mail = (() => { try { return localStorage.getItem("vhb_email"); } catch (e) { return null; } })(); if (!mail) return;
     const u = await trouverMembre(mail); if (u) setMe(u);
-  }, []);
+  }, [authMode]);
   const reload = useCallback(async () => { await loadData(); await refreshMe(); }, [loadData, refreshMe]);
 
   if (status === "loading") return <Splash />;
-  if (status === "login") return <Login onLogin={onLogin} />;
+  if (status === "login") return <Login onLogin={onLogin} resetToken={resetToken} onResetDone={clearResetParam} />;
   if (status === "profile") return <ProfileForm me={me} poles={data.poles} onSaved={onProfileSaved} />;
 
   const isAdmin = f(me, "Rôle") === "Admin";
@@ -3201,6 +3383,8 @@ export default function App() {
       <BusyOverlay />
       <Header me={me} space={space} setSpace={setSpace} outilView={outilView} setOutilView={setOutilView} view={view} setView={(v) => { setTaskOpen(null); setLiveOpen(null); setSignOpen(null); setRsvpOpen(null); setView(v); }} isAdmin={isAdmin} onLogout={logout} unread={unread} onBell={() => setModal({ type: "notifs" })} onProfile={() => setModal({ type: "profile" })} onHelp={() => setModal({ type: "help" })} />
       <div className="wrap">
+        {authMode === "legacy" && <PasswordNudge me={me} />}
+        <InstallBanner />
         {space === "outils" ? <div className="rise">{outilView === "couts" && <CoutsView />}</div> : <>
         {rsvpOpen && <RSVPView meetingId={rsvpOpen} me={me} data={data} onClose={() => { setRsvpOpen(null); try { window.history.replaceState({}, "", window.location.pathname); } catch (e) {} }} reload={reload} openNewSujet={(opts) => setModal({ type: "sujet", ...(opts || {}) })} />}
         {!rsvpOpen && signOpen && <SignatureView meetingId={signOpen} me={me} data={data} onClose={() => { setSignOpen(null); try { window.history.replaceState({}, "", window.location.pathname); } catch (e) {} }} reload={reload} />}

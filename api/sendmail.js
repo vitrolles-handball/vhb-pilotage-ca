@@ -1,25 +1,20 @@
 // Envoi d'e-mails côté serveur via Resend. La clé (RESEND_API_KEY) reste ici — jamais exposée au navigateur.
-// MAIL_FROM (facultatif) : expéditeur vérifié, ex. "VHB Pilotage <pilotage@vitrolleshandball.com>".
-// Tant que la clé n'est pas configurée dans Vercel, la fonction répond proprement sans rien envoyer.
-const KEY = process.env.RESEND_API_KEY;
-const FROM = process.env.MAIL_FROM || "VHB Pilotage <onboarding@resend.dev>";
+// Réservé aux personnes connectées (dès que le verrou AUTH_ENFORCE vaut "1"), pour que
+// personne ne puisse se servir du compte du club pour envoyer des mails.
+// Sur les adresses de test, tous les mails partent vers MAIL_TEST_TO (voir _lib.js).
+import { ENFORCE, getSession, sendMail, readBody } from "./_lib.js";
 
 export default async function handler(req, res) {
+  res.setHeader("Cache-Control", "no-store");
   if (req.method !== "POST") { res.status(405).json({ error: "POST uniquement" }); return; }
-  if (!KEY) { res.status(500).json({ error: "RESEND_API_KEY manquante — e-mail non configuré pour l'instant." }); return; }
-  let b = req.body;
-  if (typeof b === "string") { try { b = JSON.parse(b); } catch (e) { b = {}; } }
-  const { to, subject, html } = b || {};
+  const sess = await getSession(req, res);
+  if (!sess && ENFORCE) { res.status(401).json({ error: "Session expirée : reconnecte-toi.", code: "auth" }); return; }
+  const { to, subject, html } = readBody(req);
   if (!to || !subject) { res.status(400).json({ error: "Champs requis : to, subject." }); return; }
+  const dest = Array.isArray(to) ? to : [to];
+  if (dest.length > 60) { res.status(400).json({ error: "Trop de destinataires." }); return; }
   try {
-    const r = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { Authorization: "Bearer " + KEY, "Content-Type": "application/json" },
-      body: JSON.stringify({ from: FROM, to: Array.isArray(to) ? to : [to], subject, html: html || "" }),
-    });
-    const text = await r.text();
-    if (!r.ok) throw new Error("Resend " + r.status + " : " + text);
-    res.status(200).json(JSON.parse(text || "{}"));
+    res.status(200).json(await sendMail(dest, subject, html || ""));
   } catch (e) {
     res.status(500).json({ error: String((e && e.message) || e) });
   }

@@ -1,9 +1,9 @@
-/* Service worker VHB Pilotage — réception des notifications push */
+/* Service worker VHB Team — réception des notifications push */
 self.addEventListener("push", (event) => {
   let data = {};
   try { data = event.data ? event.data.json() : {}; }
-  catch (e) { data = { title: "VHB Pilotage", body: event.data ? event.data.text() : "" }; }
-  const title = data.title || "VHB Pilotage";
+  catch (e) { data = { title: "VHB Team", body: event.data ? event.data.text() : "" }; }
+  const title = data.title || "VHB Team";
   const options = {
     body: data.body || "",
     icon: "/icon-192.png",

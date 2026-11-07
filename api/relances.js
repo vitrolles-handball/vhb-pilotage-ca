@@ -2,10 +2,10 @@
 //  1) Compte-rendus en attente de signature -> rappel aux signataires (Président/Secrétaire) qui n'ont pas signé.
 //  2) Réunions à venir -> rappel de réponse (présent/absent) aux membres qui n'ont pas répondu.
 // Utilise les variables déjà présentes : AIRTABLE_TOKEN, AIRTABLE_BASE_ID, RESEND_API_KEY, MAIL_FROM.
-const BASE = process.env.AIRTABLE_BASE_ID;
+import { BASE as LIB_BASE, sendMail as libSendMail } from "./_lib.js";
+const BASE = LIB_BASE; // base de test sur les adresses de prévisualisation
 const TOKEN = process.env.AIRTABLE_TOKEN;
 const KEY = process.env.RESEND_API_KEY;
-const FROM = process.env.MAIL_FROM || "VHB Pilotage <onboarding@resend.dev>";
 const APP = process.env.APP_URL || "https://vhb-pilotage-ca.vercel.app";
 
 const T_REUNIONS = "tbl0i3NT6K1SjZHmz";
@@ -25,12 +25,8 @@ async function at(path) {
   return all;
 }
 async function sendMail(to, subject, html) {
-  const r = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: { Authorization: "Bearer " + KEY, "Content-Type": "application/json" },
-    body: JSON.stringify({ from: FROM, to: [to], subject, html }),
-  });
-  if (!r.ok) throw new Error("Resend " + r.status + " : " + (await r.text()));
+  // Redirigé vers MAIL_TEST_TO sur les adresses de test (voir _lib.js).
+  await libSendMail(to, subject, html);
 }
 async function patch(table, id, fields) {
   const r = await fetch("https://api.airtable.com/v0/" + BASE + "/" + table + "/" + id, { method: "PATCH", headers: { Authorization: "Bearer " + TOKEN, "Content-Type": "application/json" }, body: JSON.stringify({ fields, typecast: true }) });
@@ -39,7 +35,7 @@ async function patch(table, id, fields) {
 function frDate(s) { if (!s) return ""; const d = String(s).slice(0, 10).split("-"); return d.length === 3 ? d[2] + "/" + d[1] + "/" + d[0] : String(s); }
 function wrap(title, bodyHtml) {
   return '<div style="font-family:Arial,Helvetica,sans-serif;color:#333;max-width:560px;margin:auto">'
-    + '<div style="background:#16171B;padding:16px 20px;color:#fff;border-radius:12px 12px 0 0"><span style="font-weight:800;font-size:16px">VHB Pilotage</span> <span style="color:#F5C518;font-size:12px">Tous Hand\'semble</span></div>'
+    + '<div style="background:#16171B;padding:16px 20px;color:#fff;border-radius:12px 12px 0 0"><span style="font-weight:800;font-size:16px">VHB Team</span> <span style="color:#F5C518;font-size:12px">Tous Hand\'semble</span></div>'
     + '<div style="border:1px solid #eee;border-top:none;padding:20px;border-radius:0 0 12px 12px">' + (title ? '<h2 style="margin:0 0 12px;font-size:17px;color:#16171B">' + title + '</h2>' : '') + bodyHtml + '</div>'
     + '<div style="color:#9aa0a6;font-size:11px;padding:10px 4px">Rappel automatique · Vitrolles Handball Jeunes</div></div>';
 }
@@ -119,7 +115,7 @@ export default async function handler(req, res) {
       if (days > 2 || days < -1) continue;
       const titre = m.fields["Titre"] || "Réunion du CA";
       for (const u of actifs) {
-        const html = wrap("Prépare l'ordre du jour du CA", '<p>Bonjour ' + (u.fields["Prénom"] || "") + ',</p><p>Le CA <b>' + titre + '</b>' + (m.fields["Date"] ? ' du <b>' + frDate(m.fields["Date"]) + '</b>' : '') + ' approche (dans moins de 48h). Pense à <b>mettre tes tâches et tes sujets à l\'ordre du jour</b>.</p><p style="margin-top:14px">' + btn(APP, "Ouvrir VHB Pilotage", "#D62828") + '</p>');
+        const html = wrap("Prépare l'ordre du jour du CA", '<p>Bonjour ' + (u.fields["Prénom"] || "") + ',</p><p>Le CA <b>' + titre + '</b>' + (m.fields["Date"] ? ' du <b>' + frDate(m.fields["Date"]) + '</b>' : '') + ' approche (dans moins de 48h). Pense à <b>mettre tes tâches et tes sujets à l\'ordre du jour</b>.</p><p style="margin-top:14px">' + btn(APP, "Ouvrir VHB Team", "#D62828") + '</p>');
         try { await sendMail(u.fields["Email"], "Prépare l'ordre du jour — " + titre, html); odj++; } catch (e) {}
       }
       try { await patch(T_REUNIONS, m.id, { "Relance ODJ envoyée": true }); } catch (e) {}

@@ -1,7 +1,8 @@
 // Envoi de notifications push (Web Push / VAPID). Clés secrètes en variables d'environnement Vercel.
 import webpush from "web-push";
+import { BASE as LIB_BASE, ENFORCE, getSession, readBody } from "./_lib.js";
 
-const BASE = process.env.AIRTABLE_BASE_ID;
+const BASE = LIB_BASE; // base de test sur les adresses de prévisualisation
 const TOKEN = process.env.AIRTABLE_TOKEN;
 const TABLE = "Utilisateurs";
 const FIELD = "Push abonnements";
@@ -40,16 +41,17 @@ export default async function handler(req, res) {
   }
   webpush.setVapidDetails(subject, pub, priv);
 
-  let b = req.body;
-  if (typeof b === "string") { try { b = JSON.parse(b); } catch (e) { b = {}; } }
+  const sess = await getSession(req, res);
+  if (!sess && ENFORCE) { res.status(401).json({ error: "Session expirée : reconnecte-toi.", code: "auth" }); return; }
+  const b = readBody(req);
   const { userIds, title, body, url, badge } = b || {};
   if (!Array.isArray(userIds) || !userIds.length) { res.status(400).json({ error: "userIds requis" }); return; }
 
-  const payload = JSON.stringify(Object.assign({ title: title || "VHB Pilotage", body: body || "", url: url || "/" }, typeof badge === "number" ? { badge } : {}));
+  const payload = JSON.stringify(Object.assign({ title: title || "VHB Team", body: body || "", url: url || "/" }, typeof badge === "number" ? { badge } : {}));
   let sent = 0, logged = 0;
   try {
     for (const uid of userIds) {
-      try { await logNotif(uid, title || "VHB Pilotage", body || "", url || "/"); logged++; } catch (e) {}
+      try { await logNotif(uid, title || "VHB Team", body || "", url || "/"); logged++; } catch (e) {}
       const rec = await getUser(uid);
       if (!rec) continue;
       let list = [];
