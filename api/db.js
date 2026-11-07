@@ -29,6 +29,10 @@ const RULES = {
   "Joueurs": { read: READ_PLAYERS, write: ["eff"], strict: true, log: true },
   "Effectifs": { read: READ_PLAYERS, write: ["eff"], strict: true, log: true, teamField: "Équipe" },
   "Journal": { read: ["journal"], write: NOBODY, strict: true },
+  "Rythmes": { read: ANY, write: ["plan", "eff"], strict: true, log: true, teamField: "Équipe" },
+  "Séances": { read: READ_PLAYERS.concat(["plan"]), write: ["point", "plan", "eff"], strict: true, teamField: "Équipe" },
+  // Les pointages passent par /api/pointage (vérification de l'équipe, remplacement en bloc).
+  "Pointages": { read: READ_PLAYERS.concat(["plan"]), write: NOBODY, strict: true },
 };
 // Champs de la fiche Utilisateurs réservés au droit « Gérer les utilisateurs ».
 const ADMIN_FIELDS = ["Rôle", "Actif", "Email", "Rôles", "Droits ajoutés"];
@@ -83,9 +87,16 @@ export default async function handler(req, res) {
   const writeList = records ? records.map((r) => r.fields) : fields ? [fields] : [];
   if (writeList.some(touchesSensitive) || (action === "uploadAttachment" && SENSITIVE.includes(field))) { res.status(403).json({ error: "Champ protégé." }); return; }
 
+  if (sess && table === "Séances" && action === "delete" && !canAny(sess, ["plan", "eff"])) { res.status(403).json({ error: "Seul le responsable du planning peut supprimer une séance." }); return; }
   // ---- Portée « ses équipes » : on n'écrit que dans ses équipes.
   if (sess && isWrite && rule && rule.teamField && sess.scope !== "all") {
-    const teamsOk = writeList.every((fl) => ((fl && fl[rule.teamField]) || []).every((t) => seesTeam(sess, t)));
+    let teamsOk = writeList.every((fl) => ((fl && fl[rule.teamField]) || []).every((t) => seesTeam(sess, t)));
+    // Modification / suppression : l'enregistrement existant doit aussi être dans ses équipes.
+    if (teamsOk && recordId && (action === "update" || action === "delete")) {
+      try { const cur = await at("GET", encodeURIComponent(table) + "/" + encodeURIComponent(recordId)); teamsOk = ((cur.fields || {})[rule.teamField] || []).every((t) => seesTeam(sess, t)); }
+      catch (e) { teamsOk = false; }
+    }
+    if (action === "create" && writeList.some((fl) => !((fl && fl[rule.teamField]) || []).length)) teamsOk = false;
     if (!teamsOk) { res.status(403).json({ error: "Cette équipe ne fait pas partie des tiennes." }); return; }
   }
 

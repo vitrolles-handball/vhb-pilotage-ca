@@ -8,7 +8,7 @@
 // ce que la personne ne peut pas faire.
 // ===========================================================================
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { db, f, authApi, fullName, Avatar, RED, YELLOW, BLACK, TEXT, MUT, BORDER, OK } from "./App.jsx";
+import { db, f, authApi, fullName, Avatar, RED, YELLOW, BLACK, TEXT, MUT, BORDER, OK, VACANCES_DEFAUT } from "./App.jsx";
 
 export const RIGHT_GROUPS = [
   ["Pilotage du CA", [["ca", "Voir et utiliser le Pilotage du CA"]]],
@@ -19,13 +19,13 @@ export const RIGHT_GROUPS = [
 ];
 const RIGHT_LABEL = Object.fromEntries(RIGHT_GROUPS.flatMap(([, l]) => l));
 export const has = (rights, r) => (rights || []).includes("*") || (rights || []).includes(r);
-export const ADMIN_RIGHTS = ["users", "roles", "eff", "journal", "param"];
+export const ADMIN_RIGHTS = ["users", "roles", "eff", "journal", "param", "plan"];
 export const hasAdminAccess = (rights) => ADMIN_RIGHTS.some((r) => has(rights, r));
 export function adminTabsFor(rights) {
   const t = [];
   if (has(rights, "users")) t.push(["users", "Utilisateurs"]);
   if (has(rights, "roles") || has(rights, "users")) t.push(["roles", "Rôles"]);
-  if (has(rights, "eff") || has(rights, "param")) t.push(["equipes", "Équipes"]);
+  if (has(rights, "eff") || has(rights, "param") || has(rights, "plan")) t.push(["equipes", "Équipes"]);
   if (has(rights, "journal")) t.push(["journal", "Journal"]);
   return t;
 }
@@ -53,19 +53,20 @@ const Empty = ({ children }) => <div style={{ fontSize: 13.5, color: MUT, paddin
 
 // ---------------------------------------------------------------- Données
 function useAdminData(rights) {
-  const [d, setD] = useState({ users: [], roles: [], teams: [], staff: [], players: [], efx: [], loaded: false, error: "" });
+  const [d, setD] = useState({ users: [], roles: [], teams: [], staff: [], players: [], efx: [], rythmes: [], loaded: false, error: "" });
   const load = useCallback(async () => {
     try {
       const canPlayers = ["eff", "point", "corr", "valid", "compta"].some((r) => has(rights, r));
-      const [u, r, t, s, p, e] = await Promise.all([
+      const [u, r, t, s, p, e, ry] = await Promise.all([
         db({ action: "list", table: "Utilisateurs" }),
         db({ action: "list", table: "Rôles" }),
         db({ action: "list", table: "Équipes" }),
         db({ action: "list", table: "Staff" }),
         canPlayers ? db({ action: "list", table: "Joueurs" }) : Promise.resolve({ records: [] }),
         canPlayers ? db({ action: "list", table: "Effectifs" }) : Promise.resolve({ records: [] }),
+        db({ action: "list", table: "Rythmes" }),
       ]);
-      setD({ users: u.records || [], roles: (r.records || []).sort((a, b) => (f(a, "Ordre") || 99) - (f(b, "Ordre") || 99)), teams: (t.records || []).sort((a, b) => (f(a, "Ordre") || 99) - (f(b, "Ordre") || 99) || String(f(a, "Nom")).localeCompare(String(f(b, "Nom")))), staff: s.records || [], players: p.records || [], efx: e.records || [], loaded: true, error: "" });
+      setD({ users: u.records || [], roles: (r.records || []).sort((a, b) => (f(a, "Ordre") || 99) - (f(b, "Ordre") || 99)), teams: (t.records || []).sort((a, b) => (f(a, "Ordre") || 99) - (f(b, "Ordre") || 99) || String(f(a, "Nom")).localeCompare(String(f(b, "Nom")))), staff: s.records || [], players: p.records || [], efx: e.records || [], rythmes: ry.records || [], loaded: true, error: "" });
     } catch (e) { setD((x) => ({ ...x, loaded: true, error: e.message })); }
   }, [rights]);
   useEffect(() => { load(); }, [load]);
@@ -531,6 +532,8 @@ function TeamDetail({ team, d, rights, reload }) {
         <div style={{ fontSize: 12.5, color: MUT }}>Pour rattacher quelqu'un : Utilisateurs → sa fiche → « Rattacher à une équipe ».</div>
       </div>
 
+      {(has(rights, "plan") || canEff) && <RhythmBlock team={team} d={d} reload={reload} />}
+
       {importing && <ImportPlayers team={team} d={d} reload={reload} onClose={() => setImporting(false)} />}
       {adding && <AddPlayer team={team} d={d} reload={reload} onClose={() => setAdding(false)} />}
 
@@ -692,6 +695,93 @@ function ImportPlayers({ team, d, reload, onClose }) {
       </>}
       {parsed.error && text.trim() && <div style={{ color: "#FFB4B4", fontSize: 13 }}>{parsed.error} Vérifie qu'il y a bien une colonne Nom et une colonne Prénom.</div>}
       {done && <div role="status" style={{ color: "#9BE1AE", fontSize: 13.5, fontWeight: 700 }}>✓ {done} Statuts et dates restent modifiables dans le tableau.</div>}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- Rythme d'entraînement & séances
+const JOURS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
+const seasonEnd = () => SAISON.slice(5) + "-06-30";
+function ymdLocal(d) { return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
+export function datesFor(rythme, from, to) {
+  const idx = JOURS.indexOf(f(rythme, "Jour")); if (idx < 0) return [];
+  const start = [from, f(rythme, "Du")].filter(Boolean).sort().pop();
+  const end = [to, f(rythme, "Au")].filter(Boolean).sort()[0];
+  const out = []; const d = new Date(start + "T12:00:00");
+  while (((d.getDay() + 6) % 7) !== idx) d.setDate(d.getDate() + 1);
+  for (; ymdLocal(d) <= end; d.setDate(d.getDate() + 7)) out.push(ymdLocal(d));
+  return out;
+}
+const inVac = (date) => VACANCES_DEFAUT.find((v) => date >= v.du && date <= v.au);
+function RhythmBlock({ team, d, reload }) {
+  const rythmes = d.rythmes.filter((r) => (f(r, "Équipe") || []).includes(team.id)).sort((a, b) => JOURS.indexOf(f(a, "Jour")) - JOURS.indexOf(f(b, "Jour")));
+  const [nr, setNr] = useState({ jour: "Mardi", heure: "19:30", lieu: "" });
+  const [busy, setBusy] = useState(false);
+  const [gen, setGen] = useState({ du: today(), au: seasonEnd(), skipVac: false });
+  const [cx, setCx] = useState({ du: "", au: "", motif: "Vacances" });
+  const [seances, setSeances] = useState(null);
+  const loadS = useCallback(() => {
+    db({ action: "list", table: "Séances", filterByFormula: "IS_AFTER({Date}, '" + today().slice(0, 4) + "-01-01')" })
+      .then((j) => setSeances((j.records || []).filter((s) => (f(s, "Équipe") || []).includes(team.id))), () => setSeances([]));
+  }, [team.id]);
+  useEffect(() => { loadS(); }, [loadS]);
+  const addR = async () => {
+    setBusy(true);
+    try { await db({ action: "create", table: "Rythmes", fields: { "Libellé": f(team, "Nom") + " · " + nr.jour + " " + nr.heure, "Équipe": [team.id], "Jour": nr.jour, "Heure": nr.heure, "Lieu": nr.lieu, "Du": SAISON.slice(0, 4) + "-09-01", "Au": seasonEnd() } }); await reload(); } catch (e) { alert("Erreur : " + e.message); }
+    setBusy(false);
+  };
+  const delR = async (r) => { if (!confirm("Supprimer ce créneau ? Les séances déjà créées restent.")) return; try { await db({ action: "delete", table: "Rythmes", recordId: r.id }); await reload(); } catch (e) { alert("Erreur : " + e.message); } };
+  const existing = new Set((seances || []).map((s) => f(s, "Date") + "|" + (f(s, "Heure") || "")));
+  const plan = rythmes.flatMap((r) => datesFor(r, gen.du, gen.au).filter((dt) => !(gen.skipVac && inVac(dt))).map((dt) => ({ r, dt }))).filter((x) => !existing.has(x.dt + "|" + (f(x.r, "Heure") || "")));
+  const generate = async () => {
+    if (!plan.length) return;
+    if (!confirm("Créer " + plan.length + " séance(s) d'entraînement pour " + f(team, "Nom") + " ?")) return;
+    setBusy(true);
+    try {
+      await db({ action: "create", table: "Séances", records: plan.map(({ r, dt }) => ({ fields: { "Libellé": f(team, "Nom") + " · Entraînement · " + dt, "Équipe": [team.id], "Date": dt, "Heure": f(r, "Heure") || "", "Lieu": f(r, "Lieu") || "", "Type": "Entraînement", "Statut": "Prévue", "Compte primes": true } })) });
+      loadS(); alert(plan.length + " séance(s) créée(s). Elles apparaissent dans l'espace Sportif.");
+    } catch (e) { alert("Erreur : " + e.message); }
+    setBusy(false);
+  };
+  const toCancel = (seances || []).filter((s) => cx.du && cx.au && f(s, "Date") >= cx.du && f(s, "Date") <= cx.au && f(s, "Statut") === "Prévue");
+  const cancelRange = async () => {
+    if (!toCancel.length) return;
+    if (!confirm("Annuler " + toCancel.length + " séance(s) du " + cx.du.split("-").reverse().join("/") + " au " + cx.au.split("-").reverse().join("/") + " ? Elles sortiront du calcul des primes.")) return;
+    setBusy(true);
+    try { for (const s of toCancel) await db({ action: "update", table: "Séances", recordId: s.id, fields: { "Statut": "Annulée", "Motif annulation": cx.motif } }); loadS(); }
+    catch (e) { alert("Erreur : " + e.message); }
+    setBusy(false);
+  };
+  const upcoming = (seances || []).filter((s) => f(s, "Date") >= today() && f(s, "Statut") !== "Annulée").length;
+  return (
+    <div className="card" style={{ borderLeft: "4px solid " + YELLOW, display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ display: "flex", alignItems: "center" }}><div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".06em", color: MUT, flex: 1 }}>RYTHME D'ENTRAÎNEMENT & PLANNING</div><span style={{ fontSize: 12.5, color: MUT }}>{seances ? upcoming + " séance(s) à venir" : "…"}</span></div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        {rythmes.map((r) => <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, background: "#F4F5F8", borderRadius: 12, padding: "7px 10px" }}><span style={{ fontWeight: 800 }}>{f(r, "Jour")} {f(r, "Heure")}</span>{f(r, "Lieu") && <span style={{ fontSize: 12.5, color: MUT }}>{f(r, "Lieu")}</span>}<button className="btn btn-ghost" style={{ padding: "4px 8px" }} onClick={() => delR(r)} aria-label="Supprimer ce créneau"><i className="ti ti-x" aria-hidden="true" /></button></div>)}
+        {!rythmes.length && <span style={{ fontSize: 13, color: MUT }}>Aucun créneau. Ajoute les jours et heures d'entraînement de l'équipe.</span>}
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
+        <div><label className="lbl" htmlFor="ry-j">Jour</label><select id="ry-j" className="sel" value={nr.jour} onChange={(e) => setNr({ ...nr, jour: e.target.value })} style={{ width: "auto" }}>{JOURS.map((j) => <option key={j}>{j}</option>)}</select></div>
+        <div><label className="lbl" htmlFor="ry-h">Heure</label><input id="ry-h" className="inp" type="time" value={nr.heure} onChange={(e) => setNr({ ...nr, heure: e.target.value })} style={{ width: "auto" }} /></div>
+        <div style={{ flex: "1 1 140px" }}><label className="lbl" htmlFor="ry-l">Lieu (facultatif)</label><input id="ry-l" className="inp" value={nr.lieu} onChange={(e) => setNr({ ...nr, lieu: e.target.value })} /></div>
+        <button className="btn btn-dark" disabled={busy} onClick={addR}><i className="ti ti-plus" aria-hidden="true" />Ajouter le créneau</button>
+      </div>
+      {rythmes.length > 0 && <div style={{ background: "#F8F9FB", borderRadius: 14, padding: 12, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
+        <div style={{ width: "100%", fontSize: 13.5, fontWeight: 800 }}>Créer les séances</div>
+        <div><label className="lbl" htmlFor="gn-d">Du</label><input id="gn-d" className="inp" type="date" value={gen.du} onChange={(e) => setGen({ ...gen, du: e.target.value })} style={{ width: "auto" }} /></div>
+        <div><label className="lbl" htmlFor="gn-a">Au</label><input id="gn-a" className="inp" type="date" value={gen.au} onChange={(e) => setGen({ ...gen, au: e.target.value })} style={{ width: "auto" }} /></div>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, minHeight: 44, cursor: "pointer" }}><input type="checkbox" checked={gen.skipVac} onChange={(e) => setGen({ ...gen, skipVac: e.target.checked })} style={{ width: 18, height: 18, accentColor: RED }} />Rien pendant les vacances scolaires</label>
+        <button className="btn btn-red" disabled={busy || !plan.length || !seances} onClick={generate}>{plan.length ? "Créer " + plan.length + " séance(s)" : "Tout est déjà créé"}</button>
+        <div style={{ width: "100%", fontSize: 12, color: MUT }}>Les séances déjà existantes (même date, même heure) ne sont pas recréées.</div>
+      </div>}
+      <div style={{ background: "#F8F9FB", borderRadius: 14, padding: 12, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
+        <div style={{ width: "100%", fontSize: 13.5, fontWeight: 800 }}>Annuler une période</div>
+        <div style={{ width: "100%", display: "flex", gap: 6, flexWrap: "wrap" }}>{VACANCES_DEFAUT.filter((v) => v.au >= today()).map((v) => <button key={v.nom} className="btn btn-ghost" style={{ padding: "6px 10px", fontSize: 12.5 }} onClick={() => setCx({ du: v.du, au: v.au, motif: "Vacances" })}>Vacances de {v.nom}</button>)}</div>
+        <div><label className="lbl" htmlFor="cx-d">Du</label><input id="cx-d" className="inp" type="date" value={cx.du} onChange={(e) => setCx({ ...cx, du: e.target.value })} style={{ width: "auto" }} /></div>
+        <div><label className="lbl" htmlFor="cx-a">Au</label><input id="cx-a" className="inp" type="date" value={cx.au} onChange={(e) => setCx({ ...cx, au: e.target.value })} style={{ width: "auto" }} /></div>
+        <div><label className="lbl" htmlFor="cx-mo">Motif</label><select id="cx-mo" className="sel" value={cx.motif} onChange={(e) => setCx({ ...cx, motif: e.target.value })} style={{ width: "auto" }}>{["Vacances", "Gymnase indisponible", "Mise au repos", "Intempéries", "Autre"].map((m) => <option key={m}>{m}</option>)}</select></div>
+        <button className="btn btn-dark" disabled={busy || !toCancel.length} onClick={cancelRange}>{toCancel.length ? "Annuler " + toCancel.length + " séance(s)" : "Aucune séance prévue sur la période"}</button>
+      </div>
     </div>
   );
 }
