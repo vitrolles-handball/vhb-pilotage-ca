@@ -8,6 +8,7 @@
 // ===========================================================================
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { PrimesView } from "./Primes.jsx";
+import { RosterView } from "./Fiche.jsx";
 import { db, dbForget, f, RED, YELLOW, BLACK, TEXT, MUT, BORDER, OK } from "./App.jsx";
 
 const QUEUE_KEY = "vhb_pointage_attente";
@@ -101,6 +102,7 @@ export default function SportSpace({ me, rights, scope, teams, view, setView }) 
   if (!d.loaded) return <div className="card fade" style={{ color: MUT }}>Chargement de tes équipes…</div>;
   if (!d.teams || !d.teams.length) return <div className="card fade" style={{ borderLeft: "4px solid " + YELLOW, maxWidth: 560 }}><div style={{ fontSize: 17, fontWeight: 800, marginBottom: 6 }}>Aucune équipe pour l'instant</div><div style={{ fontSize: 13.5, color: MUT, lineHeight: 1.55 }}>Tu n'es rattaché à aucune équipe. Demande à un responsable de te rattacher à la tienne (Admin › Utilisateurs › ta fiche).</div></div>;
   if (view === "primes") return <PrimesView rights={rights} teams={d.teams} />;
+  if (view === "joueurs") return <RosterView teams={d.teams} efx={d.efx} players={d.players} />;
   const banner = (d.offline || queued > 0) && <div role="status" style={{ background: "#FFF6D6", color: "#5C4600", borderRadius: 14, padding: "10px 14px", fontSize: 13, fontWeight: 700, display: "flex", gap: 8, alignItems: "center" }}>
     <i className="ti ti-wifi-off" aria-hidden="true" />
     {queued > 0 ? queued + " pointage(s) enregistré(s) sur le téléphone : envoi automatique dès le retour du réseau." : "Pas de réseau : tu vois les données de ta dernière connexion."}

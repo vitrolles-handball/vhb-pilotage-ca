@@ -8,6 +8,7 @@
 // ce que la personne ne peut pas faire.
 // ===========================================================================
 import { PaymentsPanel } from "./Primes.jsx";
+import { PlayerCard } from "./Fiche.jsx";
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { db, f, authApi, fullName, Avatar, RED, YELLOW, BLACK, TEXT, MUT, BORDER, OK, VACANCES_DEFAUT } from "./App.jsx";
 
@@ -465,6 +466,7 @@ function TeamDetail({ team, d, rights, reload }) {
   const [adding, setAdding] = useState(false);
   const [importing, setImporting] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [card, setCard] = useState(null);
   const efx = d.efx.filter((e) => (f(e, "Équipe") || []).includes(team.id));
   const player = (e) => d.players.find((p) => p.id === (f(e, "Joueur") || [])[0]);
   const teamName = (id) => f(d.teams.find((t) => t.id === id), "Nom") || "?";
@@ -526,6 +528,7 @@ function TeamDetail({ team, d, rights, reload }) {
         </div>}
       </div>
 
+      {card && <PlayerCard joueurId={card} onClose={() => setCard(null)} />}
       <div className="card" style={{ borderLeft: "4px solid #1B5E9B", display: "flex", flexDirection: "column", gap: 8 }}>
         <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".06em", color: MUT }}>STAFF DE L'ÉQUIPE</div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
@@ -556,7 +559,7 @@ function TeamDetail({ team, d, rights, reload }) {
             <thead><tr>{["JOUEUR", "NÉ(E) EN", "STATUT", "ENTRÉE", "SORTIE", "AUSSI DANS", ""].map((h) => <th key={h} style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".06em", color: MUT, textAlign: "left", padding: "10px 12px", borderTop: "1px solid " + BORDER, borderBottom: "1px solid " + BORDER, whiteSpace: "nowrap" }}>{h}</th>)}</tr></thead>
             <tbody>
               {rows.map(({ e, p }) => <tr key={e.id} style={{ borderBottom: "1px solid #F0F1F4" }}>
-                <td style={{ padding: "8px 12px", fontWeight: 700, whiteSpace: "nowrap" }}>{p ? (f(p, "Prénom") || "") + " " + (f(p, "Nom") || "") : "?"}</td>
+                <td style={{ padding: "8px 12px", fontWeight: 700, whiteSpace: "nowrap" }}>{p ? <button className="linkbtn" title="Ouvrir la fiche du joueur" onClick={() => setCard(p.id)} style={{ background: "none", border: "none", padding: 0, font: "inherit", fontWeight: 700, color: TEXT, cursor: "pointer", textDecoration: "underline", textDecorationColor: "#C9CCD2", textUnderlineOffset: 3 }}>{(f(p, "Prénom") || "") + " " + (f(p, "Nom") || "")}</button> : "?"}</td>
                 <td style={{ padding: "8px 12px", color: "#3A3F47" }}>{(p && f(p, "Année de naissance")) || "—"}</td>
                 <td style={{ padding: "8px 12px" }}>{canEff ? <select aria-label="Statut" className="sel" value={f(e, "Statut") || "Effectif"} onChange={(ev) => updEfx(e, { "Statut": ev.target.value })} style={{ width: "auto", padding: "6px 8px" }}><option>Effectif</option><option>Renfort</option></select> : (f(e, "Statut") || "Effectif")}</td>
                 <td style={{ padding: "8px 12px" }}>{canEff ? <input aria-label="Date d'entrée" type="date" className="inp" value={f(e, "Entrée") || ""} onChange={(ev) => updEfx(e, { "Entrée": ev.target.value || null })} style={{ width: "auto", padding: "6px 8px" }} /> : frDate(f(e, "Entrée"))}</td>
