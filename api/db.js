@@ -14,6 +14,9 @@ const CA = ["ca"];
 const ANY = "any";      // toute personne connectée
 const NOBODY = [];      // écrit uniquement par le serveur
 const READ_PLAYERS = ["eff", "point", "corr", "valid", "compta"];
+const READ_PRIMES = ["corr", "valid", "compta", "param"];
+// Barème modifiable avec le seul droit « Paramétrer les barèmes » (sans « Gérer les équipes »).
+const PRIME_FIELDS = ["Primes actives", "Prime présence", "Prime victoire", "Excusé compte comme"];
 // read / write : liste de droits (un seul suffit), ANY, ou NOBODY.
 // adminOnly : table nouvelle → session obligatoire même pendant la transition.
 const RULES = {
@@ -24,7 +27,7 @@ const RULES = {
   "Notifications": { read: ANY, write: ANY },
   "Utilisateurs": { read: ANY, write: ANY /* règles fines plus bas */ },
   "Rôles": { read: ANY, write: ["roles"], strict: true, log: true },
-  "Équipes": { read: ANY, write: ["eff"], strict: true, log: true },
+  "Équipes": { read: ANY, write: ["eff", "param"], strict: true, log: true },
   "Staff": { read: ANY, write: ["users", "eff"], strict: true, log: true },
   "Joueurs": { read: READ_PLAYERS, write: ["eff"], strict: true, log: true },
   "Effectifs": { read: READ_PLAYERS, write: ["eff"], strict: true, log: true, teamField: "Équipe" },
@@ -33,6 +36,9 @@ const RULES = {
   "Séances": { read: READ_PLAYERS.concat(["plan"]), write: ["point", "plan", "eff"], strict: true, teamField: "Équipe" },
   // Les pointages passent par /api/pointage (vérification de l'équipe, remplacement en bloc).
   "Pointages": { read: READ_PLAYERS.concat(["plan"]), write: NOBODY, strict: true },
+  // Les primes passent par /api/primes (calcul, validation, paiements). Lecture limitée à ses équipes.
+  "Primes – Mois": { read: READ_PRIMES, write: NOBODY, strict: true, teamRead: "Équipe" },
+  "Primes – Lignes": { read: READ_PRIMES, write: NOBODY, strict: true, teamRead: "Équipe" },
 };
 // Champs de la fiche Utilisateurs réservés au droit « Gérer les utilisateurs ».
 const ADMIN_FIELDS = ["Rôle", "Actif", "Email", "Rôles", "Droits ajoutés"];
@@ -91,6 +97,9 @@ export default async function handler(req, res) {
   const writeList = records ? records.map((r) => r.fields) : fields ? [fields] : [];
   if (writeList.some(touchesSensitive) || (action === "uploadAttachment" && SENSITIVE.includes(field))) { res.status(403).json({ error: "Champ protégé." }); return; }
 
+  if (sess && table === "Équipes" && isWrite && !can(sess, "eff")) {
+    if (action !== "update" || writeList.some((fl) => Object.keys(fl || {}).some((k) => !PRIME_FIELDS.includes(k)))) { res.status(403).json({ error: "Avec le droit « Paramétrer les barèmes », seuls les montants des primes se modifient." }); return; }
+  }
   if (sess && table === "Séances" && action === "delete" && !canAny(sess, ["plan", "eff"])) { res.status(403).json({ error: "Seul le responsable du planning peut supprimer une séance." }); return; }
   // ---- Portée « ses équipes » : on n'écrit que dans ses équipes.
   if (sess && isWrite && rule && rule.teamField && sess.scope !== "all") {
@@ -158,6 +167,7 @@ export default async function handler(req, res) {
         const j = await at("GET", t + "?" + params.toString());
         all = all.concat(j.records || []); offset = j.offset;
       } while (offset);
+      if (rule.teamRead && sess && sess.scope !== "all") all = all.filter((r) => ((r.fields || {})[rule.teamRead] || []).some((tm) => seesTeam(sess, tm)));
       res.status(200).json({ records: all.map(stripRecord) });
       return;
     }
