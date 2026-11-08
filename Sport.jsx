@@ -239,7 +239,7 @@ function ClubView({ d, banner, onTeam, onOpen }) {
       </div>
       <div style={{ fontSize: 14, fontWeight: 800, color: "#3A3F47", padding: "4px 4px 0" }}>Les équipes <span style={{ fontWeight: 600, color: MUT }}>· touche une équipe pour le détail</span></div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 12 }}>
-        {sorted.map(({ t, s }) => { const st = staff[t.id] || []; const coach = st.find((x) => /entra[iî]neur/i.test(x.fn) && !/adjoint/i.test(x.fn)) || st[0]; return (
+        {sorted.map(({ t, s }) => { const st = staff[t.id] || []; const coach = st.find((x) => x.fn === "Coach 1") || st.find((x) => /coach|entra[iî]neur/i.test(x.fn)) || st[0]; return (
           <button key={t.id} className="card" onClick={() => onTeam(t.id)} aria-label={"Détail de l'équipe " + f(t, "Nom")} style={{ textAlign: "left", cursor: "pointer", fontFamily: "inherit", display: "flex", flexDirection: "column", gap: 8, borderLeft: "4px solid " + (s.late.length ? RED : f(t, "Primes actives") ? YELLOW : BORDER), minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ flex: 1, minWidth: 0, fontSize: 16, fontWeight: 800, color: TEXT }}>{f(t, "Nom")}</span>

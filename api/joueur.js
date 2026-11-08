@@ -3,9 +3,11 @@
 //   fiche     { joueurId }          → équipes, assiduité par mois (vs moyenne de l'équipe), dernières séances,
 //                                     primes (seulement avec un droit Primes : Corriger, Valider, Comptabilité, Paramétrer)
 //   assiduite { teamId, month }     → présences / séances / taux du mois pour chaque joueur de l'équipe (sans montants)
+//   saisonBilan / saisonArchive / saisonCloture → assistant de fin de saison (voir _saison.js)
 // Droits : Gérer les effectifs, Pointer, Corriger, Valider ou Comptabilité (comme la lecture des joueurs).
 import { at, getSession, canAny, seesTeam, readBody } from "./_lib.js";
 import { computeMonth, counts, nextMonth, monthOf } from "./_primes.js";
+import { saison } from "./_saison.js";
 
 const T = (n) => encodeURIComponent(n);
 const READ_PLAYERS = ["eff", "point", "corr", "valid", "compta"];
@@ -43,6 +45,8 @@ export default async function handler(req, res) {
   if (!canAny(sess, READ_PLAYERS)) { res.status(403).json({ error: "Tu n'as pas accès aux fiches des joueurs." }); return; }
   const b = readBody(req);
   try {
+    // Assistant de fin de saison (Admin › Équipes).
+    if (String(b.action || "").startsWith("saison")) { await saison(sess, b, res); return; }
     // -------------------------------------------------------------- Assiduité d'une équipe sur un mois
     if (b.action === "assiduite") {
       if (!isId(b.teamId) || !isMonth(b.month)) { res.status(400).json({ error: "Équipe ou mois manquant." }); return; }

@@ -4,12 +4,14 @@
 //  • Rôles : créer / modifier des rôles (modèles de droits), portée
 //  • Équipes : équipes de la saison, staff, effectifs, ajout et import de joueurs
 //  • Journal : qui a fait quoi
+//  • Fin de saison : assistant (Saison.jsx)
 // Les droits sont vérifiés côté serveur (api/db.js) ; l'interface masque seulement
 // ce que la personne ne peut pas faire.
 // ===========================================================================
 import { PaymentsPanel } from "./Primes.jsx";
 import { PlayerCard } from "./Fiche.jsx";
 import { SupportPanel } from "./Comms.jsx";
+import { SeasonWizard } from "./Saison.jsx";
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { db, f, authApi, fullName, Avatar, RED, YELLOW, BLACK, TEXT, MUT, BORDER, OK, VACANCES_DEFAUT } from "./App.jsx";
 
@@ -431,6 +433,7 @@ function TeamsPanel({ d, rights, reload }) {
   const active = d.teams.filter((t) => !f(t, "Archivée"));
   const [sel, setSel] = useState((active[0] || {}).id || null);
   const [newName, setNewName] = useState("");
+  const [wizard, setWizard] = useState(false);
   const canEff = has(rights, "eff");
   const team = d.teams.find((t) => t.id === sel) || null;
   const efxOf = (tid) => d.efx.filter((e) => (f(e, "Équipe") || []).includes(tid));
@@ -454,6 +457,8 @@ function TeamsPanel({ d, rights, reload }) {
           <input id="nt" className="inp" placeholder="Nouvelle équipe (ex. U15 F)" value={newName} onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addTeam()} />
           <button className="btn btn-dark" onClick={addTeam} aria-label="Créer l'équipe"><i className="ti ti-plus" aria-hidden="true" /></button>
         </div>}
+        {canEff && active.length > 0 && <button className="btn btn-ghost" onClick={() => setWizard(true)} style={{ justifyContent: "flex-start" }}><i className="ti ti-flag" aria-hidden="true" />Fin de saison…</button>}
+        {wizard && <SeasonWizard teams={active} canParam={has(rights, "param")} onClose={() => setWizard(false)} onDone={async () => { setWizard(false); await reload(); }} />}
       </div>
       <div style={{ flex: "999 1 600px", minWidth: 0 }}>{team ? <TeamDetail key={team.id} team={team} d={d} rights={rights} reload={reload} /> : <div className="card"><Empty>Choisis ou crée une équipe.</Empty></div>}</div>
     </div>
