@@ -18,7 +18,7 @@ export const ENFORCE = process.env.AUTH_ENFORCE === "1";
 
 export const T_USERS = "Utilisateurs";
 // Champs que le navigateur ne doit JAMAIS voir ni modifier.
-export const SENSITIVE = ["Mot de passe (chiffré)", "Jeton réinitialisation"];
+export const SENSITIVE = ["Mot de passe (chiffré)", "Jeton réinitialisation", "Version session"];
 
 // ---------------------------------------------------------------- Airtable
 export async function at(method, path, body) {
@@ -98,6 +98,9 @@ export async function checkPassword(pwd, stored) {
 // Petite empreinte du mot de passe enregistrée dans la session : si le mot de
 // passe change, toutes les anciennes sessions tombent d'elles-mêmes.
 export const pwdVersion = (stored) => crypto.createHash("sha256").update(String(stored || "")).digest("hex").slice(0, 12);
+// Version de session = mot de passe + compteur « Version session » (« Me déconnecter partout » l'augmente).
+// Sans compteur, identique à l'ancienne empreinte : les sessions déjà ouvertes restent valables.
+export const sessVersion = (fields) => { const fl = fields || {}; const n = Number(fl["Version session"]) || 0; return pwdVersion(fl["Mot de passe (chiffré)"]) + (n ? "." + n : ""); };
 
 // ---------------------------------------------------------------- Cookies & sessions
 const COOKIE = "vhb_s";
@@ -118,11 +121,10 @@ function appendCookie(res, value) {
   res.setHeader("Set-Cookie", list.concat(value));
 }
 export async function setSessionCookie(res, user, remember) {
-  const stored = (user.fields || {})["Mot de passe (chiffré)"];
   const now = Date.now();
   const life = remember ? 30 * DAY : 12 * 3600000;
   const acc = await computeAccess(user);
-  const payload = { u: user.id, ri: acc.rights, sc: acc.scope, tm: acc.teams, pv: pwdVersion(stored), rm: !!remember, ck: now, exp: now + life };
+  const payload = { u: user.id, ri: acc.rights, sc: acc.scope, tm: acc.teams, pv: sessVersion(user.fields), rm: !!remember, ck: now, exp: now + life };
   const parts = [COOKIE + "=" + encodeURIComponent(sign(payload)), "Path=/", "HttpOnly", "Secure", "SameSite=Lax"];
   if (remember) parts.push("Max-Age=" + Math.floor(life / 1000));
   appendCookie(res, parts.join("; "));
@@ -140,7 +142,7 @@ export async function getSession(req, res) {
   if (Date.now() - (p.ck || 0) > RECHECK_MS) {
     const u = await getUser(p.u);
     const fl = (u && u.fields) || {};
-    if (!u || fl["Actif"] === false || pwdVersion(fl["Mot de passe (chiffré)"]) !== p.pv) {
+    if (!u || fl["Actif"] === false || sessVersion(fl) !== p.pv) {
       clearSessionCookie(res);
       return null;
     }
@@ -151,7 +153,7 @@ export async function getSession(req, res) {
     if (p.rm) parts.push("Max-Age=" + Math.max(0, Math.floor((p.exp - Date.now()) / 1000)));
     appendCookie(res, parts.join("; "));
   }
-  return { uid: p.u, rights: acc.rights, scope: acc.scope, teams: acc.teams };
+  return { uid: p.u, rights: acc.rights, scope: acc.scope, teams: acc.teams, pv: p.pv, rm: !!p.rm };
 }
 
 // ---------------------------------------------------------------- Droits

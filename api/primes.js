@@ -67,6 +67,13 @@ async function loadAndCompute(team, month) {
   return computeMonth({ team, month, seances: mine, pointages, effectifs, players, extras, today: todayParis() });
 }
 
+async function readSettings() {
+  const rows = await listAll(T("Réglages"), "{Clé}='primes'");
+  const r = rows[0];
+  let value = {}; try { value = JSON.parse((r && (r.fields || {})["Valeur"]) || "{}") || {}; } catch (e) {}
+  return { id: r ? r.id : null, value };
+}
+
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
   if (req.method !== "POST") { res.status(405).json({ error: "POST uniquement" }); return; }
@@ -76,6 +83,21 @@ export default async function handler(req, res) {
   const deny = (msg) => res.status(403).json({ error: msg || "Tu n'as pas le droit de faire ça." });
   try {
     // ------------------------------------------------------------ Paiements (plusieurs équipes possibles)
+    if (b.action === "reglages") {
+      // Réglages des primes (table Réglages, clé « primes ») : règle des quatre yeux.
+      if (!canAny(sess, READ)) return deny();
+      const cur = await readSettings();
+      if (b.set) {
+        if (!can(sess, "param")) return deny("Réservé aux personnes qui paramètrent les barèmes.");
+        const next = { ...cur.value, quatreYeux: !!b.set.quatreYeux };
+        const fields = { "Clé": "primes", "Valeur": JSON.stringify(next) };
+        if (cur.id) await at("PATCH", T("Réglages") + "/" + cur.id, { fields }); else await at("POST", T("Réglages"), { records: [{ fields }] });
+        await logAction(sess, "Réglage des primes", "Réglages", cur.id || "", { "Quatre yeux": { avant: !!cur.value.quatreYeux, après: next.quatreYeux } });
+        res.status(200).json({ ok: true, ...next }); return;
+      }
+      res.status(200).json({ quatreYeux: !!cur.value.quatreYeux }); return;
+    }
+
     if (b.action === "pay") {
       if (!can(sess, "compta")) return deny("Réservé à la comptabilité.");
       const ids = [...new Set((b.lineIds || []).filter(isRec))];
@@ -88,6 +110,11 @@ export default async function handler(req, res) {
         const fl = l.fields || {};
         if (!((fl["Équipe"] || []).every((t) => seesTeam(sess, t)))) return deny("Une des lignes concerne une équipe qui n'est pas la tienne.");
         if (!(fl["Mois"] || []).length) { res.status(409).json({ error: "Une des lignes appartient à un mois pas encore validé." }); return; }
+      }
+      // Règle des quatre yeux : on ne marque pas « Payé » une prime qu'on a soi-même créée ou corrigée.
+      if (status === "Payé" && (await readSettings()).value.quatreYeux) {
+        const own = lines.filter((l) => ((l.fields || {})["Créé par"] || []).includes(sess.uid));
+        if (own.length) { res.status(409).json({ error: "Règle des quatre yeux : " + own.length + " ligne(s) ont été créées ou corrigées par toi (régularisation, prime exceptionnelle). Une autre personne doit les marquer payées." }); return; }
       }
       const date = /^\d{4}-\d{2}-\d{2}$/.test(String(b.date || "")) ? b.date : todayParis();
       const f = status === "Payé"
@@ -141,7 +168,7 @@ export default async function handler(req, res) {
 
     // ------------------------------------------------------------ Actions sur une équipe et un mois
     const { teamId, month } = b;
-    if (!isRec(teamId) || (b.action !== "annual" && !isMonth(month))) { res.status(400).json({ error: "Équipe ou mois manquant." }); return; }
+    if (!isRec(teamId) || (!["annual", "reglages", "pay"].includes(b.action) && !isMonth(month))) { res.status(400).json({ error: "Équipe ou mois manquant." }); return; }
     if (!seesTeam(sess, teamId)) return deny("Cette équipe ne fait pas partie des tiennes.");
     let team; try { team = await at("GET", T("Équipes") + "/" + teamId); } catch (e) { res.status(404).json({ error: "Équipe introuvable." }); return; }
     const teamName = (team.fields || {})["Nom"] || "Équipe";

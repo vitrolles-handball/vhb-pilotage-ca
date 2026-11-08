@@ -185,11 +185,23 @@ export default async function handler(req, res) {
       }
       if (shouldLog) await logAction(sess, "Création", table, out.records.map((r) => r.id).join(", "), recs.length > 3 ? recs.length + " enregistrements" : recs.map((r) => r.fields));
     } else if (action === "update") {
+      // Journal : on garde l'ancienne et la nouvelle valeur de chaque champ modifié.
+      let before = null;
+      if (shouldLog) { try { before = (await at("GET", t + "/" + recordId)).fields || {}; } catch (e) {} }
       out = await at("PATCH", t, { records: [{ id: recordId, fields }], typecast: true });
-      if (shouldLog) await logAction(sess, "Modification", table, recordId, fields);
+      if (shouldLog) {
+        const diff = {};
+        Object.keys(fields || {}).filter((k) => !SENSITIVE.includes(k)).forEach((k) => {
+          const a = before ? before[k] : undefined, n = fields[k];
+          if (JSON.stringify(a ?? null) !== JSON.stringify(n ?? null)) diff[k] = { avant: a ?? null, après: n ?? null };
+        });
+        if (Object.keys(diff).length || !before) await logAction(sess, "Modification", table, recordId, before ? diff : fields);
+      }
     } else if (action === "delete") {
+      let before = null;
+      if (shouldLog) { try { before = (await at("GET", t + "/" + recordId)).fields || {}; } catch (e) {} }
       out = await at("DELETE", t + "/" + recordId);
-      if (shouldLog) await logAction(sess, "Suppression", table, recordId, "");
+      if (shouldLog) await logAction(sess, "Suppression", table, recordId, before ? { avant: Object.fromEntries(Object.entries(before).filter(([k]) => !SENSITIVE.includes(k))) } : "");
     } else { res.status(400).json({ error: "Action inconnue : " + action }); return; }
     res.status(200).json(clean(out));
   } catch (e) {

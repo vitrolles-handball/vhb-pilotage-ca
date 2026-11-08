@@ -297,6 +297,10 @@ function UserEditor({ row, d, me, rights, reload, onSelfChanged }) {
       {msg && <div role="status" style={{ fontSize: 13, color: msg.startsWith("Erreur") || msg.startsWith("Envoi") ? RED : OK }}>{msg}</div>}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         {canEdit && <button className="btn btn-red" disabled={!dirty || busy} onClick={save}>{busy ? "…" : "Enregistrer"}</button>}
+        {has(rights, "users") && f(u, "Actif") !== false && f(u, "Profil complété") && <button className="btn btn-ghost" disabled={busy} onClick={async () => {
+          if (!confirm("Déconnecter " + fullName(u) + " de tous ses appareils ? (téléphone perdu, appareil partagé…) Il devra se reconnecter avec son mot de passe.")) return;
+          try { await authApi("logoutAll", { userId: u.id }); setMsg(fullName(u) + " est déconnecté(e) de tous ses appareils."); } catch (e) { setMsg("Impossible : " + e.message); }
+        }}><i className="ti ti-device-mobile-off" aria-hidden="true" />Déconnecter de tous ses appareils</button>}
         {has(rights, "users") && f(u, "Actif") !== false && <button className="btn btn-dark" disabled={busy} onClick={invite}><i className="ti ti-mail" aria-hidden="true" />{f(u, "Profil complété") ? "Renvoyer un lien de connexion" : "Renvoyer l'invitation"}</button>}
         {canEdit && !isSelf && <button className="btn btn-ghost" disabled={busy} onClick={toggleActif}>{f(u, "Actif") !== false ? "Désactiver" : "Réactiver"}</button>}
       </div>
@@ -906,6 +910,27 @@ function RhythmBlock({ team, d, reload }) {
 }
 
 // ---------------------------------------------------------------- Journal
+// Détail d'une ligne du journal : « champ : avant → après » quand l'ancienne valeur est connue.
+const showVal = (v, d) => {
+  if (v === null || v === undefined || v === "") return "(vide)";
+  if (Array.isArray(v)) return v.map((x) => { if (typeof x !== "string" || !/^rec/.test(x)) return String(x); const u = d.users.find((y) => y.id === x) || d.teams.find((y) => y.id === x) || d.roles.find((y) => y.id === x) || d.players.find((y) => y.id === x); return u ? (f(u, "Nom") && f(u, "Prénom") ? f(u, "Prénom") + " " + f(u, "Nom") : f(u, "Nom") || fullName(u)) : x; }).join(", ") || "(vide)";
+  if (typeof v === "boolean") return v ? "oui" : "non";
+  if (typeof v === "object") return JSON.stringify(v);
+  return String(v);
+};
+function JournalDetail({ raw, d }) {
+  const [open, setOpen] = useState(false);
+  let o = null; try { o = raw && /^[{\[]/.test(raw) ? JSON.parse(raw) : null; } catch (e) {}
+  const diff = o && !Array.isArray(o) && Object.values(o).length && Object.values(o).every((x) => x && typeof x === "object" && "avant" in x && ("après" in x)) ? o : null;
+  if (diff) return <span style={{ flex: "1 1 260px", display: "flex", flexDirection: "column", gap: 2 }}>
+    {Object.entries(diff).map(([k, v]) => <span key={k} style={{ fontSize: 13 }}><b>{k}</b> : <span style={{ color: "#9E1B1B", textDecoration: "line-through" }}>{showVal(v.avant, d)}</span> → <span style={{ color: "#1F5C30", fontWeight: 700 }}>{showVal(v["après"], d)}</span></span>)}
+  </span>;
+  if (o && o.avant && typeof o.avant === "object") return <span style={{ flex: "1 1 260px", fontSize: 13, color: MUT }}>
+    <button onClick={() => setOpen(!open)} style={{ background: "none", border: "none", padding: 0, color: "#1B5E9B", textDecoration: "underline", cursor: "pointer", font: "inherit" }}>{open ? "Masquer" : "Voir"} ce qui a été supprimé</button>
+    {open && Object.entries(o.avant).map(([k, v]) => <span key={k} style={{ display: "block" }}><b>{k}</b> : {showVal(v, d)}</span>)}
+  </span>;
+  return <span style={{ color: MUT, flex: "1 1 200px", overflow: open ? "visible" : "hidden", textOverflow: "ellipsis", whiteSpace: open ? "normal" : "nowrap", cursor: "pointer", wordBreak: "break-word" }} title={raw || ""} onClick={() => setOpen(!open)}>{raw || ""}</span>;
+}
 function JournalPanel({ d }) {
   const [rows, setRows] = useState(null);
   const [tbl, setTbl] = useState("all");
@@ -926,7 +951,7 @@ function JournalPanel({ d }) {
         <span style={{ color: MUT, minWidth: 120 }}>{when(f(r, "Date"))}</span>
         <span style={{ fontWeight: 800, minWidth: 140 }}>{who(r)}</span>
         <span style={{ minWidth: 160 }}>{f(r, "Action")} · {f(r, "Table")}</span>
-        <span style={{ color: MUT, flex: "1 1 200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={f(r, "Détail") || ""}>{f(r, "Détail") || ""}</span>
+        <JournalDetail raw={f(r, "Détail")} d={d} />
       </div>)}
     </div>
   );

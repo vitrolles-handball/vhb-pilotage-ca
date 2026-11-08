@@ -62,6 +62,23 @@ export default async function handler(req, res) {
   const b = readBody(req);
   try {
     if (["fils", "fil", "poster", "effacer"].includes(b.action)) { await discussions(sess, b, res); return; }
+    // Pastilles des espaces : ce qui attend dans Sportif (séances en retard) et Admin (demandes de support nouvelles).
+    if (b.action === "compteurs") {
+      const out = { sport: 0, admin: 0 };
+      const today = new Date(Date.now() + 3600e3).toISOString().slice(0, 10);
+      const since = new Date(Date.now() - 45 * 864e5).toISOString().slice(0, 10);
+      if (["point", "eff", "plan", "corr", "valid"].some((r) => can(sess, r))) {
+        const q = new URLSearchParams({ pageSize: "100", filterByFormula: "AND(IS_AFTER({Date}, '" + since + "'), IS_BEFORE({Date}, '" + today + "'), {Statut}!='Pointée', {Statut}!='Annulée')" });
+        q.append("fields[]", "Équipe"); q.append("fields[]", "Statut"); q.append("fields[]", "Date");
+        const j = await at("GET", T("Séances") + "?" + q.toString());
+        out.sport = (j.records || []).filter((s) => ((s.fields || {})["Équipe"] || []).some((t) => seesTeam(sess, t))).length;
+      }
+      if (can(sess, "support")) {
+        const q = new URLSearchParams({ pageSize: "100", filterByFormula: "{Statut}='Nouveau'" }); q.append("fields[]", "Statut");
+        try { const j = await at("GET", T("Support") + "?" + q.toString()); out.admin = (j.records || []).length; } catch (e) {}
+      }
+      res.status(200).json(out); return;
+    }
     if (b.action === "targets") {
       if (!canAny(sess, ["msg", "msgall"])) { res.status(403).json({ error: "Tu n'as pas le droit d'envoyer des annonces." }); return; }
       const { groups, people } = await buildTargets(sess);

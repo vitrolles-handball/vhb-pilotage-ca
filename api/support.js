@@ -37,6 +37,24 @@ export default async function handler(req, res) {
   if (!sess) { res.status(401).json({ error: "Session expirée : reconnecte-toi.", code: "auth" }); return; }
   const b = readBody(req);
   try {
+    // Proposer un sujet au CA depuis l'espace Sportif (le staff n'a pas accès au Pilotage CA).
+    if (b.action === "sujet") {
+      const titre = String(b.titre || "").trim().slice(0, 120);
+      const texte = String(b.texte || "").trim().slice(0, 3000);
+      if (!titre) { res.status(400).json({ error: "Donne un titre à ton sujet." }); return; }
+      const THEMES = ["Finances", "Sportif", "Événements", "Bénévoles", "Communication", "Administratif", "Partenariats", "Divers"];
+      const theme = THEMES.includes(b.theme) ? b.theme : "Sportif";
+      const [users, roles] = await Promise.all([listAll(T("Utilisateurs")), listAll(T("Rôles"))]);
+      const me = users.find((u) => u.id === sess.uid);
+      const fields = { "Titre": titre, "Description": (texte ? texte + "\n\n" : "") + "— Proposé depuis l'espace Sportif par " + nameOf(me) + ".", "Thème": theme, "Statut": "À traiter", "Proposé par": [sess.uid], "Date proposé": new Date(Date.now() + 3600e3).toISOString().slice(0, 10) };
+      const rec = (await at("POST", T("Sujets CA"), { records: [{ fields }], typecast: true })).records[0];
+      await logAction(sess, "Sujet proposé au CA", "Sujets CA", rec.id, titre);
+      const ca = users.filter((u) => u.id !== sess.uid && fv(u, "Actif") !== false && hasRight(rightsOf(u, roles), "ca"));
+      const r = ca.length ? await notifyUsers(ca, { title: "💡 Sujet proposé au CA", body: nameOf(me) + " : " + titre, url: "/" }) : {};
+      res.status(200).json({ ok: true, id: rec.id, notified: ca.length, ...r });
+      return;
+    }
+
     if (b.action === "create") {
       const type = TYPES.includes(b.type) ? b.type : "Question";
       const texte = String(b.texte || "").trim().slice(0, 4000);

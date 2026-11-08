@@ -10,6 +10,7 @@ import {
   TOKEN, BASE, ENFORCE, T_USERS, getUser, findUserByEmail, updateUser, stripRecord,
   sign, verify, randomId, hashPassword, checkPassword, setSessionCookie, clearSessionCookie,
   getSession, isAdmin, can, sendMail, appUrl, mailWrap, readBody, tooMany, noteFailure, clearFailures,
+  sessVersion, logAction,
 } from "./_lib.js";
 
 const MIN_LEN = 8;
@@ -51,8 +52,25 @@ export default async function handler(req, res) {
       const s = await getSession(req, res);
       if (!s) { res.status(401).json({ error: "Non connecté.", enforce: ENFORCE }); return; }
       const u = await getUser(s.uid);
-      if (!u || (u.fields || {})["Actif"] === false) { clearSessionCookie(res); res.status(401).json({ error: "Non connecté.", enforce: ENFORCE }); return; }
+      if (!u || (u.fields || {})["Actif"] === false || sessVersion(u.fields) !== s.pv) { clearSessionCookie(res); res.status(401).json({ error: "Non connecté.", enforce: ENFORCE }); return; }
       res.status(200).json({ user: stripRecord(u), rights: s.rights, scope: s.scope, teams: s.teams, enforce: ENFORCE });
+      return;
+    }
+
+    // « Me déconnecter partout » (ou, pour un administrateur, déconnecter une autre personne) :
+    // le compteur « Version session » augmente, toutes les sessions ouvertes tombent ; on garde celle-ci.
+    if (action === "logoutAll") {
+      const s = await getSession(req, res);
+      if (!s) { res.status(401).json({ error: "Non connecté." }); return; }
+      const target = b.userId && b.userId !== s.uid ? b.userId : s.uid;
+      if (target !== s.uid && !can(s, "users")) { res.status(403).json({ error: "Réservé aux administrateurs." }); return; }
+      const u = await getUser(target);
+      if (!u) { res.status(404).json({ error: "Utilisateur introuvable." }); return; }
+      const n = (Number((u.fields || {})["Version session"]) || 0) + 1;
+      await updateUser(u.id, { "Version session": n });
+      if (target === s.uid) { const nu = await getUser(s.uid); await setSessionCookie(res, nu, s.rm); }
+      await logAction(s, target === s.uid ? "Déconnexion de tous ses appareils" : "Déconnexion forcée de tous les appareils", "Utilisateurs", u.id, "");
+      res.status(200).json({ ok: true });
       return;
     }
 

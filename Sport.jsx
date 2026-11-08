@@ -10,6 +10,7 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { PrimesView } from "./Primes.jsx";
 import { RosterView } from "./Fiche.jsx";
 import { TeamManager, SAISON } from "./Admin.jsx";
+import { Sheet } from "./Comms.jsx";
 import { db, dbForget, f, RED, YELLOW, BLACK, TEXT, MUT, BORDER, OK } from "./App.jsx";
 
 const QUEUE_KEY = "vhb_pointage_attente";
@@ -187,8 +188,51 @@ export default function SportSpace({ me, rights, scope, teams, view, setView }) 
         </button>)}
         {!week.length && <div style={{ fontSize: 13.5, color: MUT, padding: 14 }}>Rien de prévu cette semaine. Le planning se prépare dans Admin › Équipes › Rythme d'entraînement.</div>}
       </div>
+      <ProposeSujet />
     </div>
   );
+}
+
+// ---------------------------------------------------------------- Proposer un sujet au CA (depuis l'espace Sportif)
+const THEMES_CA = ["Sportif", "Finances", "Événements", "Bénévoles", "Communication", "Administratif", "Partenariats", "Divers"];
+function ProposeSujet() {
+  const [open, setOpen] = useState(false);
+  const [titre, setTitre] = useState("");
+  const [texte, setTexte] = useState("");
+  const [theme, setTheme] = useState("Sportif");
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState("");
+  const send = async () => {
+    if (!titre.trim()) { alert("Donne un titre à ton sujet."); return; }
+    setBusy(true);
+    try {
+      const r = await fetch("/api/support", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "sujet", titre, texte, theme }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || "Erreur " + r.status);
+      setDone("Merci ! Ton sujet « " + titre.trim() + " » est transmis au CA" + (j.notified ? " (" + j.notified + " membre(s) prévenu(s))" : "") + ".");
+      setTitre(""); setTexte(""); setTheme("Sportif");
+    } catch (e) { alert(e.message); }
+    setBusy(false);
+  };
+  return <>
+    <button onClick={() => { setOpen(true); setDone(""); }} className="card" style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer", fontFamily: "inherit", textAlign: "left", borderLeft: "4px solid " + YELLOW, marginTop: 4 }}>
+      <i className="ti ti-bulb" aria-hidden="true" style={{ fontSize: 22, color: "#B5660A" }} />
+      <span style={{ flex: 1 }}><b style={{ display: "block", fontSize: 14.5, color: TEXT }}>Une idée, un besoin pour le club ?</b><span style={{ fontSize: 12.5, color: MUT }}>Propose un sujet au conseil d'administration.</span></span>
+      <span aria-hidden="true" style={{ color: MUT, fontSize: 18 }}>›</span>
+    </button>
+    {open && <Sheet title="Proposer un sujet au CA" onClose={() => setOpen(false)}>
+      {done ? <>
+        <div style={{ background: "#E7F4EA", color: "#1F5C30", borderRadius: 12, padding: "10px 12px", fontSize: 14 }}>{done}</div>
+        <div style={{ display: "flex", gap: 8 }}><button className="btn btn-ghost" onClick={() => setDone("")}>Proposer un autre sujet</button><button className="btn btn-dark" onClick={() => setOpen(false)}>Fermer</button></div>
+      </> : <>
+        <div style={{ fontSize: 13.5, color: MUT, lineHeight: 1.5 }}>Ton sujet arrive dans la banque des sujets du CA, qui décide quand l'aborder. Les membres du CA reçoivent une notification.</div>
+        <div><label className="lbl" htmlFor="ps-t">Sujet</label><input id="ps-t" className="inp" maxLength={120} placeholder="ex. Créneau supplémentaire pour les U15" value={titre} onChange={(e) => setTitre(e.target.value)} /></div>
+        <div><label className="lbl" htmlFor="ps-th">Thème</label><select id="ps-th" className="sel" value={theme} onChange={(e) => setTheme(e.target.value)}>{THEMES_CA.map((x) => <option key={x}>{x}</option>)}</select></div>
+        <div><label className="lbl" htmlFor="ps-d">Explications (facultatif)</label><textarea id="ps-d" className="ta" rows={4} maxLength={3000} value={texte} onChange={(e) => setTexte(e.target.value)} placeholder="Contexte, besoin, proposition…" /></div>
+        <button className="btn btn-red" disabled={busy || !titre.trim()} onClick={send} style={{ alignSelf: "flex-start" }}><i className="ti ti-send" aria-hidden="true" />{busy ? "Envoi…" : "Envoyer au CA"}</button>
+      </>}
+    </Sheet>}
+  </>;
 }
 
 // ---------------------------------------------------------------- Vue club (supervision)
@@ -281,6 +325,7 @@ function ClubView({ d, banner, onTeam, onOpen, rights, onManage, onCreated }) {
             <div style={{ fontSize: 12.5, color: "#3A3F47", borderTop: "1px solid #F0F1F4", paddingTop: 8 }}>{s.next ? "Prochaine : " + dayLabel(f(s.next, "Date")) + (f(s.next, "Heure") ? " · " + f(s.next, "Heure") : "") + " · " + f(s.next, "Type") + (f(s.next, "Adversaire") ? " vs " + f(s.next, "Adversaire") : "") : "Aucune séance planifiée"}</div>
           </button>); })}
       </div>
+      <ProposeSujet />
     </div>
   );
 }
@@ -348,6 +393,16 @@ function PointageView({ s, d, me, rights, onBack, onDone }) {
   const [busy, setBusy] = useState(false);
   const [cancelMode, setCancelMode] = useState(false);
   const [motif, setMotif] = useState("Gymnase indisponible");
+  // Qui a pointé, et quand (« déjà pointée par Karim le 8 nov. à 19h45 »).
+  const [byName, setByName] = useState("");
+  const byId = (f(s, "Pointée par") || [])[0];
+  useEffect(() => {
+    if (!pointed || !byId) return;
+    if (byId === (me && me.id)) { setByName("toi"); return; }
+    db({ action: "list", table: "Utilisateurs" }).then((j) => { const u = (j.records || []).find((x) => x.id === byId); if (u) setByName([f(u, "Prénom"), f(u, "Nom")].filter(Boolean).join(" ")); }).catch(() => {});
+  }, [s.id]);
+  const when = f(s, "Pointée le") ? new Date(f(s, "Pointée le")) : null;
+  const pointedTxt = pointed ? " · déjà pointée" + (byName ? " par " + byName : "") + (when ? " le " + when.toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) + " à " + when.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }).replace(":", "h") : "") + ", tu peux corriger" : "";
   // Séance déjà pointée : on recharge qui était présent.
   useEffect(() => {
     if (!pointed) return;
@@ -393,7 +448,7 @@ function PointageView({ s, d, me, rights, onBack, onDone }) {
         <button className="btn btn-ghost" onClick={onBack} aria-label="Retour" style={{ padding: "8px 10px" }}><i className="ti ti-chevron-left" aria-hidden="true" /></button>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 18, fontWeight: 800 }}>{f(s, "Type")}{f(s, "Heure") ? " · " + f(s, "Heure").replace(":", "h") : ""}{f(s, "Adversaire") ? " vs " + f(s, "Adversaire") : ""}</div>
-          <div style={{ fontSize: 13, color: MUT }}>{dayLabel(date)} · {teamName}{pointed ? " · déjà pointée, tu peux corriger" : ""}</div>
+          <div style={{ fontSize: 13, color: MUT }}>{dayLabel(date)} · {teamName}{pointedTxt}</div>
         </div>
       </div>
       {cancelled ? <div className="card" style={{ borderLeft: "4px solid #9AA0A8" }}>

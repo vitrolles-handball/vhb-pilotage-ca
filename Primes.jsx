@@ -373,6 +373,12 @@ export function PaymentsPanel({ rights }) {
   const [fil, setFil] = useState({ period: "all", team: "all", status: "À payer", q: "" });
   const [paying, setPaying] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [four, setFour] = useState(null); // règle des quatre yeux (réglage du club)
+  useEffect(() => { primesApi({ action: "reglages" }).then((r) => setFour(!!r.quatreYeux)).catch(() => {}); }, []);
+  const setFourEyes = async (v) => {
+    if (!confirm(v ? "Activer la règle des quatre yeux ? Une personne ne pourra plus marquer « Payé » une prime qu'elle a elle-même créée ou corrigée (régularisation, prime exceptionnelle)." : "Désactiver la règle des quatre yeux ?")) return;
+    try { const r = await primesApi({ action: "reglages", set: { quatreYeux: v } }); setFour(!!r.quatreYeux); } catch (e) { alert(e.message); }
+  };
   const load = useCallback(async () => {
     try {
       const [l, t, p] = await Promise.all([db({ action: "list", table: "Primes – Lignes" }), db({ action: "list", table: "Équipes" }), db({ action: "list", table: "Joueurs" })]);
@@ -408,6 +414,11 @@ export function PaymentsPanel({ rights }) {
 
   return <div className="fade" style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 1100 }}>
     {d.error && <div className="card" style={{ borderLeft: "4px solid " + RED }}>{d.error}</div>}
+    {four !== null && <div className="card" style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", padding: "10px 14px", borderLeft: "4px solid " + (four ? OK : BORDER) }}>
+      <i className={"ti " + (four ? "ti-shield-check" : "ti-shield")} aria-hidden="true" style={{ fontSize: 20, color: four ? OK : MUT }} />
+      <span style={{ flex: "1 1 240px", fontSize: 13.5 }}><b>Règle des quatre yeux : {four ? "activée" : "désactivée"}.</b> <span style={{ color: MUT }}>{four ? "Celui qui crée ou corrige une prime ne peut pas la marquer payée." : "Activée, celui qui crée ou corrige une prime ne pourra pas la marquer payée."}</span></span>
+      {has(rights, "param") && <button className="btn btn-ghost" onClick={() => setFourEyes(!four)}>{four ? "Désactiver" : "Activer"}</button>}
+    </div>}
     <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
       {["À payer", "Mis en paiement", "Payé"].map((s) => { const list = d.lines.filter((l) => (f(l, "Paiement") || "À payer") === s && (fil.period === "all" || f(l, "Période") === fil.period)); return <Stat key={s} label={s.toUpperCase() + " · " + list.length} value={eur(sum(list))} tone={PAY_TONE[s][1]} />; })}
     </div>

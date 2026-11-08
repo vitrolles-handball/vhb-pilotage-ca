@@ -59,7 +59,7 @@ html{overflow-x:clip;}body{margin:0;font-family:'Manrope',system-ui,sans-serif;o
 .appactions{display:flex;align-items:center;gap:8px;margin-left:auto;}
 .appnav{display:inline-flex;gap:2px;background:rgba(0,0,0,.22);border-radius:30px;padding:4px;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
 .appbrand{display:flex;align-items:center;gap:12px;min-width:0;}
-@media(min-width:761px){.appheader{display:grid;grid-template-columns:1fr auto 1fr;}.appnav{justify-self:center;}.appactions{justify-self:end;}}
+@media(min-width:761px){.appheader{display:grid;grid-template-columns:auto minmax(0,1fr) auto;column-gap:14px;}.appnav{justify-self:center;}.appactions{justify-self:end;}}
 .appnav::-webkit-scrollbar{display:none;}
 .bottomnav{display:none;position:fixed;left:0;right:0;bottom:0;z-index:40;background-color:#16110f;background-image:linear-gradient(rgba(16,11,12,.52),rgba(16,11,12,.72)),url(/bandeau.jpg);background-size:cover;background-position:center 73%;padding:8px 6px calc(8px + env(safe-area-inset-bottom));justify-content:space-around;box-shadow:0 -4px 18px rgba(0,0,0,.30);}
 .bottomnav button{flex:1;background:none;border:none;display:flex;flex-direction:column;align-items:center;gap:3px;color:#C7CACF;font-family:inherit;font-size:10.5px;font-weight:600;cursor:pointer;padding:4px 0;}
@@ -75,6 +75,8 @@ html{overflow-x:clip;}body{margin:0;font-family:'Manrope',system-ui,sans-serif;o
 .vhb-dot i{width:8px;height:8px;border-radius:50%;background:#D62828;animation:vhbpulsedot 1s ease-in-out infinite;}
 @keyframes vhbpulsedot{0%,100%{opacity:.35;transform:scale(.85);}50%{opacity:1;transform:scale(1.1);}}
 @media(max-width:380px){.hide-xs{display:none;}}
+@media(min-width:761px) and (max-width:1480px){.sp-lbl{display:none;}}
+@media(min-width:761px) and (max-width:1180px){.aide-lbl{display:none;}.appheader{column-gap:10px;}}
 .only-mobile{display:none !important;}
 @media(max-width:760px){.only-mobile{display:inline-flex !important;}.only-desktop{display:none !important;}}
 @media(max-width:760px){.inp,.sel,.ta{font-size:16px;}.appheader{padding:calc(8px + env(safe-area-inset-top)) 12px 10px;}.navb{padding:7px 12px;font-size:12.5px;}.caprep{padding:14px 15px !important;}.caprep .btn{font-size:12.5px;padding:9px 13px;}.appnav{display:none;}.bottomnav{display:flex;}.spaceswitch{display:none !important;}}
@@ -530,7 +532,7 @@ function ProfileForm({ me, poles, onSaved }) {
   );
 }
 
-function Header({ me, space, setSpace, view, setView, outilView, setOutilView, adminView, setAdminView, sportView, setSportView, rights, isAdmin, onLogout, unread, onBell, onProfile, onHelp, onAnnonces, annUnread, sportClub }) {
+function Header({ me, space, setSpace, view, setView, outilView, setOutilView, adminView, setAdminView, sportView, setSportView, rights, isAdmin, onLogout, unread, onBell, onProfile, onHelp, onAnnonces, annUnread, sportClub, counts }) {
   const caTabs = [["dash", "Accueil"], ["taches", "Tâches"], ["sujets", "Sujets"], ["ca", "Réunions"], ["cal", "Agenda"], ["annuaire", "Annuaire"]];
   const outilTabs = [["couts", "Coût de la pratique"]];
   const sportTabs = [["accueil", sportClub ? "Club" : "Aujourd'hui"], ["seances", "Séances"], ["joueurs", "Joueurs"]].concat(canPrimes(rights) ? [["primes", "Primes"]] : []);
@@ -539,6 +541,9 @@ function Header({ me, space, setSpace, view, setView, outilView, setOutilView, a
   const onTab = space === "outils" ? setOutilView : space === "admin" ? setAdminView : space === "sport" ? setSportView : setView;
   const spaces = [hasRight(rights, "ca") && ["ca", "Pilotage CA", "ti-layout-dashboard"], hasSport(rights) && ["sport", "Sportif", "ti-ball-football"], hasRight(rights, "ca") && ["outils", "Outils", "ti-tools"], hasAdminAccess(rights) && ["admin", "Admin", "ti-shield-lock"]].filter(Boolean);
   const [spOpen, setSpOpen] = useState(false);
+  const cnt = (k) => Number((counts || {})[k]) || 0;
+  const CNT_TXT = { ca: "à traiter (mentions, invitations, signatures)", sport: "séance(s) en retard de pointage", admin: "demande(s) de support nouvelle(s)" };
+  const elsewhere = spaces.some(([k]) => k !== space && cnt(k) > 0);
   const SPACE_INFO = { ca: "Tâches, sujets, réunions, agenda", sport: "Pointage, séances, joueurs, primes", outils: "Coût de la pratique et outils du club", admin: "Utilisateurs, rôles, équipes, paiements" };
   const spaceSheet = spOpen && createPortal(<div role="dialog" aria-modal="true" aria-label="Mes espaces" onClick={(e) => { if (e.target === e.currentTarget) setSpOpen(false); }} style={{ position: "fixed", inset: 0, background: "rgba(16,17,20,.55)", zIndex: 230, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
     <div style={{ background: "#fff", width: "100%", maxWidth: 520, borderRadius: "22px 22px 0 0", padding: "18px 16px calc(18px + env(safe-area-inset-bottom))", display: "flex", flexDirection: "column", gap: 8, position: "relative" }}>
@@ -546,7 +551,8 @@ function Header({ me, space, setSpace, view, setView, outilView, setOutilView, a
       <div style={{ fontSize: 18, fontWeight: 800, color: TEXT, marginBottom: 4 }}>Mes espaces</div>
       {spaces.map(([k, l, ic]) => <button key={k} onClick={() => { setSpace(k); setSpOpen(false); }} aria-current={space === k} style={{ display: "flex", alignItems: "center", gap: 12, textAlign: "left", border: "2px solid " + (space === k ? RED : BORDER), background: space === k ? "#FDF1F0" : "#fff", borderRadius: 16, padding: "12px 14px", cursor: "pointer", fontFamily: "inherit" }}>
         <span style={{ width: 42, height: 42, borderRadius: 12, background: space === k ? RED : "#F1F2F5", color: space === k ? "#fff" : TEXT, display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}><i className={"ti " + ic} style={{ fontSize: 21 }} aria-hidden="true" /></span>
-        <span style={{ flex: 1, minWidth: 0 }}><span style={{ display: "block", fontWeight: 800, fontSize: 15.5, color: TEXT }}>{l}</span><span style={{ display: "block", fontSize: 12.5, color: MUT }}>{SPACE_INFO[k]}</span></span>
+        <span style={{ flex: 1, minWidth: 0 }}><span style={{ display: "block", fontWeight: 800, fontSize: 15.5, color: TEXT }}>{l}</span><span style={{ display: "block", fontSize: 12.5, color: MUT }}>{SPACE_INFO[k]}</span>{cnt(k) > 0 && <span style={{ display: "block", fontSize: 12.5, fontWeight: 800, color: "#9E1B1B" }}>{cnt(k)} {CNT_TXT[k]}</span>}</span>
+        {cnt(k) > 0 && <span aria-hidden="true" style={{ minWidth: 22, height: 22, borderRadius: 11, padding: "0 6px", background: YELLOW, color: BLACK, fontSize: 12, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" }}>{cnt(k)}</span>}
         {space === k && <span style={{ fontSize: 11.5, fontWeight: 800, color: RED }}>ICI</span>}
       </button>)}
     </div>
@@ -559,7 +565,7 @@ function Header({ me, space, setSpace, view, setView, outilView, setOutilView, a
           <div style={{ fontSize: 16, color: "#fff", fontWeight: 800, letterSpacing: "-.01em" }}>VHB Team</div>
           <div className={spaces.length > 1 ? "only-desktop" : ""} style={{ fontSize: 10.5, color: "#FFFFFF", fontWeight: 600 }}>Tous Hand'semble</div>
           {spaces.length > 1 && <button className="only-mobile spacebtn" onClick={() => setSpOpen(true)} aria-label={"Espace actuel : " + ((spaces.find((s) => s[0] === space) || [])[1] || "") + ". Changer d'espace"} style={{ alignItems: "center", gap: 5, marginTop: 3, border: "none", cursor: "pointer", fontFamily: "inherit", fontWeight: 800, fontSize: 12.5, color: BLACK, background: "#fff", borderRadius: 20, padding: "4px 10px", boxShadow: "0 2px 8px rgba(0,0,0,.18)" }}>
-            <i className={"ti " + ((spaces.find((s) => s[0] === space) || [])[2] || "ti-apps")} aria-hidden="true" />{(spaces.find((s) => s[0] === space) || [])[1] || "Espaces"}<span aria-hidden="true" style={{ fontSize: 11 }}>▾</span>
+            <i className={"ti " + ((spaces.find((s) => s[0] === space) || [])[2] || "ti-apps")} aria-hidden="true" />{(spaces.find((s) => s[0] === space) || [])[1] || "Espaces"}<span aria-hidden="true" style={{ fontSize: 11 }}>▾</span>{elsewhere && <span aria-label="Des choses attendent dans un autre espace" style={{ width: 9, height: 9, borderRadius: 5, background: YELLOW, boxShadow: "0 0 0 2px #fff", display: "inline-block", marginLeft: 2 }} />}
           </button>}
         </div>
       </div>
@@ -568,9 +574,9 @@ function Header({ me, space, setSpace, view, setView, outilView, setOutilView, a
       </nav>
       <div className="appactions">
         {spaces.length > 1 && <div className="spaceswitch" style={{ display: "flex", background: "rgba(0,0,0,.26)", borderRadius: 30, padding: 3, flex: "0 0 auto" }} title="Changer d'espace">
-          {spaces.map(([k, l, ic]) => <button key={k} onClick={() => setSpace(k)} aria-pressed={space === k} style={{ border: "none", cursor: "pointer", fontFamily: "inherit", fontWeight: 700, fontSize: 12, borderRadius: 30, padding: "6px 11px", display: "flex", alignItems: "center", gap: 6, background: space === k ? "#fff" : "transparent", color: space === k ? "#16171B" : "rgba(255,255,255,.85)" }}><i className={"ti " + ic} style={{ fontSize: 15 }} /><span className="hide-xs">{l}</span></button>)}
+          {spaces.map(([k, l, ic]) => <button key={k} onClick={() => setSpace(k)} aria-pressed={space === k} aria-label={l + (cnt(k) ? " (" + cnt(k) + " en attente)" : "")} title={l + (cnt(k) ? " · " + cnt(k) + " en attente" : "")} style={{ position: "relative", border: "none", cursor: "pointer", fontFamily: "inherit", fontWeight: 700, fontSize: 12, borderRadius: 30, padding: "6px 11px", display: "flex", alignItems: "center", gap: 6, background: space === k ? "#fff" : "transparent", color: space === k ? "#16171B" : "rgba(255,255,255,.85)" }}><i className={"ti " + ic} style={{ fontSize: 15 }} /><span className="hide-xs sp-lbl">{l}</span>{cnt(k) > 0 && <span aria-hidden="true" style={{ minWidth: 18, height: 18, borderRadius: 9, padding: "0 5px", background: space === k ? RED : YELLOW, color: space === k ? "#fff" : BLACK, fontSize: 11, fontWeight: 800, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>{cnt(k)}</span>}</button>)}
         </div>}
-        <button onClick={onHelp} title="Aide / Guide" style={{ background: YELLOW, color: BLACK, border: "none", borderRadius: 30, padding: "7px 14px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontFamily: "inherit", fontWeight: 700, fontSize: 12.5, flex: "0 0 auto", boxShadow: "0 2px 8px rgba(0,0,0,.18)" }}><i className="ti ti-help-circle" style={{ fontSize: 17 }} aria-hidden="true" />Aide</button>
+        <button onClick={onHelp} title="Aide / Guide" style={{ background: YELLOW, color: BLACK, border: "none", borderRadius: 30, padding: "7px 14px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontFamily: "inherit", fontWeight: 700, fontSize: 12.5, flex: "0 0 auto", boxShadow: "0 2px 8px rgba(0,0,0,.18)" }}><i className="ti ti-help-circle" style={{ fontSize: 17 }} aria-hidden="true" /><span className="aide-lbl">Aide</span></button>
         {onAnnonces && <button onClick={onAnnonces} title="Annonces et discussions" aria-label={"Annonces et discussions" + (annUnread ? " (" + annUnread + " non lus)" : "")} style={{ position: "relative", background: "rgba(255,255,255,.08)", border: "none", color: "#E9EAEC", width: 36, height: 36, borderRadius: 11, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}><i className="ti ti-speakerphone" style={{ fontSize: 18 }} aria-hidden="true" />{annUnread > 0 && <span style={{ position: "absolute", top: -5, right: -5, background: YELLOW, color: BLACK, fontSize: 10, fontWeight: 800, borderRadius: 10, minWidth: 17, height: 17, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>{annUnread}</span>}</button>}
         <button onClick={onBell} title="Notifications" style={{ position: "relative", background: "rgba(255,255,255,.08)", border: "none", color: "#E9EAEC", width: 36, height: 36, borderRadius: 11, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}><i className="ti ti-bell" style={{ fontSize: 18 }} />{unread > 0 && <span style={{ position: "absolute", top: -5, right: -5, background: RED, color: "#fff", fontSize: 10, fontWeight: 700, borderRadius: 10, minWidth: 17, height: 17, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>{unread}</span>}</button>
         <div style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", flex: "0 0 auto" }} onClick={onProfile} title="Mon espace">
@@ -2315,6 +2321,12 @@ function MonCompte({ me, data, onClose, reload, onLogout, onUsers, onHelp }) {
         <button className="btn btn-red" disabled={busy} onClick={save}>{busy ? "…" : "Enregistrer"}</button>
         <button className="btn btn-ghost" style={{ marginLeft: "auto", color: RED, borderColor: "#F0C7C3" }} onClick={onLogout}><i className="ti ti-logout" />Se déconnecter</button>
       </div>
+      <div style={{ marginTop: 10, textAlign: "right" }}>
+        <button onClick={async () => {
+          if (!confirm("Te déconnecter de tous tes autres appareils (téléphone perdu, ordinateur partagé…) ? Tu restes connecté ici.")) return;
+          try { await authApi("logoutAll"); alert("C'est fait : tes autres appareils sont déconnectés. Il faudra se reconnecter avec ton mot de passe."); } catch (e) { alert(e.message); }
+        }} style={{ background: "none", border: "none", color: MUT, textDecoration: "underline", cursor: "pointer", fontSize: 12.5, fontFamily: "inherit" }}>Me déconnecter de tous mes autres appareils</button>
+      </div>
     </Modal>
   );
 }
@@ -3375,6 +3387,14 @@ export default function App() {
   const [modal, setModal] = useState(null);
   const [supportFocus, setSupportFocus] = useState(null);
   const [ann, reloadAnn, annUnread] = useAnnonces(!!me && authMode === "session");
+  // Pastilles des espaces (Sportif : séances en retard ; Admin : support nouveau ; CA : calculé ici).
+  const [srvCounts, setSrvCounts] = useState({ sport: 0, admin: 0 });
+  useEffect(() => {
+    if (!me || authMode !== "session") return;
+    const load = () => fetch("/api/annonces", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "compteurs" }) }).then((r) => r.ok ? r.json() : null).then((j) => { if (j && typeof j === "object") setSrvCounts({ sport: Number(j.sport) || 0, admin: Number(j.admin) || 0 }); }).catch(() => {});
+    load(); const t = setInterval(() => { if (document.visibilityState === "visible") load(); }, 5 * 60000);
+    return () => clearInterval(t);
+  }, [me && me.id, authMode, space]);
   const [taskOpen, setTaskOpen] = useState(null);
   const [liveOpen, setLiveOpen] = useState(null);
   const [signOpen, setSignOpen] = useState(null);
@@ -3443,6 +3463,8 @@ export default function App() {
       if (an || ai || su || fl) window.history.replaceState(null, "", window.location.pathname);
     } catch (e) {}
   }, [me && me.id, rights.join(",")]);
+  const caCount = me && hasRight(rights, "ca") ? (data.commentaires || []).filter((c) => (f(c, "Mentions") || []).includes(me.id) && !String(f(c, "Lu par") || "").includes(me.id)).length
+    + (data.meetings || []).filter((m) => f(m, "Statut") !== "Passée" && !((f(m, "Répondu présent") || []).includes(me.id) || (f(m, "Répondu absent") || []).includes(me.id))).length : 0;
   useEffect(() => {
     if (typeof navigator === "undefined" || !("setAppBadge" in navigator)) return;
     try {
@@ -3486,7 +3508,7 @@ export default function App() {
     <div style={{ minHeight: "100vh", backgroundColor: "#F4F5F8", backgroundImage: "radial-gradient(720px circle at 100% -6%, rgba(214,40,40,.06), transparent 58%), radial-gradient(620px circle at -6% 112%, rgba(245,197,24,.07), transparent 58%)", backgroundAttachment: "fixed", color: TEXT, fontFamily: "'Manrope',system-ui,sans-serif" }}>
       <style>{CSS}</style>
       <BusyOverlay />
-      <Header me={me} space={space} setSpace={(k) => { try { localStorage.setItem("vhb_space", k); } catch (e) {} setSpace(k); }} outilView={outilView} setOutilView={setOutilView} adminView={adminView} setAdminView={setAdminView} sportView={sportView} setSportView={setSportView} sportClub={access.scope === "all"} rights={rights} view={view} setView={(v) => { setTaskOpen(null); setLiveOpen(null); setSignOpen(null); setRsvpOpen(null); setView(v); }} isAdmin={isAdmin} onLogout={logout} unread={unread} onBell={() => setModal({ type: "notifs" })} onProfile={() => setModal({ type: "profile" })} onHelp={() => setModal({ type: "aide" })} onAnnonces={authMode === "session" ? () => { reloadAnn(); setModal({ type: "annonces" }); } : null} annUnread={annUnread} />
+      <Header me={me} space={space} setSpace={(k) => { try { localStorage.setItem("vhb_space", k); } catch (e) {} setSpace(k); }} outilView={outilView} setOutilView={setOutilView} adminView={adminView} setAdminView={setAdminView} sportView={sportView} setSportView={setSportView} sportClub={access.scope === "all"} counts={{ ca: caCount, sport: srvCounts.sport, admin: srvCounts.admin }} rights={rights} view={view} setView={(v) => { setTaskOpen(null); setLiveOpen(null); setSignOpen(null); setRsvpOpen(null); setView(v); }} isAdmin={isAdmin} onLogout={logout} unread={unread} onBell={() => setModal({ type: "notifs" })} onProfile={() => setModal({ type: "profile" })} onHelp={() => setModal({ type: "aide" })} onAnnonces={authMode === "session" ? () => { reloadAnn(); setModal({ type: "annonces" }); } : null} annUnread={annUnread} />
       <div className="wrap">
         {authMode === "legacy" && <PasswordNudge me={me} onRelogin={() => { setMe(null); setAuthMode(null); setStatus("login"); }} />}
         <InstallBanner />
