@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import AdminSpace, { hasAdminAccess, adminTabsFor, has as hasRight } from "./Admin.jsx";
 import SportSpace from "./Sport.jsx";
 import { AnnoncesPanel, useAnnonces, HelpCenter, NotifPrefs } from "./Comms.jsx";
@@ -74,6 +75,8 @@ html{overflow-x:clip;}body{margin:0;font-family:'Manrope',system-ui,sans-serif;o
 .vhb-dot i{width:8px;height:8px;border-radius:50%;background:#D62828;animation:vhbpulsedot 1s ease-in-out infinite;}
 @keyframes vhbpulsedot{0%,100%{opacity:.35;transform:scale(.85);}50%{opacity:1;transform:scale(1.1);}}
 @media(max-width:380px){.hide-xs{display:none;}}
+.only-mobile{display:none !important;}
+@media(max-width:760px){.only-mobile{display:inline-flex !important;}.only-desktop{display:none !important;}}
 @media(max-width:760px){.inp,.sel,.ta{font-size:16px;}.appheader{padding:calc(8px + env(safe-area-inset-top)) 12px 10px;}.navb{padding:7px 12px;font-size:12.5px;}.caprep{padding:14px 15px !important;}.caprep .btn{font-size:12.5px;padding:9px 13px;}.appnav{display:none;}.bottomnav{display:flex;}.spaceswitch{display:none !important;}}
 @media (max-width:760px){
   .navrow{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
@@ -535,13 +538,29 @@ function Header({ me, space, setSpace, view, setView, outilView, setOutilView, a
   const cur = space === "outils" ? outilView : space === "admin" ? adminView : space === "sport" ? sportView : view;
   const onTab = space === "outils" ? setOutilView : space === "admin" ? setAdminView : space === "sport" ? setSportView : setView;
   const spaces = [hasRight(rights, "ca") && ["ca", "Pilotage CA", "ti-layout-dashboard"], hasSport(rights) && ["sport", "Sportif", "ti-ball-football"], hasRight(rights, "ca") && ["outils", "Outils", "ti-tools"], hasAdminAccess(rights) && ["admin", "Admin", "ti-shield-lock"]].filter(Boolean);
+  const [spOpen, setSpOpen] = useState(false);
+  const SPACE_INFO = { ca: "Tâches, sujets, réunions, agenda", sport: "Pointage, séances, joueurs, primes", outils: "Coût de la pratique et outils du club", admin: "Utilisateurs, rôles, équipes, paiements" };
+  const spaceSheet = spOpen && createPortal(<div role="dialog" aria-modal="true" aria-label="Mes espaces" onClick={(e) => { if (e.target === e.currentTarget) setSpOpen(false); }} style={{ position: "fixed", inset: 0, background: "rgba(16,17,20,.55)", zIndex: 230, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+    <div style={{ background: "#fff", width: "100%", maxWidth: 520, borderRadius: "22px 22px 0 0", padding: "18px 16px calc(18px + env(safe-area-inset-bottom))", display: "flex", flexDirection: "column", gap: 8, position: "relative" }}>
+      <button aria-label="Fermer" onClick={() => setSpOpen(false)} style={{ position: "absolute", top: 12, right: 12, width: 40, height: 40, borderRadius: 20, border: "none", background: "#EEF0F3", cursor: "pointer", fontSize: 22, lineHeight: 1 }}><span aria-hidden="true">×</span></button>
+      <div style={{ fontSize: 18, fontWeight: 800, color: TEXT, marginBottom: 4 }}>Mes espaces</div>
+      {spaces.map(([k, l, ic]) => <button key={k} onClick={() => { setSpace(k); setSpOpen(false); }} aria-current={space === k} style={{ display: "flex", alignItems: "center", gap: 12, textAlign: "left", border: "2px solid " + (space === k ? RED : BORDER), background: space === k ? "#FDF1F0" : "#fff", borderRadius: 16, padding: "12px 14px", cursor: "pointer", fontFamily: "inherit" }}>
+        <span style={{ width: 42, height: 42, borderRadius: 12, background: space === k ? RED : "#F1F2F5", color: space === k ? "#fff" : TEXT, display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}><i className={"ti " + ic} style={{ fontSize: 21 }} aria-hidden="true" /></span>
+        <span style={{ flex: 1, minWidth: 0 }}><span style={{ display: "block", fontWeight: 800, fontSize: 15.5, color: TEXT }}>{l}</span><span style={{ display: "block", fontSize: 12.5, color: MUT }}>{SPACE_INFO[k]}</span></span>
+        {space === k && <span style={{ fontSize: 11.5, fontWeight: 800, color: RED }}>ICI</span>}
+      </button>)}
+    </div>
+  </div>, document.body);
   return (
     <header className="appheader" style={{ backgroundColor: "#E8590C", backgroundImage: "linear-gradient(rgba(28,10,0,.22), rgba(28,10,0,.36)), url(/accent.jpg)", backgroundSize: "cover", backgroundPosition: "center", position: "sticky", top: 0, zIndex: 30, boxShadow: "0 2px 18px rgba(0,0,0,.22)" }}>
       <div className="appbrand">
         <img src={LOGO} width={40} height={40} alt="VHB" style={{ cursor: "pointer", flex: "0 0 auto", filter: "drop-shadow(0 4px 10px rgba(214,40,40,.35))" }} onClick={() => { if (hasRight(rights, "ca")) { setSpace("ca"); setView("dash"); } }} />
         <div style={{ lineHeight: 1.12, minWidth: 0 }}>
           <div style={{ fontSize: 16, color: "#fff", fontWeight: 800, letterSpacing: "-.01em" }}>VHB Team</div>
-          <div style={{ fontSize: 10.5, color: "#FFFFFF", fontWeight: 600 }}>Tous Hand'semble</div>
+          <div className={spaces.length > 1 ? "only-desktop" : ""} style={{ fontSize: 10.5, color: "#FFFFFF", fontWeight: 600 }}>Tous Hand'semble</div>
+          {spaces.length > 1 && <button className="only-mobile spacebtn" onClick={() => setSpOpen(true)} aria-label={"Espace actuel : " + ((spaces.find((s) => s[0] === space) || [])[1] || "") + ". Changer d'espace"} style={{ alignItems: "center", gap: 5, marginTop: 3, border: "none", cursor: "pointer", fontFamily: "inherit", fontWeight: 800, fontSize: 12.5, color: BLACK, background: "#fff", borderRadius: 20, padding: "4px 10px", boxShadow: "0 2px 8px rgba(0,0,0,.18)" }}>
+            <i className={"ti " + ((spaces.find((s) => s[0] === space) || [])[2] || "ti-apps")} aria-hidden="true" />{(spaces.find((s) => s[0] === space) || [])[1] || "Espaces"}<span aria-hidden="true" style={{ fontSize: 11 }}>▾</span>
+          </button>}
         </div>
       </div>
       <nav className="appnav">
@@ -556,9 +575,10 @@ function Header({ me, space, setSpace, view, setView, outilView, setOutilView, a
         <button onClick={onBell} title="Notifications" style={{ position: "relative", background: "rgba(255,255,255,.08)", border: "none", color: "#E9EAEC", width: 36, height: 36, borderRadius: 11, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}><i className="ti ti-bell" style={{ fontSize: 18 }} />{unread > 0 && <span style={{ position: "absolute", top: -5, right: -5, background: RED, color: "#fff", fontSize: 10, fontWeight: 700, borderRadius: 10, minWidth: 17, height: 17, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>{unread}</span>}</button>
         <div style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", flex: "0 0 auto" }} onClick={onProfile} title="Mon espace">
           <Avatar u={me} size={32} />
-          <span className="hide-xs" style={{ fontSize: 12.5, color: "#E9EAEC", fontWeight: 500 }}>{f(me, "Prénom") || "Moi"}</span>
+          <span className="only-desktop" style={{ fontSize: 12.5, color: "#E9EAEC", fontWeight: 500 }}>{f(me, "Prénom") || "Moi"}</span>
         </div>
       </div>
+      {spaceSheet}
     </header>
   );
 }
