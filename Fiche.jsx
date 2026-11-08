@@ -101,8 +101,8 @@ export function PlayerCard({ joueurId, onClose }) {
 }
 
 // ---------------------------------------------------------------------------- Onglet Joueurs (toutes les équipes)
-export function RosterView({ teams, efx, players }) {
-  const [teamId, setTeamId] = useState(() => (teams[0] || {}).id);
+export function RosterView({ teams, efx, players, initialTeam }) {
+  const [teamId, setTeamId] = useState(() => initialTeam || (teams[0] || {}).id);
   const [month, setMonth] = useState(thisMonth);
   const [data, setData] = useState(null);
   const [err, setErr] = useState("");

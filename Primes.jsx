@@ -60,9 +60,9 @@ const PAY_TONE = { "À payer": ["#FDECEC", "#9E1B1B"], "Mis en paiement": ["#FFF
 // =====================================================================================
 // Tableau du mois
 // =====================================================================================
-export function PrimesView({ rights, teams, users }) {
+export function PrimesView({ rights, teams, users, initialTeam }) {
   const primeTeams = useMemo(() => (teams || []).filter((t) => f(t, "Primes actives")).concat((teams || []).filter((t) => !f(t, "Primes actives"))), [teams]);
-  const [teamId, setTeamId] = useState(() => (primeTeams[0] || {}).id);
+  const [teamId, setTeamId] = useState(() => initialTeam || (primeTeams[0] || {}).id);
   const [month, setMonth] = useState(defaultMonth);
   const [data, setData] = useState(null);
   const [err, setErr] = useState("");

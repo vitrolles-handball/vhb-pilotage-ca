@@ -530,10 +530,10 @@ function ProfileForm({ me, poles, onSaved }) {
   );
 }
 
-function Header({ me, space, setSpace, view, setView, outilView, setOutilView, adminView, setAdminView, sportView, setSportView, rights, isAdmin, onLogout, unread, onBell, onProfile, onHelp, onAnnonces, annUnread }) {
+function Header({ me, space, setSpace, view, setView, outilView, setOutilView, adminView, setAdminView, sportView, setSportView, rights, isAdmin, onLogout, unread, onBell, onProfile, onHelp, onAnnonces, annUnread, sportClub }) {
   const caTabs = [["dash", "Accueil"], ["taches", "Tâches"], ["sujets", "Sujets"], ["ca", "Réunions"], ["cal", "Agenda"], ["annuaire", "Annuaire"]];
   const outilTabs = [["couts", "Coût de la pratique"]];
-  const sportTabs = [["accueil", "Aujourd'hui"], ["seances", "Séances"], ["joueurs", "Joueurs"]].concat(canPrimes(rights) ? [["primes", "Primes"]] : []);
+  const sportTabs = [["accueil", sportClub ? "Club" : "Aujourd'hui"], ["seances", "Séances"], ["joueurs", "Joueurs"]].concat(canPrimes(rights) ? [["primes", "Primes"]] : []);
   const tabs = space === "outils" ? outilTabs : space === "admin" ? adminTabsFor(rights) : space === "sport" ? sportTabs : caTabs;
   const cur = space === "outils" ? outilView : space === "admin" ? adminView : space === "sport" ? sportView : view;
   const onTab = space === "outils" ? setOutilView : space === "admin" ? setAdminView : space === "sport" ? setSportView : setView;
@@ -3316,11 +3316,11 @@ function CoutsBaremes({ sections, baremes, params, secNames, commitSec, commitBa
   </>;
 }
 
-function BottomNav({ space, view, setView, outilView, setOutilView, setSpace, adminView, setAdminView, sportView, setSportView, rights }) {
+function BottomNav({ space, view, setView, outilView, setOutilView, setSpace, adminView, setAdminView, sportView, setSportView, rights, sportClub }) {
   if (space === "sport") {
     return (
       <nav className="bottomnav">
-        <button className={sportView === "accueil" ? "on" : ""} onClick={() => setSportView("accueil")}><i className="ti ti-home" aria-hidden="true" /><span>Aujourd'hui</span></button>
+        <button className={sportView === "accueil" ? "on" : ""} onClick={() => setSportView("accueil")}><i className={"ti " + (sportClub ? "ti-building-community" : "ti-home")} aria-hidden="true" /><span>{sportClub ? "Club" : "Aujourd'hui"}</span></button>
         <button className={sportView === "seances" ? "on" : ""} onClick={() => setSportView("seances")}><i className="ti ti-calendar" aria-hidden="true" /><span>Séances</span></button>
         <button className={sportView === "joueurs" ? "on" : ""} onClick={() => setSportView("joueurs")}><i className="ti ti-users" aria-hidden="true" /><span>Joueurs</span></button>
         {canPrimes(rights) && <button className={sportView === "primes" ? "on" : ""} onClick={() => setSportView("primes")}><i className="ti ti-coin-euro" aria-hidden="true" /><span>Primes</span></button>}
@@ -3485,7 +3485,7 @@ export default function App() {
     <div style={{ minHeight: "100vh", backgroundColor: "#F4F5F8", backgroundImage: "radial-gradient(720px circle at 100% -6%, rgba(214,40,40,.06), transparent 58%), radial-gradient(620px circle at -6% 112%, rgba(245,197,24,.07), transparent 58%)", backgroundAttachment: "fixed", color: TEXT, fontFamily: "'Manrope',system-ui,sans-serif" }}>
       <style>{CSS}</style>
       <BusyOverlay />
-      <Header me={me} space={space} setSpace={(k) => { try { localStorage.setItem("vhb_space", k); } catch (e) {} setSpace(k); }} outilView={outilView} setOutilView={setOutilView} adminView={adminView} setAdminView={setAdminView} sportView={sportView} setSportView={setSportView} rights={rights} view={view} setView={(v) => { setTaskOpen(null); setLiveOpen(null); setSignOpen(null); setRsvpOpen(null); setView(v); }} isAdmin={isAdmin} onLogout={logout} unread={unread} onBell={() => setModal({ type: "notifs" })} onProfile={() => setModal({ type: "profile" })} onHelp={() => setModal({ type: "aide" })} onAnnonces={authMode === "session" ? () => { reloadAnn(); setModal({ type: "annonces" }); } : null} annUnread={annUnread} />
+      <Header me={me} space={space} setSpace={(k) => { try { localStorage.setItem("vhb_space", k); } catch (e) {} setSpace(k); }} outilView={outilView} setOutilView={setOutilView} adminView={adminView} setAdminView={setAdminView} sportView={sportView} setSportView={setSportView} sportClub={access.scope === "all"} rights={rights} view={view} setView={(v) => { setTaskOpen(null); setLiveOpen(null); setSignOpen(null); setRsvpOpen(null); setView(v); }} isAdmin={isAdmin} onLogout={logout} unread={unread} onBell={() => setModal({ type: "notifs" })} onProfile={() => setModal({ type: "profile" })} onHelp={() => setModal({ type: "aide" })} onAnnonces={authMode === "session" ? () => { reloadAnn(); setModal({ type: "annonces" }); } : null} annUnread={annUnread} />
       <div className="wrap">
         {authMode === "legacy" && <PasswordNudge me={me} onRelogin={() => { setMe(null); setAuthMode(null); setStatus("login"); }} />}
         <InstallBanner />
@@ -3518,7 +3518,7 @@ export default function App() {
       {modal && modal.type === "help" && <HelpView onClose={() => setModal(null)} />}
       {modal && modal.type === "aide" && <HelpCenter rights={rights} sessionOk={authMode === "session"} initialTab={modal.tab} page={({ ca: "Pilotage CA", sport: "Sportif", outils: "Outils", admin: "Admin", none: "Accueil" }[space] || space) + " › " + (space === "sport" ? sportView : space === "admin" ? adminView : space === "outils" ? outilView : view)} onClose={() => setModal(null)} onOpenCaGuide={() => setModal({ type: "help" })} />}
       {modal && modal.type === "annonces" && <AnnoncesPanel rights={rights} data={ann} reload={reloadAnn} focusId={modal.focus} onClose={() => { setModal(null); reloadAnn(); }} />}
-      <BottomNav space={space} setSpace={(k) => { try { localStorage.setItem("vhb_space", k); } catch (e) {} setSpace(k); }} outilView={outilView} setOutilView={setOutilView} adminView={adminView} setAdminView={setAdminView} sportView={sportView} setSportView={setSportView} rights={rights} view={view} setView={(v) => { setTaskOpen(null); setLiveOpen(null); setSignOpen(null); setRsvpOpen(null); setView(v); }} />
+      <BottomNav space={space} setSpace={(k) => { try { localStorage.setItem("vhb_space", k); } catch (e) {} setSpace(k); }} outilView={outilView} setOutilView={setOutilView} adminView={adminView} setAdminView={setAdminView} sportView={sportView} setSportView={setSportView} sportClub={access.scope === "all"} rights={rights} view={view} setView={(v) => { setTaskOpen(null); setLiveOpen(null); setSignOpen(null); setRsvpOpen(null); setView(v); }} />
     </div>
   );
 }

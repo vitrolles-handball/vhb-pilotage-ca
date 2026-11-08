@@ -21,6 +21,7 @@ const MOIS = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août"
 const dayLabel = (s) => { const d = new Date(s + "T12:00:00"); return JOURS[d.getDay()] + " " + d.getDate() + " " + MOIS[d.getMonth()]; };
 const norm = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 const has = (rights, r) => (rights || []).includes("*") || (rights || []).includes(r);
+const canPrimesR = (r) => ["corr", "valid", "param", "compta"].some((x) => has(r, x));
 const TYPE_ICON = { "Entraînement": "ti-run", "Match": "ti-trophy", "Entraînement supplémentaire": "ti-plus", "Stage": "ti-tent" };
 
 // ---------------------------------------------------------------- File d'attente hors ligne
@@ -96,13 +97,15 @@ const initials = (p) => (((f(p, "Prénom") || "")[0] || "") + ((f(p, "Nom") || "
 // ---------------------------------------------------------------- Espace
 export default function SportSpace({ me, rights, scope, teams, view, setView }) {
   const [d, reload] = useSportData(me, rights, scope, teams);
+  const club = scope === "all"; // vue de supervision : synthèse du club, puis détail par équipe
   const [open, setOpen] = useState(null); // { seanceId } | { create: "Match" | "Supp" }
   const [filter, setFilter] = useState("all");
   const queued = useQueueCount();
   if (!d.loaded) return <div className="card fade" style={{ color: MUT }}>Chargement de tes équipes…</div>;
   if (!d.teams || !d.teams.length) return <div className="card fade" style={{ borderLeft: "4px solid " + YELLOW, maxWidth: 560 }}><div style={{ fontSize: 17, fontWeight: 800, marginBottom: 6 }}>Aucune équipe pour l'instant</div><div style={{ fontSize: 13.5, color: MUT, lineHeight: 1.55 }}>Tu n'es rattaché à aucune équipe. Demande à un responsable de te rattacher à la tienne (Admin › Utilisateurs › ta fiche).</div></div>;
-  if (view === "primes") return <PrimesView rights={rights} teams={d.teams} />;
-  if (view === "joueurs") return <RosterView teams={d.teams} efx={d.efx} players={d.players} />;
+  const pick = filter !== "all" ? filter : null;
+  if (view === "primes") return <PrimesView key={"p" + (pick || "")} rights={rights} teams={d.teams} initialTeam={pick} />;
+  if (view === "joueurs") return <RosterView key={"r" + (pick || "")} teams={d.teams} efx={d.efx} players={d.players} initialTeam={pick} />;
   const banner = (d.offline || queued > 0) && <div role="status" style={{ background: "#FFF6D6", color: "#5C4600", borderRadius: 14, padding: "10px 14px", fontSize: 13, fontWeight: 700, display: "flex", gap: 8, alignItems: "center" }}>
     <i className="ti ti-wifi-off" aria-hidden="true" />
     {queued > 0 ? queued + " pointage(s) enregistré(s) sur le téléphone : envoi automatique dès le retour du réseau." : "Pas de réseau : tu vois les données de ta dernière connexion."}
@@ -132,10 +135,21 @@ export default function SportSpace({ me, rights, scope, teams, view, setView }) 
   const nextMatch = mineS.filter((s) => f(s, "Type") === "Match" && f(s, "Date") >= today && f(s, "Statut") !== "Annulée").sort((a, b) => String(f(a, "Date")).localeCompare(String(f(b, "Date"))))[0];
 
   if (view === "seances") return <SeancesList d={d} mineS={mineS} tName={tName} filter={filter} setFilter={setFilter} onOpen={(id) => setOpen({ seanceId: id })} banner={banner} />;
+  if (club && filter === "all") return <ClubView d={d} banner={banner} onTeam={(id) => { setFilter(id); window.scrollTo(0, 0); }} onOpen={(id) => setOpen({ seanceId: id })} />;
+  const curTeam = club && d.teams.find((t) => t.id === filter);
   return (
     <div className="fade" style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 720 }}>
       {banner}
-      {d.teams.length > 1 && <div role="group" aria-label="Filtrer par équipe" style={{ display: "flex", gap: 4, background: "#E9EBEF", borderRadius: 30, padding: 4, alignSelf: "flex-start", flexWrap: "wrap" }}>
+      {curTeam && <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <button className="btn btn-ghost" onClick={() => { setFilter("all"); window.scrollTo(0, 0); }} style={{ alignSelf: "flex-start" }}><span aria-hidden="true">‹</span> Vue club</button>
+        <div style={{ fontSize: 22, fontWeight: 800, color: TEXT }}>{f(curTeam, "Nom")}</div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button className="btn btn-ghost" onClick={() => setView("seances")}><i className="ti ti-calendar" aria-hidden="true" />Séances</button>
+          <button className="btn btn-ghost" onClick={() => setView("joueurs")}><i className="ti ti-users" aria-hidden="true" />Joueurs et assiduité</button>
+          {canPrimesR(rights) && f(curTeam, "Primes actives") && <button className="btn btn-ghost" onClick={() => setView("primes")}><i className="ti ti-coin-euro" aria-hidden="true" />Primes</button>}
+        </div>
+      </div>}
+      {!club && d.teams.length > 1 && <div role="group" aria-label="Filtrer par équipe" style={{ display: "flex", gap: 4, background: "#E9EBEF", borderRadius: 30, padding: 4, alignSelf: "flex-start", flexWrap: "wrap" }}>
         {[["all", "Toutes"]].concat(d.teams.map((t) => [t.id, tShort(t.id)])).map(([k, l]) => <button key={k} aria-pressed={filter === k} onClick={() => setFilter(k)} style={{ minHeight: 36, padding: "0 14px", border: "none", borderRadius: 30, cursor: "pointer", fontFamily: "inherit", fontSize: 13, fontWeight: 800, background: filter === k ? BLACK : "transparent", color: filter === k ? "#fff" : "#3A3F47" }}>{l}</button>)}
       </div>}
       {late.length > 0 && <button onClick={() => setOpen({ seanceId: late[0].id })} className="card" style={{ textAlign: "left", cursor: "pointer", fontFamily: "inherit", borderLeft: "4px solid " + RED, display: "flex", alignItems: "center", gap: 12 }}>
@@ -165,6 +179,80 @@ export default function SportSpace({ me, rights, scope, teams, view, setView }) 
           <span style={{ fontSize: 13, color: MUT }}>{f(s, "Heure") || ""}</span>
         </button>)}
         {!week.length && <div style={{ fontSize: 13.5, color: MUT, padding: 14 }}>Rien de prévu cette semaine. Le planning se prépare dans Admin › Équipes › Rythme d'entraînement.</div>}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- Vue club (supervision)
+function teamStats(d, t, today) {
+  const ss = d.seances.filter((s) => teamOf(s) === t.id);
+  const month = today.slice(0, 7);
+  const late = ss.filter((s) => f(s, "Statut") !== "Pointée" && f(s, "Statut") !== "Annulée" && f(s, "Date") < today);
+  let pres = 0, tot = 0;
+  ss.filter((s) => f(s, "Statut") === "Pointée" && String(f(s, "Date")).startsWith(month)).forEach((s) => { tot += rosterAt(d, t.id, f(s, "Date")).length; pres += (f(s, "Pointages") || []).length; });
+  const next = ss.filter((s) => f(s, "Date") >= today && f(s, "Statut") !== "Annulée" && f(s, "Statut") !== "Pointée").sort((a, b) => (String(f(a, "Date")) + (f(a, "Heure") || "")).localeCompare(String(f(b, "Date")) + (f(b, "Heure") || "")))[0];
+  const last = ss.filter((s) => f(s, "Type") === "Match" && f(s, "Résultat")).sort((a, b) => String(f(b, "Date")).localeCompare(String(f(a, "Date"))))[0];
+  const week = ss.filter((s) => f(s, "Date") >= today && f(s, "Date") <= addDays(today, 7) && f(s, "Statut") !== "Annulée").length;
+  return { late, pres, tot, rate: tot ? Math.round(pres / tot * 100) : null, next, last, week, n: rosterAt(d, t.id, today).length };
+}
+function ClubView({ d, banner, onTeam, onOpen }) {
+  const today = TODAY();
+  const [staff, setStaff] = useState({});
+  useEffect(() => {
+    Promise.all([db({ action: "list", table: "Staff" }), db({ action: "list", table: "Utilisateurs" })]).then(([s, u]) => {
+      const users = u.records || []; const m = {};
+      (s.records || []).forEach((x) => { const tid = (f(x, "Équipe") || [])[0]; const us = users.find((y) => y.id === (f(x, "Personne") || [])[0]); if (!tid || !us) return; (m[tid] = m[tid] || []).push({ nom: [f(us, "Prénom"), f(us, "Nom")].filter(Boolean).join(" "), fn: f(x, "Fonction") || "" }); });
+      setStaff(m);
+    }).catch(() => {});
+  }, []);
+  const rows = d.teams.map((t) => ({ t, s: teamStats(d, t, today) }));
+  const lateN = rows.reduce((a, r) => a + r.s.late.length, 0);
+  const weekN = rows.reduce((a, r) => a + r.s.week, 0);
+  const P = rows.reduce((a, r) => a + r.s.pres, 0), T = rows.reduce((a, r) => a + r.s.tot, 0);
+  const todays = d.seances.filter((s) => f(s, "Date") === today && d.teams.some((t) => t.id === teamOf(s))).sort((a, b) => String(f(a, "Heure")).localeCompare(String(f(b, "Heure"))));
+  const matches = d.seances.filter((s) => f(s, "Type") === "Match" && f(s, "Date") >= today && f(s, "Date") <= addDays(today, 7) && f(s, "Statut") !== "Annulée" && d.teams.some((t) => t.id === teamOf(s))).length;
+  const tShort = (id) => (f(d.teams.find((t) => t.id === id), "Nom") || "").split("·")[0].trim();
+  const sorted = rows.slice().sort((a, b) => (b.s.late.length > 0) - (a.s.late.length > 0));
+  const Kpi = ({ label, value, sub, tone, color }) => <div className="card" style={{ borderLeft: "4px solid " + tone, padding: "12px 14px", minWidth: 0 }}>
+    <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".06em", color: MUT }}>{label}</div>
+    <div style={{ fontSize: 26, fontWeight: 800, color: color || TEXT }}>{value}</div>
+    <div style={{ fontSize: 12, color: MUT }}>{sub}</div></div>;
+  return (
+    <div className="fade" style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 1000 }}>
+      {banner}
+      <div style={{ fontSize: 20, fontWeight: 800, color: TEXT, padding: "2px 4px 0" }}>Le club en un coup d'œil</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
+        <Kpi label="ÉQUIPES SUIVIES" value={d.teams.length} sub={rows.reduce((a, r) => a + r.s.n, 0) + " joueurs"} tone={BLACK} />
+        <Kpi label="EN RETARD DE POINTAGE" value={lateN} sub={lateN ? "séance(s) à pointer" : "tout est à jour"} tone={lateN ? RED : OK} color={lateN ? "#B42318" : TEXT} />
+        <Kpi label="PRÉSENCE DU MOIS" value={T ? Math.round(P / T * 100) + " %" : "—"} sub="toutes équipes" tone={RED} />
+        <Kpi label="7 PROCHAINS JOURS" value={weekN} sub={"séance(s) dont " + matches + " match(s)"} tone={YELLOW} />
+      </div>
+      <div style={{ fontSize: 14, fontWeight: 800, color: "#3A3F47", padding: "4px 4px 0" }}>Aujourd'hui au club</div>
+      <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+        {todays.map((s) => { const st = f(s, "Statut") || "Prévue"; return <button key={s.id} onClick={() => onOpen(s.id)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", border: "none", borderBottom: "1px solid #F0F1F4", background: "#fff", cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
+          <span style={{ fontSize: 11, fontWeight: 800, padding: "4px 8px", borderRadius: 10, background: "#F4F5F8", minWidth: 34, textAlign: "center" }}>{tShort(teamOf(s))}</span>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: TEXT }}>{f(s, "Heure") ? f(s, "Heure") + " · " : ""}{f(s, "Type")}{f(s, "Adversaire") ? " vs " + f(s, "Adversaire") : ""}</span>
+          <span style={{ fontSize: 12, fontWeight: 800, padding: "4px 9px", borderRadius: 10, background: st === "Pointée" ? "#E7F4EA" : st === "Annulée" ? "#EEF0F3" : "#FFF6D6", color: st === "Pointée" ? "#1F5C30" : st === "Annulée" ? MUT : "#6B4A00" }}>{st === "Pointée" ? (f(s, "Pointages") || []).length + " présents" : st}</span>
+        </button>; })}
+        {!todays.length && <div style={{ fontSize: 13.5, color: MUT, padding: 14 }}>Pas de séance prévue aujourd'hui dans le club.</div>}
+      </div>
+      <div style={{ fontSize: 14, fontWeight: 800, color: "#3A3F47", padding: "4px 4px 0" }}>Les équipes <span style={{ fontWeight: 600, color: MUT }}>· touche une équipe pour le détail</span></div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 12 }}>
+        {sorted.map(({ t, s }) => { const st = staff[t.id] || []; const coach = st.find((x) => /entra[iî]neur/i.test(x.fn) && !/adjoint/i.test(x.fn)) || st[0]; return (
+          <button key={t.id} className="card" onClick={() => onTeam(t.id)} aria-label={"Détail de l'équipe " + f(t, "Nom")} style={{ textAlign: "left", cursor: "pointer", fontFamily: "inherit", display: "flex", flexDirection: "column", gap: 8, borderLeft: "4px solid " + (s.late.length ? RED : f(t, "Primes actives") ? YELLOW : BORDER), minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ flex: 1, minWidth: 0, fontSize: 16, fontWeight: 800, color: TEXT }}>{f(t, "Nom")}</span>
+              {s.late.length > 0 && <span style={{ fontSize: 11.5, fontWeight: 800, padding: "4px 9px", borderRadius: 10, background: "#FDECEC", color: "#9E1B1B", whiteSpace: "nowrap" }}>{s.late.length} à pointer</span>}
+              <span aria-hidden="true" style={{ color: MUT, fontSize: 18 }}>›</span>
+            </div>
+            <div style={{ fontSize: 12.5, color: MUT }}>{coach ? coach.nom + (coach.fn ? " · " + coach.fn : "") : "Pas d'entraîneur rattaché"} · {s.n} joueurs</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
+              <div><div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: ".06em", color: MUT }}>PRÉSENCE DU MOIS</div><div style={{ fontSize: 18, fontWeight: 800, color: s.rate == null ? MUT : s.rate < 60 ? "#B42318" : TEXT }}>{s.rate == null ? "—" : s.rate + " %"}</div></div>
+              <div><div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: ".06em", color: MUT }}>DERNIER MATCH</div><div style={{ fontSize: 13.5, fontWeight: 700, color: TEXT }}>{s.last ? f(s.last, "Résultat") + " " + (f(s.last, "Score VHB") ?? "") + "-" + (f(s.last, "Score adverse") ?? "") : "—"}</div></div>
+            </div>
+            <div style={{ fontSize: 12.5, color: "#3A3F47", borderTop: "1px solid #F0F1F4", paddingTop: 8 }}>{s.next ? "Prochaine : " + dayLabel(f(s.next, "Date")) + (f(s.next, "Heure") ? " · " + f(s.next, "Heure") : "") + " · " + f(s.next, "Type") + (f(s.next, "Adversaire") ? " vs " + f(s.next, "Adversaire") : "") : "Aucune séance planifiée"}</div>
+          </button>); })}
       </div>
     </div>
   );
