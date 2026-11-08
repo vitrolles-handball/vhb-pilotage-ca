@@ -13,6 +13,7 @@ import { PlayerCard } from "./Fiche.jsx";
 import { SupportPanel } from "./Comms.jsx";
 import { SeasonWizard } from "./Saison.jsx";
 import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { db, f, authApi, fullName, Avatar, RED, YELLOW, BLACK, TEXT, MUT, BORDER, OK, VACANCES_DEFAUT } from "./App.jsx";
 
 export const RIGHT_GROUPS = [
@@ -38,7 +39,7 @@ export function adminTabsFor(rights) {
 }
 const COLORS = ["#16171B", "#D62828", "#E8590C", "#8A6A00", "#2F7A43", "#1B5E9B", "#7A3FB0", "#5E646D"];
 const FONCTIONS = ["Coach 1", "Coach 2", "Dirigeant", "Autre"];
-const SAISON = (() => { const d = new Date(); const y = d.getMonth() >= 6 ? d.getFullYear() : d.getFullYear() - 1; return y + "-" + (y + 1); })();
+export const SAISON = (() => { const d = new Date(); const y = d.getMonth() >= 6 ? d.getFullYear() : d.getFullYear() - 1; return y + "-" + (y + 1); })();
 const norm = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 const frDate = (s) => { if (!s) return "—"; const d = String(s).slice(0, 10).split("-"); return d.length === 3 ? d[2] + "/" + d[1] + "/" + d[0] : s; };
 const today = () => new Date().toISOString().slice(0, 10);
@@ -537,15 +538,7 @@ function TeamDetail({ team, d, rights, reload }) {
       </div>
 
       {card && <PlayerCard joueurId={card} onClose={() => setCard(null)} />}
-      <div className="card" style={{ borderLeft: "4px solid #1B5E9B", display: "flex", flexDirection: "column", gap: 8 }}>
-        <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".06em", color: MUT }}>STAFF DE L'ÉQUIPE</div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-          {staff.map((s) => { const u = d.users.find((x) => x.id === (f(s, "Personne") || [])[0]); return <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 8, background: "#F4F5F8", borderRadius: 12, padding: "7px 11px" }}>
-            <span style={{ fontSize: 11.5, fontWeight: 800, color: MUT }}>{f(s, "Fonction") || "Staff"}</span><span style={{ fontSize: 14, fontWeight: 800 }}>{u ? fullName(u) : "?"}</span></div>; })}
-          {!staff.length && <span style={{ fontSize: 13, color: MUT }}>Personne n'est encore rattaché à cette équipe.</span>}
-        </div>
-        <div style={{ fontSize: 12.5, color: MUT }}>Pour rattacher quelqu'un : Utilisateurs → sa fiche → « Rattacher à une équipe ».</div>
-      </div>
+      <StaffBlock team={team} d={d} rights={rights} reload={reload} />
 
       {(has(rights, "plan") || canEff) && <RhythmBlock team={team} d={d} reload={reload} />}
 
@@ -582,6 +575,117 @@ function TeamDetail({ team, d, rights, reload }) {
       </div>
     </div>
   );
+}
+
+// Staff de l'équipe : rattacher une personne existante ou inviter une nouvelle personne (compte + mail).
+function StaffBlock({ team, d, rights, reload }) {
+  const canLink = has(rights, "users") || has(rights, "eff");
+  const canInvite = has(rights, "users");
+  const staff = d.staff.filter((s) => (f(s, "Équipe") || []).includes(team.id));
+  const [mode, setMode] = useState(null); // null | "existant" | "nouveau"
+  const [who, setWho] = useState("");
+  const [fn, setFn] = useState("Coach 1");
+  const [form, setForm] = useState({ prenom: "", nom: "", email: "" });
+  const coachRole = d.roles.find((r) => /entra[iî]neur/i.test(f(r, "Nom") || "") && !isLocked(r));
+  const [role, setRole] = useState(coachRole ? coachRole.id : "");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const userOf = (s) => d.users.find((x) => x.id === (f(s, "Personne") || [])[0]);
+  const inTeam = new Set(staff.flatMap((s) => f(s, "Personne") || []));
+  const candidates = d.users.filter((u) => f(u, "Actif") !== false && !inTeam.has(u.id)).sort((a, b) => fullName(a).localeCompare(fullName(b), "fr"));
+  const link = async (uid, name) => db({ action: "create", table: "Staff", fields: { "Libellé": name + " — " + (f(team, "Nom") || ""), "Personne": [uid], "Équipe": [team.id], "Fonction": fn } });
+  const reset = () => { setMode(null); setWho(""); setForm({ prenom: "", nom: "", email: "" }); setFn("Coach 1"); };
+  const addExisting = async () => {
+    const u = d.users.find((x) => x.id === who); if (!u) return;
+    setBusy(true); setMsg("");
+    try { await link(u.id, fullName(u)); await reload(); setMsg(fullName(u) + " est rattaché(e) à l'équipe (" + fn + ")."); reset(); } catch (e) { setMsg("Erreur : " + e.message); }
+    setBusy(false);
+  };
+  const addNew = async () => {
+    const mail = form.email.trim().toLowerCase();
+    if (!form.prenom.trim() || !form.nom.trim()) { setMsg("Indique le prénom et le nom."); return; }
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(mail)) { setMsg("Adresse e-mail invalide."); return; }
+    const exist = d.users.find((u) => String(f(u, "Email") || "").toLowerCase() === mail);
+    setBusy(true); setMsg("");
+    try {
+      let uid = exist && exist.id, note = "";
+      if (!uid) {
+        const j = await db({ action: "create", table: "Utilisateurs", fields: { "Email": mail, "Prénom": form.prenom.trim(), "Nom": form.nom.trim(), "Actif": true, "Profil complété": false, "Rôles": role ? [role] : [], "Rôle": "Équipier" } });
+        uid = ((j.records || [])[0] || {}).id;
+        try { await authApi("invite", { userId: uid }); note = " Une invitation lui a été envoyée par mail (lien valable 7 jours)."; } catch (e) { note = " Attention : le mail d'invitation n'est pas parti (" + e.message + ")."; }
+      } else note = " Cette adresse avait déjà un accès : la personne est simplement rattachée.";
+      await link(uid, form.prenom.trim() + " " + form.nom.trim());
+      await reload(); setMsg(form.prenom.trim() + " " + form.nom.trim() + " est ajouté(e) au staff (" + fn + ")." + note); reset();
+    } catch (e) { setMsg("Erreur : " + e.message); }
+    setBusy(false);
+  };
+  const remove = async (s) => {
+    const u = userOf(s);
+    if (!confirm("Retirer " + (u ? fullName(u) : "cette personne") + " du staff de " + f(team, "Nom") + " ? Son compte reste actif.")) return;
+    try { await db({ action: "delete", table: "Staff", recordId: s.id }); await reload(); } catch (e) { alert("Erreur : " + e.message); }
+  };
+  const reinvite = async (u) => {
+    try { await authApi("invite", { userId: u.id }); setMsg("Invitation renvoyée à " + f(u, "Email") + "."); } catch (e) { setMsg("Envoi impossible : " + e.message); }
+  };
+  return <div className="card" style={{ borderLeft: "4px solid #1B5E9B", display: "flex", flexDirection: "column", gap: 10 }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+      <div style={{ flex: 1, fontSize: 11.5, fontWeight: 800, letterSpacing: ".06em", color: MUT }}>STAFF DE L'ÉQUIPE</div>
+      {canLink && !mode && <button className="btn btn-red" onClick={() => { setMode(canInvite ? "nouveau" : "existant"); setMsg(""); }}><i className="ti ti-user-plus" aria-hidden="true" />Ajouter un entraîneur</button>}
+    </div>
+    {staff.map((s) => { const u = userOf(s); const ok = u && f(u, "Profil complété"); return <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 10, background: "#F4F5F8", borderRadius: 12, padding: "8px 12px", flexWrap: "wrap" }}>
+      <span style={{ fontSize: 11.5, fontWeight: 800, color: MUT, minWidth: 64 }}>{f(s, "Fonction") || "Staff"}</span>
+      <span style={{ flex: "1 1 140px", fontSize: 14, fontWeight: 800 }}>{u ? fullName(u) : "?"}{u && <span style={{ display: "block", fontSize: 12, fontWeight: 400, color: MUT }}>{f(u, "Email")}</span>}</span>
+      {u && <span style={{ fontSize: 11.5, fontWeight: 800, padding: "4px 9px", borderRadius: 10, background: ok ? "#E7F4EA" : "#FFF6D6", color: ok ? "#1F5C30" : "#6B4A00" }}>{ok ? "Compte actif" : "Invitation en attente"}</span>}
+      {u && !ok && canInvite && <button className="btn btn-ghost" style={{ minHeight: 34, padding: "0 10px", fontSize: 12.5 }} onClick={() => reinvite(u)}>Renvoyer l'invitation</button>}
+      {canLink && <button className="btn btn-ghost" style={{ padding: "6px 9px" }} onClick={() => remove(s)} aria-label={"Retirer " + (u ? fullName(u) : "") + " du staff"}><span aria-hidden="true">×</span></button>}
+    </div>; })}
+    {!staff.length && !mode && <span style={{ fontSize: 13, color: MUT }}>Personne n'est encore rattaché à cette équipe.</span>}
+    {mode && <div style={{ border: "1px solid " + BORDER, borderRadius: 14, padding: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+      <div role="group" aria-label="Qui ajouter" style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        {canInvite && <button aria-pressed={mode === "nouveau"} onClick={() => setMode("nouveau")} style={chipStyle(mode === "nouveau")}>Nouvelle personne (invitation)</button>}
+        <button aria-pressed={mode === "existant"} onClick={() => setMode("existant")} style={chipStyle(mode === "existant")}>Personne qui a déjà un accès</button>
+      </div>
+      {mode === "nouveau" ? <>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ flex: "1 1 140px" }}><label className="lbl" htmlFor="sb-pre">Prénom</label><input id="sb-pre" className="inp" value={form.prenom} onChange={(e) => setForm({ ...form, prenom: e.target.value })} /></div>
+          <div style={{ flex: "1 1 140px" }}><label className="lbl" htmlFor="sb-nom">Nom</label><input id="sb-nom" className="inp" value={form.nom} onChange={(e) => setForm({ ...form, nom: e.target.value })} /></div>
+        </div>
+        <div><label className="lbl" htmlFor="sb-mail">Adresse e-mail</label><input id="sb-mail" className="inp" type="email" inputMode="email" placeholder="prenom@exemple.com" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
+        <div><label className="lbl" htmlFor="sb-role">Rôle</label><select id="sb-role" className="sel" value={role} onChange={(e) => setRole(e.target.value)}>
+          <option value="">Aucun rôle (à régler plus tard)</option>
+          {d.roles.filter((r) => !isLocked(r)).map((r) => <option key={r.id} value={r.id}>{f(r, "Nom")}</option>)}
+        </select></div>
+      </> : <div><label className="lbl" htmlFor="sb-who">Personne</label><select id="sb-who" className="sel" value={who} onChange={(e) => setWho(e.target.value)}>
+        <option value="">Choisir…</option>
+        {candidates.map((u) => <option key={u.id} value={u.id}>{fullName(u)}{f(u, "Email") ? " · " + f(u, "Email") : ""}</option>)}
+      </select></div>}
+      <div><label className="lbl" htmlFor="sb-fn">Fonction dans l'équipe</label><select id="sb-fn" className="sel" value={fn} onChange={(e) => setFn(e.target.value)}>{FONCTIONS.map((x) => <option key={x}>{x}</option>)}</select></div>
+      {mode === "nouveau" && <div style={{ fontSize: 12.5, color: MUT, lineHeight: 1.5 }}>La personne reçoit un mail pour choisir son mot de passe. Elle verra ensuite cette équipe dans l'espace Sportif.</div>}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <button className="btn btn-red" disabled={busy || (mode === "existant" && !who)} onClick={mode === "nouveau" ? addNew : addExisting}>{busy ? "Enregistrement…" : mode === "nouveau" ? "Créer l'accès et envoyer l'invitation" : "Rattacher à l'équipe"}</button>
+        <button className="btn btn-ghost" disabled={busy} onClick={reset}>Annuler</button>
+      </div>
+      {!canInvite && <div style={{ fontSize: 12.5, color: MUT }}>Pour inviter une personne qui n'a pas encore d'accès, il faut le droit « Gérer les utilisateurs ».</div>}
+    </div>}
+    {msg && <div role="status" style={{ fontSize: 13, color: msg.startsWith("Erreur") || msg.startsWith("Attention") ? "#9E1B1B" : "#1F5C30" }}>{msg}</div>}
+  </div>;
+}
+
+// Fenêtre « Gérer l'équipe » ouverte depuis la vue Club (Sportif) : même écran que Admin › Équipes.
+export function TeamManager({ teamId, rights, onClose }) {
+  const [d, reload] = useAdminData(rights);
+  useEffect(() => { const h = (e) => { if (e.key === "Escape") onClose(); }; window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h); }, [onClose]);
+  const team = d.teams.find((t) => t.id === teamId);
+  return createPortal(<div role="dialog" aria-modal="true" aria-label="Gérer l'équipe" style={{ position: "fixed", inset: 0, background: "rgba(16,17,20,.55)", zIndex: 205, display: "flex", justifyContent: "center", alignItems: "flex-start", overflowY: "auto", padding: "calc(12px + env(safe-area-inset-top)) 10px 40px" }}>
+    <div style={{ position: "relative", width: "100%", maxWidth: 1100, background: "#F4F5F8", borderRadius: 20, padding: 14, display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ position: "sticky", top: 0, alignSelf: "flex-end", height: 0, zIndex: 3 }}><button aria-label="Fermer" onClick={onClose} style={{ position: "relative", top: -4, right: -4, boxShadow: "0 2px 8px rgba(0,0,0,.15)", width: 40, height: 40, borderRadius: 20, border: "none", background: "#fff", cursor: "pointer", fontSize: 22, lineHeight: 1 }}><span aria-hidden="true">×</span></button></div>
+      <div style={{ fontSize: 13, fontWeight: 800, color: MUT, paddingRight: 48 }}>GÉRER L'ÉQUIPE · staff, joueurs, entraînements{has(rights, "param") ? ", primes" : ""}</div>
+      {!d.loaded && <div className="card" style={{ color: MUT }}>Chargement…</div>}
+      {d.error && <div className="card" style={{ color: "#9E1B1B" }}>{d.error}</div>}
+      {d.loaded && !team && !d.error && <div className="card" style={{ color: MUT }}>Équipe introuvable.</div>}
+      {team && <TeamDetail key={team.id} team={team} d={d} rights={rights} reload={reload} />}
+    </div>
+  </div>, document.body);
 }
 
 async function findOrCreatePlayers(d, list) {

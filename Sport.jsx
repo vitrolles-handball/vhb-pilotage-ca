@@ -9,6 +9,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { PrimesView } from "./Primes.jsx";
 import { RosterView } from "./Fiche.jsx";
+import { TeamManager, SAISON } from "./Admin.jsx";
 import { db, dbForget, f, RED, YELLOW, BLACK, TEXT, MUT, BORDER, OK } from "./App.jsx";
 
 const QUEUE_KEY = "vhb_pointage_attente";
@@ -21,6 +22,7 @@ const MOIS = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août"
 const dayLabel = (s) => { const d = new Date(s + "T12:00:00"); return JOURS[d.getDay()] + " " + d.getDate() + " " + MOIS[d.getMonth()]; };
 const norm = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 const has = (rights, r) => (rights || []).includes("*") || (rights || []).includes(r);
+const canManage = (r) => ["eff", "users", "plan", "param"].some((x) => has(r, x));
 const canPrimesR = (r) => ["corr", "valid", "param", "compta"].some((x) => has(r, x));
 const TYPE_ICON = { "Entraînement": "ti-run", "Match": "ti-trophy", "Entraînement supplémentaire": "ti-plus", "Stage": "ti-tent" };
 
@@ -99,6 +101,7 @@ export default function SportSpace({ me, rights, scope, teams, view, setView }) 
   const [d, reload] = useSportData(me, rights, scope, teams);
   const club = scope === "all"; // vue de supervision : synthèse du club, puis détail par équipe
   const [open, setOpen] = useState(null); // { seanceId } | { create: "Match" | "Supp" }
+  const [manage, setManage] = useState(null); // équipe ouverte dans « Gérer l'équipe »
   const [filter, setFilter] = useState("all");
   const queued = useQueueCount();
   if (!d.loaded) return <div className="card fade" style={{ color: MUT }}>Chargement de tes équipes…</div>;
@@ -135,7 +138,8 @@ export default function SportSpace({ me, rights, scope, teams, view, setView }) 
   const nextMatch = mineS.filter((s) => f(s, "Type") === "Match" && f(s, "Date") >= today && f(s, "Statut") !== "Annulée").sort((a, b) => String(f(a, "Date")).localeCompare(String(f(b, "Date"))))[0];
 
   if (view === "seances") return <SeancesList d={d} mineS={mineS} tName={tName} filter={filter} setFilter={setFilter} onOpen={(id) => setOpen({ seanceId: id })} banner={banner} />;
-  if (club && filter === "all") return <ClubView d={d} banner={banner} onTeam={(id) => { setFilter(id); window.scrollTo(0, 0); }} onOpen={(id) => setOpen({ seanceId: id })} />;
+  const manageUI = manage && <TeamManager teamId={manage} rights={rights} onClose={() => { setManage(null); ["Équipes", "Staff", "Effectifs", "Rythmes", "Séances", "Joueurs"].forEach((x) => dbForget(x)); reload(); }} />;
+  if (club && filter === "all") return <><ClubView d={d} banner={banner} rights={rights} onManage={setManage} onCreated={async (id) => { dbForget("Équipes"); await reload(); setManage(id); }} onTeam={(id) => { setFilter(id); window.scrollTo(0, 0); }} onOpen={(id) => setOpen({ seanceId: id })} />{manageUI}</>;
   const curTeam = club && d.teams.find((t) => t.id === filter);
   return (
     <div className="fade" style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 720 }}>
@@ -147,8 +151,11 @@ export default function SportSpace({ me, rights, scope, teams, view, setView }) 
           <button className="btn btn-ghost" onClick={() => setView("seances")}><i className="ti ti-calendar" aria-hidden="true" />Séances</button>
           <button className="btn btn-ghost" onClick={() => setView("joueurs")}><i className="ti ti-users" aria-hidden="true" />Joueurs et assiduité</button>
           {canPrimesR(rights) && f(curTeam, "Primes actives") && <button className="btn btn-ghost" onClick={() => setView("primes")}><i className="ti ti-coin-euro" aria-hidden="true" />Primes</button>}
+          {canManage(rights) && <button className="btn btn-dark" onClick={() => setManage(curTeam.id)}><i className="ti ti-settings" aria-hidden="true" />Gérer l'équipe</button>}
         </div>
+        {canManage(rights) && <div style={{ fontSize: 12.5, color: MUT }}>« Gérer l'équipe » : entraîneurs (avec invitation), joueurs, rythme d'entraînement{has(rights, "param") ? ", primes" : ""}.</div>}
       </div>}
+      {manageUI}
       {!club && d.teams.length > 1 && <div role="group" aria-label="Filtrer par équipe" style={{ display: "flex", gap: 4, background: "#E9EBEF", borderRadius: 30, padding: 4, alignSelf: "flex-start", flexWrap: "wrap" }}>
         {[["all", "Toutes"]].concat(d.teams.map((t) => [t.id, tShort(t.id)])).map(([k, l]) => <button key={k} aria-pressed={filter === k} onClick={() => setFilter(k)} style={{ minHeight: 36, padding: "0 14px", border: "none", borderRadius: 30, cursor: "pointer", fontFamily: "inherit", fontSize: 13, fontWeight: 800, background: filter === k ? BLACK : "transparent", color: filter === k ? "#fff" : "#3A3F47" }}>{l}</button>)}
       </div>}
@@ -196,8 +203,19 @@ function teamStats(d, t, today) {
   const week = ss.filter((s) => f(s, "Date") >= today && f(s, "Date") <= addDays(today, 7) && f(s, "Statut") !== "Annulée").length;
   return { late, pres, tot, rate: tot ? Math.round(pres / tot * 100) : null, next, last, week, n: rosterAt(d, t.id, today).length };
 }
-function ClubView({ d, banner, onTeam, onOpen }) {
+function ClubView({ d, banner, onTeam, onOpen, rights, onManage, onCreated }) {
   const today = TODAY();
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [busyNew, setBusyNew] = useState(false);
+  const canEff = has(rights, "eff");
+  const createTeam = async () => {
+    const n = newName.trim(); if (!n) return;
+    setBusyNew(true);
+    try { const j = await db({ action: "create", table: "Équipes", fields: { "Nom": n, "Saison": SAISON, "Ordre": d.teams.length + 1 } }); setNewName(""); setCreating(false); await onCreated(((j.records || [])[0] || {}).id); }
+    catch (e) { alert("Erreur : " + e.message); }
+    setBusyNew(false);
+  };
   const [staff, setStaff] = useState({});
   useEffect(() => {
     Promise.all([db({ action: "list", table: "Staff" }), db({ action: "list", table: "Utilisateurs" })]).then(([s, u]) => {
@@ -237,7 +255,16 @@ function ClubView({ d, banner, onTeam, onOpen }) {
         </button>; })}
         {!todays.length && <div style={{ fontSize: 13.5, color: MUT, padding: 14 }}>Pas de séance prévue aujourd'hui dans le club.</div>}
       </div>
-      <div style={{ fontSize: 14, fontWeight: 800, color: "#3A3F47", padding: "4px 4px 0" }}>Les équipes <span style={{ fontWeight: 600, color: MUT }}>· touche une équipe pour le détail</span></div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "4px 4px 0" }}>
+        <div style={{ flex: 1, fontSize: 14, fontWeight: 800, color: "#3A3F47" }}>Les équipes <span style={{ fontWeight: 600, color: MUT }}>· touche une équipe pour le détail</span></div>
+        {canEff && !creating && <button className="btn btn-red" onClick={() => setCreating(true)}><i className="ti ti-plus" aria-hidden="true" />Nouvelle équipe</button>}
+      </div>
+      {creating && <div className="card" style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap", borderLeft: "4px solid " + RED }}>
+        <div style={{ flex: "1 1 200px" }}><label className="lbl" htmlFor="cl-nt">Nom de la nouvelle équipe</label><input id="cl-nt" className="inp" autoFocus placeholder="ex. U15 F" value={newName} onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && createTeam()} /></div>
+        <button className="btn btn-red" disabled={busyNew || !newName.trim()} onClick={createTeam}>{busyNew ? "Création…" : "Créer et ajouter les entraîneurs"}</button>
+        <button className="btn btn-ghost" onClick={() => { setCreating(false); setNewName(""); }}>Annuler</button>
+      </div>}
+      {!d.teams.length && <div className="card" style={{ color: MUT, fontSize: 13.5 }}>Aucune équipe pour l'instant.{canEff ? " Crée la première avec « Nouvelle équipe »." : ""}</div>}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 12 }}>
         {sorted.map(({ t, s }) => { const st = staff[t.id] || []; const coach = st.find((x) => x.fn === "Coach 1") || st.find((x) => /coach|entra[iî]neur/i.test(x.fn)) || st[0]; return (
           <button key={t.id} className="card" onClick={() => onTeam(t.id)} aria-label={"Détail de l'équipe " + f(t, "Nom")} style={{ textAlign: "left", cursor: "pointer", fontFamily: "inherit", display: "flex", flexDirection: "column", gap: 8, borderLeft: "4px solid " + (s.late.length ? RED : f(t, "Primes actives") ? YELLOW : BORDER), minWidth: 0 }}>
