@@ -41,6 +41,90 @@ function downloadCsv(name, rows) {
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
 }
 
+// Relevé imprimable (ou « Enregistrer en PDF ») ouvert dans un nouvel onglet.
+const escH = (x) => String(x ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+export function printReleve({ team, season, players, months, win }) {
+  const w = win || window.open("", "_blank");
+  if (!w) { alert("Ton navigateur a bloqué l'ouverture de la page à imprimer. Autorise les fenêtres pour VHB Team."); return; }
+  const pending = (months || []).filter((m) => !m.valide && m.mois <= todayIso().slice(0, 7)).map((m) => monthLabel(m.mois));
+  const one = (p) => {
+    const rows = p.rows.filter((r) => r.valide).map((r) => "<tr><td>" + escH(monthLabel(r.mois)) + "</td><td>" + escH(r.type === "Normale" ? "Présence et victoires" : r.type + (r.motif ? " · " + r.motif : "")) + "</td><td class=n>" + (r.type === "Normale" ? r.presences + " / " + r.seances : "") + "</td><td class=n>" + (r.type === "Normale" ? eur(r.primePresence) : "") + "</td><td class=n>" + (r.type === "Normale" ? r.victoires + " · " + eur(r.primeVictoire) : "") + "</td><td class=n><b>" + eur(r.montant) + "</b></td><td>" + escH(r.paiement + (r.payeLe ? " le " + new Date(r.payeLe + "T12:00:00").toLocaleDateString("fr-FR") : "") + (r.mode && r.paiement === "Payé" ? " · " + r.mode : "") + (r.ref ? " · " + r.ref : "")) + "</td></tr>").join("");
+    const t = p.totals;
+    return "<section><h2>" + escH(p.nom) + "</h2><table><thead><tr><th>Mois</th><th>Nature</th><th class=n>Présences</th><th class=n>Prime présence</th><th class=n>Victoires</th><th class=n>Montant</th><th>Paiement</th></tr></thead><tbody>" + (rows || "<tr><td colspan=7>Aucune prime validée sur la saison.</td></tr>") + "</tbody></table>"
+      + "<p class=tot>Total de la saison : <b>" + eur(t.total) + "</b> · payé : " + eur(t.paye) + " · reste dû : " + eur(t.reste) + (t.provisoire ? " · en attente de validation : " + eur(t.provisoire) : "") + "</p></section>";
+  };
+  w.document.write("<!DOCTYPE html><html lang=fr><head><meta charset=utf-8><meta name=viewport content='width=device-width, initial-scale=1'><title>Relevé annuel des primes " + season + "-" + (season + 1) + "</title><style>body{font-family:Arial,Helvetica,sans-serif;color:#15171C;margin:24px;font-size:12.5px}h1{font-size:18px;margin:0 0 4px}.sub{color:#5B616B;margin-bottom:14px}section{page-break-inside:avoid;margin:18px 0 26px}h2{font-size:15px;border-bottom:2px solid #C21F1F;padding-bottom:4px}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:5px 6px;border-bottom:1px solid #E3E5EA;vertical-align:top}th{font-size:11px;color:#5B616B;text-transform:uppercase}.n{text-align:right;white-space:nowrap}.tot{margin-top:8px}.warn{background:#FFF6D6;padding:8px 10px;border-radius:6px}.bar button{font-size:15px;padding:10px 18px;border:0;border-radius:20px;background:#15171C;color:#fff;margin:0 0 14px}@media print{.bar{display:none}section{page-break-after:always}}</style></head><body>"
+    + "<div class=bar><button onclick='window.print()'>Imprimer ou enregistrer en PDF</button></div>"
+    + "<h1>Vitrolles Handball Jeunes — relevé annuel des primes</h1><div class=sub>" + escH(team) + " · saison " + season + "-" + (season + 1) + " · édité le " + new Date().toLocaleDateString("fr-FR") + "</div>"
+    + (pending.length ? "<p class=warn>Mois non encore validés (non repris dans ce relevé) : " + escH(pending.join(", ")) + ".</p>" : "")
+    + players.map(one).join("") + "</body></html>");
+  w.document.close();
+}
+const seasonOf = (iso) => { const y = Number(iso.slice(0, 4)), m = Number(iso.slice(5, 7)); return m >= 8 ? y : y - 1; };
+
+export function AnnualSheet({ teamId, teamName, onClose, onPlayer }) {
+  const [season, setSeason] = useState(() => seasonOf(todayIso()));
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState("");
+  const [open, setOpen] = useState(null);
+  useEffect(() => { setData(null); setErr(""); primesApi({ action: "annual", teamId, season }).then(setData).catch((e) => setErr(e.message)); }, [teamId, season]);
+  const csv = () => {
+    const head = ["Joueur", "Prime présence", "Primes victoire", "Régularisations", "Exceptionnelles", "Total saison", "Payé", "Reste dû", "En attente de validation"];
+    const r2 = (x) => Math.round(x * 100) / 100;
+    downloadCsv("releve-primes-" + norm(teamName).replace(/[^a-z0-9]+/g, "-") + "-" + season + "-" + (season + 1) + ".csv", [head].concat(data.players.map((p) => [p.nom, r2(p.totals.presence), r2(p.totals.victoire), r2(p.totals.regularisation), r2(p.totals.exceptionnelle), r2(p.totals.total), r2(p.totals.paye), r2(p.totals.reste), r2(p.totals.provisoire)]), [["Total", ...["presence", "victoire", "regularisation", "exceptionnelle", "total", "paye", "reste", "provisoire"].map((k) => r2(data.totals[k]))]]));
+  };
+  const pending = data ? data.months.filter((m) => !m.valide && m.mois <= todayIso().slice(0, 7)) : [];
+  const P = open && data && data.players.find((p) => p.joueur === open);
+  return <Sheet title={"Relevé annuel · " + teamName} onClose={onClose} wide>
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+      <div role="group" aria-label="Saison" style={{ display: "flex", alignItems: "center", gap: 4, background: "#E9EBEF", borderRadius: 30, padding: 4 }}>
+        <button aria-label="Saison précédente" className="btn btn-ghost" style={{ minHeight: 36, padding: "0 10px", borderRadius: 30 }} onClick={() => setSeason(season - 1)}><span aria-hidden="true" style={{ fontSize: 20 }}>‹</span></button>
+        <span style={{ fontWeight: 800, fontSize: 14.5, minWidth: 96, textAlign: "center" }}>{season}-{season + 1}</span>
+        <button aria-label="Saison suivante" className="btn btn-ghost" style={{ minHeight: 36, padding: "0 10px", borderRadius: 30 }} disabled={season >= seasonOf(todayIso())} onClick={() => setSeason(season + 1)}><span aria-hidden="true" style={{ fontSize: 20 }}>›</span></button>
+      </div>
+      <span style={{ flex: 1 }} />
+      {data && data.players.length > 0 && <>
+        <button className="btn btn-ghost" onClick={csv}><i className="ti ti-file-spreadsheet" aria-hidden="true" />Excel</button>
+        <button className="btn btn-dark" onClick={() => printReleve({ team: teamName, season, players: data.players, months: data.months })}><i className="ti ti-printer" aria-hidden="true" />Tous les relevés (PDF)</button>
+      </>}
+    </div>
+    {err && <div style={{ color: "#9E1B1B" }}>{err}</div>}
+    {!data && !err && <div style={{ color: MUT }}>Chargement…</div>}
+    {data && <>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <Stat label="TOTAL VALIDÉ" value={eur(data.totals.total)} tone={BLACK} />
+        <Stat label="PAYÉ" value={eur(data.totals.paye)} tone={OK} />
+        <Stat label="RESTE DÛ" value={eur(data.totals.reste)} tone={data.totals.reste > 0 ? RED : BORDER} />
+      </div>
+      {pending.length > 0 && <div style={{ background: "#FFF6D6", color: "#5C4600", borderRadius: 12, padding: "8px 12px", fontSize: 13 }}>Mois pas encore validés, donc absents du relevé : {pending.map((m) => monthLabel(m.mois)).join(", ")}.</div>}
+      {!data.players.length && <div style={{ color: MUT, fontSize: 13.5 }}>Aucune prime validée sur cette saison.</div>}
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {data.players.map((p) => <button key={p.joueur} onClick={() => setOpen(p.joueur)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: "#F7F8FA", border: "none", borderRadius: 12, cursor: "pointer", fontFamily: "inherit", textAlign: "left", flexWrap: "wrap" }}>
+          <span style={{ flex: "1 1 150px", fontWeight: 800, fontSize: 14 }}>{p.nom}</span>
+          <span style={{ fontSize: 13.5, fontWeight: 800 }}>{eur(p.totals.total)}</span>
+          {p.totals.reste > 0 ? <Chip bg="#FDECEC" fg="#9E1B1B">reste {eur(p.totals.reste)}</Chip> : p.totals.total ? <Chip bg="#E7F4EA" fg="#1F5C30">tout payé</Chip> : null}
+          <span aria-hidden="true" style={{ color: MUT }}>›</span>
+        </button>)}
+      </div>
+    </>}
+    {P && <Sheet title={P.nom + " · " + season + "-" + (season + 1)} onClose={() => setOpen(null)} wide>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <button className="btn btn-dark" onClick={() => printReleve({ team: teamName, season, players: [P], months: data.months })}><i className="ti ti-printer" aria-hidden="true" />Imprimer / PDF</button>
+        {onPlayer && <button className="btn btn-ghost" onClick={() => onPlayer(P.joueur)}>Voir la fiche du joueur</button>}
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <Stat label="PRÉSENCE" value={eur(P.totals.presence)} /><Stat label="VICTOIRES" value={eur(P.totals.victoire)} />
+        <Stat label="TOTAL" value={eur(P.totals.total)} tone={BLACK} /><Stat label="RESTE DÛ" value={eur(P.totals.reste)} tone={P.totals.reste > 0 ? RED : OK} />
+      </div>
+      {P.rows.map((r) => { const tone = PAY_TONE[r.paiement] || PAY_TONE["À payer"]; return <div key={r.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "8px 10px", background: "#F7F8FA", borderRadius: 12, flexWrap: "wrap", opacity: r.valide ? 1 : .65 }}>
+        <span style={{ flex: "1 1 180px", fontSize: 13.5 }}><b style={{ textTransform: "capitalize" }}>{monthLabel(r.mois)}</b> · {r.type === "Normale" ? r.presences + "/" + r.seances + " présences · " + r.victoires + " victoire(s)" : r.type + (r.motif ? " · " + r.motif : "")}</span>
+        <b style={{ fontSize: 13.5 }}>{eur(r.montant)}</b>
+        {r.valide ? <Chip bg={tone[0]} fg={tone[1]}>{r.paiement}{r.payeLe ? " · " + new Date(r.payeLe + "T12:00:00").toLocaleDateString("fr-FR") : ""}</Chip> : <Chip>non validé</Chip>}
+      </div>; })}
+    </Sheet>}
+  </Sheet>;
+}
+
 // Fenêtre avec croix de fermeture en haut à droite et touche Échap.
 function Sheet({ title, onClose, children, wide }) {
   useEffect(() => { const h = (e) => { if (e.key === "Escape") onClose(); }; window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h); }, [onClose]);
@@ -69,6 +153,8 @@ export function PrimesView({ rights, teams, users, initialTeam }) {
   const [busy, setBusy] = useState(false);
   const [detail, setDetail] = useState(null);   // ligne joueur
   const [extra, setExtra] = useState(null);     // { joueurId? }
+  const [annual, setAnnual] = useState(false);
+  const [cardOf, setCardOf] = useState(null);
   const canCorr = has(rights, "corr"), canValid = has(rights, "valid");
   const narrow = useNarrow();
   const [ref, setRef] = useState({ users: users || [], players: [] });
@@ -128,6 +214,7 @@ export function PrimesView({ rights, teams, users, initialTeam }) {
         {data && (validated ? <Chip bg="#E7F4EA" fg="#1F5C30">Validé{data.mois && data.mois.valideLe ? " le " + fmtDT(data.mois.valideLe) : ""}{data.mois && data.mois.validePar && userName(data.mois.validePar) ? " par " + userName(data.mois.validePar) : ""}</Chip> : <Chip bg="#FFF6D6" fg="#6B4A00">Ouvert · montants provisoires</Chip>)}
         <span style={{ flex: 1 }} />
         {data && rows.length > 0 && <button className="btn btn-ghost" onClick={exportCsv}><i className="ti ti-file-spreadsheet" aria-hidden="true" />Exporter (Excel)</button>}
+        {team && f(team, "Primes actives") && <button className="btn btn-ghost" onClick={() => setAnnual(true)}><i className="ti ti-report-money" aria-hidden="true" />Relevé annuel</button>}
       </div>
 
       {err && <div className="card" style={{ borderLeft: "4px solid " + RED, color: "#9E1B1B" }}>{err}</div>}
@@ -196,6 +283,8 @@ export function PrimesView({ rights, teams, users, initialTeam }) {
 
       {detail && <PlayerDetail row={detail} data={data} validated={validated} canCorr={canCorr} onClose={() => setDetail(null)} onChanged={async () => { setDetail(null); await load(); }} onExtra={() => { setExtra({ joueurId: detail.joueur }); setDetail(null); }} />}
       {extra && <ExtraForm teamId={teamId} month={validated ? shiftMonth(month, 1) : month} rows={rows} preset={extra.joueurId} validated={validated} onClose={() => setExtra(null)} onDone={async (m) => { setExtra(null); if (m !== month) setMonth(m); else await load(); }} />}
+      {annual && <AnnualSheet teamId={teamId} teamName={f(team, "Nom")} onClose={() => setAnnual(false)} onPlayer={(id) => setCardOf(id)} />}
+      {cardOf && <PlayerCard joueurId={cardOf} onClose={() => setCardOf(null)} />}
     </div>
   );
 }

@@ -7,6 +7,8 @@
 //   deleteExtra { lineId }                              → retire une ligne ajoutée (mois encore ouvert) — Corriger
 //   validate    { teamId, month }                       → fige le mois (lignes recopiées, jamais recalculées) — Valider
 //   pay         { lineIds, status, date, mode, ref }    → Mis en paiement / Payé / À payer — Comptabilité
+//   annual      { teamId, season }                      → relevé annuel (saison août → juillet) : lignes validées par joueur,
+//                                                         mois validés / non validés, totaux payés et restant dus
 import { at, getSession, can, canAny, seesTeam, readBody, logAction } from "./_lib.js";
 import { computeMonth, round2, nextMonth } from "./_primes.js";
 
@@ -139,7 +141,7 @@ export default async function handler(req, res) {
 
     // ------------------------------------------------------------ Actions sur une équipe et un mois
     const { teamId, month } = b;
-    if (!isRec(teamId) || !isMonth(month)) { res.status(400).json({ error: "Équipe ou mois manquant." }); return; }
+    if (!isRec(teamId) || (b.action !== "annual" && !isMonth(month))) { res.status(400).json({ error: "Équipe ou mois manquant." }); return; }
     if (!seesTeam(sess, teamId)) return deny("Cette équipe ne fait pas partie des tiennes.");
     let team; try { team = await at("GET", T("Équipes") + "/" + teamId); } catch (e) { res.status(404).json({ error: "Équipe introuvable." }); return; }
     const teamName = (team.fields || {})["Nom"] || "Équipe";
@@ -156,6 +158,44 @@ export default async function handler(req, res) {
       }
       const r = await loadAndCompute(team, month);
       res.status(200).json({ status: "Ouvert", ...r });
+      return;
+    }
+
+    if (b.action === "annual") {
+      if (!canAny(sess, READ)) return deny();
+      const y = Number(b.season);
+      if (!(y >= 2020 && y <= 2100)) { res.status(400).json({ error: "Saison manquante." }); return; }
+      const months = Array.from({ length: 12 }, (_, i) => { const d = new Date(Date.UTC(y, 7 + i, 1)); return d.toISOString().slice(0, 7); });
+      const orM = "OR(" + months.map((m) => "{Mois}='" + m + "'").join(",") + ")";
+      const orP = "OR(" + months.map((m) => "{Période}='" + m + "'").join(",") + ")";
+      const [mois, lines, players] = await Promise.all([listAll(T_M, orM), listAll(T_L, orP), listAll(T("Joueurs"))]);
+      const vMois = mois.filter((m) => ((m.fields || {})["Équipe"] || []).includes(teamId) && (m.fields || {})["Statut"] === "Validé");
+      const vIds = new Set(vMois.map((m) => m.id));
+      const mine = lines.filter((l) => ((l.fields || {})["Équipe"] || []).includes(teamId));
+      const pName = (id) => { const p = players.find((x) => x.id === id); return p ? (((p.fields || {})["Prénom"] || "") + " " + ((p.fields || {})["Nom"] || "")).trim() : null; };
+      const pSort = (id) => { const p = players.find((x) => x.id === id); return p ? String((p.fields || {})["Nom"] || "") + " " + String((p.fields || {})["Prénom"] || "") : "~"; };
+      const byJ = new Map();
+      for (const l of mine) {
+        const fl = l.fields || {}; const j = (fl["Joueur"] || [])[0]; if (!j) continue;
+        const valide = (fl["Mois"] || []).some((x) => vIds.has(x));
+        if (!byJ.has(j)) byJ.set(j, { joueur: j, nom: pName(j) || String(fl["Libellé"] || "").split(" · ").pop() || "Joueur", tri: pSort(j), rows: [], totals: { presence: 0, victoire: 0, regularisation: 0, exceptionnelle: 0, total: 0, paye: 0, reste: 0, provisoire: 0 } });
+        const r = byJ.get(j); const mt = round2(Number(fl["Montant"]) || 0);
+        r.rows.push({ id: l.id, mois: fl["Période"], type: fl["Type"] || "Normale", valide, presences: fl["Présences"] || 0, seances: fl["Séances"] || 0, taux: fl["Taux"] || 0,
+          primePresence: fl["Prime présence"] || 0, victoires: fl["Victoires"] || 0, primeVictoire: fl["Prime victoire"] || 0, montant: mt, motif: fl["Motif"] || "",
+          paiement: fl["Paiement"] || "À payer", payeLe: fl["Payé le"] || null, mode: fl["Mode"] || "", ref: fl["Référence"] || "" });
+        const t = r.totals;
+        if (!valide) { t.provisoire = round2(t.provisoire + mt); continue; }
+        if (fl["Type"] === "Normale") { t.presence = round2(t.presence + (Number(fl["Prime présence"]) || 0)); t.victoire = round2(t.victoire + (Number(fl["Prime victoire"]) || 0)); }
+        else if (fl["Type"] === "Régularisation") t.regularisation = round2(t.regularisation + mt);
+        else t.exceptionnelle = round2(t.exceptionnelle + mt);
+        t.total = round2(t.total + mt);
+        if (fl["Paiement"] === "Payé") t.paye = round2(t.paye + mt); else t.reste = round2(t.reste + mt);
+      }
+      const out = [...byJ.values()].sort((a, b) => a.tri.localeCompare(b.tri, "fr")).map(({ tri, ...r }) => ({ ...r, rows: r.rows.sort((a, b) => String(a.mois).localeCompare(String(b.mois)) || (a.type === "Normale" ? -1 : 1)) }));
+      const sum = (k) => round2(out.reduce((t, r) => t + r.totals[k], 0));
+      const validMonths = new Set(vMois.map((m) => (m.fields || {})["Mois"]));
+      res.status(200).json({ season: y, team: { id: teamId, nom: teamName }, months: months.map((m) => ({ mois: m, valide: validMonths.has(m) })), players: out,
+        totals: { presence: sum("presence"), victoire: sum("victoire"), regularisation: sum("regularisation"), exceptionnelle: sum("exceptionnelle"), total: sum("total"), paye: sum("paye"), reste: sum("reste"), provisoire: sum("provisoire") } });
       return;
     }
 

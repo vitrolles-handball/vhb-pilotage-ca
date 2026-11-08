@@ -1,6 +1,7 @@
 // Étape 5 — Fiche joueur et assiduité de toutes les équipes.
 import React, { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
+import { printReleve } from "./Primes.jsx";
 import { f, RED, YELLOW, BLACK, TEXT, MUT, BORDER, OK } from "./App.jsx";
 
 const MOIS = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];
@@ -29,7 +30,7 @@ const ETAT = { "Présent": ["#E7F4EA", "#1F5C30"], "Excusé": ["#FFF6D6", "#6B4A
 export function PlayerCard({ joueurId, onClose }) {
   const [d, setD] = useState(null);
   const [err, setErr] = useState("");
-  useEffect(() => { api({ action: "fiche", joueurId }).then(setD).catch((e) => setErr(e.message)); }, [joueurId]);
+  useEffect(() => { api({ action: "fiche", joueurId }).then((x) => (x && x.joueur ? setD(x) : setErr("Fiche indisponible pour le moment."))).catch((e) => setErr(e.message)); }, [joueurId]);
   useEffect(() => { const h = (e) => { if (e.key === "Escape") onClose(); }; window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h); }, [onClose]);
   const initials = d ? ((d.joueur.prenom[0] || "") + (d.joueur.nom[0] || "")).toUpperCase() : "";
   return createPortal(<div role="dialog" aria-modal="true" aria-label="Fiche joueur" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{ position: "fixed", inset: 0, background: "rgba(16,17,20,.55)", zIndex: 210, display: "flex", justifyContent: "center", alignItems: "flex-start", overflowY: "auto", padding: "calc(12px + env(safe-area-inset-top)) 12px 40px" }}>
@@ -86,6 +87,18 @@ export function PlayerCard({ joueurId, onClose }) {
         {d.primes && <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
             <span style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".06em", color: MUT }}>PRIMES</span>
+            {d.primes.length > 0 && d.teams.filter((t) => t.primes).map((t) => <button key={t.teamId} className="btn btn-ghost" style={{ minHeight: 32, padding: "0 10px", fontSize: 12.5, marginLeft: "auto", order: 2 }} onClick={async () => {
+              const w = window.open("", "_blank"); // ouvert tout de suite, sinon le téléphone bloque la page
+              if (w) w.document.write("<p style='font-family:Arial;margin:24px'>Préparation du relevé…</p>");
+              try {
+                const r = await fetch("/api/primes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "annual", teamId: t.teamId, season: Number(d.saison.slice(0, 4)) }) });
+                const j = await r.json(); if (!r.ok) throw new Error(j.error || "Erreur");
+                const pl = j.players.filter((x) => x.joueur === joueurId);
+                if (!pl.length) { if (w) w.close(); alert("Aucune prime validée cette saison pour ce joueur."); return; }
+                if (w) { w.document.open(); }
+                printReleve({ team: j.team.nom, season: j.season, players: pl, months: j.months, win: w });
+              } catch (e) { if (w) w.close(); alert(e.message); }
+            }}><i className="ti ti-printer" aria-hidden="true" />Relevé annuel{d.teams.filter((x) => x.primes).length > 1 ? " · " + t.nom : ""}</button>)}
             {d.primes.length > 0 && <span style={{ fontSize: 13 }}>Saison : <b>{eur(d.primes.filter((l) => l.valide).reduce((t, l) => t + l.montant, 0))}</b> validés · dont {eur(d.primes.filter((l) => l.paiement === "Payé").reduce((t, l) => t + l.montant, 0))} payés</span>}
           </div>
           {!d.primes.length && <div style={{ fontSize: 13, color: MUT }}>Aucune prime validée pour l'instant (le mois en cours se voit dans Sportif › Primes).</div>}
