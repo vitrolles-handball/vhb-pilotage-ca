@@ -42,6 +42,7 @@ const RULES = {
   // Annonces et support passent par /api/annonces et /api/support.
   "Annonces": { read: NOBODY, write: NOBODY, strict: true },
   "Support": { read: NOBODY, write: NOBODY, strict: true },
+  "Messages": { read: NOBODY, write: NOBODY, strict: true },
 };
 // Champs de la fiche Utilisateurs réservés au droit « Gérer les utilisateurs ».
 const ADMIN_FIELDS = ["Rôle", "Actif", "Email", "Rôles", "Droits ajoutés"];

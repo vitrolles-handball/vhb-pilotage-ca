@@ -571,7 +571,7 @@ function Header({ me, space, setSpace, view, setView, outilView, setOutilView, a
           {spaces.map(([k, l, ic]) => <button key={k} onClick={() => setSpace(k)} aria-pressed={space === k} style={{ border: "none", cursor: "pointer", fontFamily: "inherit", fontWeight: 700, fontSize: 12, borderRadius: 30, padding: "6px 11px", display: "flex", alignItems: "center", gap: 6, background: space === k ? "#fff" : "transparent", color: space === k ? "#16171B" : "rgba(255,255,255,.85)" }}><i className={"ti " + ic} style={{ fontSize: 15 }} /><span className="hide-xs">{l}</span></button>)}
         </div>}
         <button onClick={onHelp} title="Aide / Guide" style={{ background: YELLOW, color: BLACK, border: "none", borderRadius: 30, padding: "7px 14px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontFamily: "inherit", fontWeight: 700, fontSize: 12.5, flex: "0 0 auto", boxShadow: "0 2px 8px rgba(0,0,0,.18)" }}><i className="ti ti-help-circle" style={{ fontSize: 17 }} aria-hidden="true" />Aide</button>
-        {onAnnonces && <button onClick={onAnnonces} title="Annonces" aria-label={"Annonces" + (annUnread ? " (" + annUnread + " non lues)" : "")} style={{ position: "relative", background: "rgba(255,255,255,.08)", border: "none", color: "#E9EAEC", width: 36, height: 36, borderRadius: 11, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}><i className="ti ti-speakerphone" style={{ fontSize: 18 }} aria-hidden="true" />{annUnread > 0 && <span style={{ position: "absolute", top: -5, right: -5, background: YELLOW, color: BLACK, fontSize: 10, fontWeight: 800, borderRadius: 10, minWidth: 17, height: 17, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>{annUnread}</span>}</button>}
+        {onAnnonces && <button onClick={onAnnonces} title="Annonces et discussions" aria-label={"Annonces et discussions" + (annUnread ? " (" + annUnread + " non lus)" : "")} style={{ position: "relative", background: "rgba(255,255,255,.08)", border: "none", color: "#E9EAEC", width: 36, height: 36, borderRadius: 11, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}><i className="ti ti-speakerphone" style={{ fontSize: 18 }} aria-hidden="true" />{annUnread > 0 && <span style={{ position: "absolute", top: -5, right: -5, background: YELLOW, color: BLACK, fontSize: 10, fontWeight: 800, borderRadius: 10, minWidth: 17, height: 17, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>{annUnread}</span>}</button>}
         <button onClick={onBell} title="Notifications" style={{ position: "relative", background: "rgba(255,255,255,.08)", border: "none", color: "#E9EAEC", width: 36, height: 36, borderRadius: 11, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}><i className="ti ti-bell" style={{ fontSize: 18 }} />{unread > 0 && <span style={{ position: "absolute", top: -5, right: -5, background: RED, color: "#fff", fontSize: 10, fontWeight: 700, borderRadius: 10, minWidth: 17, height: 17, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>{unread}</span>}</button>
         <div style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", flex: "0 0 auto" }} onClick={onProfile} title="Mon espace">
           <Avatar u={me} size={32} />
@@ -3435,11 +3435,12 @@ export default function App() {
     if (!me) return;
     try {
       const q = new URLSearchParams(window.location.search);
-      const an = q.get("annonce"), ai = q.get("aide"), su = q.get("support");
-      if (an) setModal({ type: "annonces", focus: an });
+      const an = q.get("annonce"), ai = q.get("aide"), su = q.get("support"), fl = q.get("fil");
+      if (fl && /^(annonce|equipe):[A-Za-z0-9]{2,24}$/.test(fl)) setModal({ type: "annonces", fil: fl });
+      else if (an) setModal({ type: "annonces", focus: an });
       else if (ai) setModal({ type: "aide", tab: ai === "demandes" ? "demandes" : "guide" });
       else if (su && hasAdminAccess(rights)) { setSupportFocus(su); setAdminView("support"); setSpace("admin"); }
-      if (an || ai || su) window.history.replaceState(null, "", window.location.pathname);
+      if (an || ai || su || fl) window.history.replaceState(null, "", window.location.pathname);
     } catch (e) {}
   }, [me && me.id, rights.join(",")]);
   useEffect(() => {
@@ -3517,7 +3518,7 @@ export default function App() {
       {modal && modal.type === "sujetDetail" && <SujetDetail sujetId={modal.id} me={me} data={data} isAdmin={isAdmin} reload={reload} onClose={() => setModal(null)} />}
       {modal && modal.type === "help" && <HelpView onClose={() => setModal(null)} />}
       {modal && modal.type === "aide" && <HelpCenter rights={rights} sessionOk={authMode === "session"} initialTab={modal.tab} page={({ ca: "Pilotage CA", sport: "Sportif", outils: "Outils", admin: "Admin", none: "Accueil" }[space] || space) + " › " + (space === "sport" ? sportView : space === "admin" ? adminView : space === "outils" ? outilView : view)} onClose={() => setModal(null)} onOpenCaGuide={() => setModal({ type: "help" })} />}
-      {modal && modal.type === "annonces" && <AnnoncesPanel rights={rights} data={ann} reload={reloadAnn} focusId={modal.focus} onClose={() => { setModal(null); reloadAnn(); }} />}
+      {modal && modal.type === "annonces" && <AnnoncesPanel rights={rights} data={ann} reload={reloadAnn} focusId={modal.focus} focusFil={modal.fil} onClose={() => { setModal(null); reloadAnn(); }} />}
       <BottomNav space={space} setSpace={(k) => { try { localStorage.setItem("vhb_space", k); } catch (e) {} setSpace(k); }} outilView={outilView} setOutilView={setOutilView} adminView={adminView} setAdminView={setAdminView} sportView={sportView} setSportView={setSportView} sportClub={access.scope === "all"} rights={rights} view={view} setView={(v) => { setTaskOpen(null); setLiveOpen(null); setSignOpen(null); setRsvpOpen(null); setView(v); }} />
     </div>
   );

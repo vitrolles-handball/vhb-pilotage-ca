@@ -5,8 +5,10 @@
 //          (« tout le club » : droit « Écrire à tout le club »)
 //   list                                      → reçues (avec lu / bien reçu) et envoyées (compteurs de lecture)
 //   read   { id }  /  ack { id }              → marquer lu / « Bien reçu »
+//   fils / fil / poster / effacer            → discussions (voir _discussions.js)
 import { at, getSession, can, canAny, seesTeam, readBody, logAction, appUrl } from "./_lib.js";
 import { notifyUsers, rightsOf, hasRight, esc } from "./_notify.js";
+import { discussions } from "./_discussions.js";
 
 const T = (n) => encodeURIComponent(n);
 const fv = (r, k) => ((r && r.fields) || {})[k];
@@ -59,6 +61,7 @@ export default async function handler(req, res) {
   if (!sess) { res.status(401).json({ error: "Session expirée : reconnecte-toi.", code: "auth" }); return; }
   const b = readBody(req);
   try {
+    if (["fils", "fil", "poster", "effacer"].includes(b.action)) { await discussions(sess, b, res); return; }
     if (b.action === "targets") {
       if (!canAny(sess, ["msg", "msgall"])) { res.status(403).json({ error: "Tu n'as pas le droit d'envoyer des annonces." }); return; }
       const { groups, people } = await buildTargets(sess);

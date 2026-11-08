@@ -1,4 +1,4 @@
-// Étape 6 — Annonces, aide & support, réglages de notifications.
+// Étape 6 — Annonces, aide & support, réglages de notifications. Étape 7 — discussions (fils d'équipe, réponses aux annonces).
 import React, { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { db, f, RED, YELLOW, BLACK, TEXT, MUT, BORDER, OK } from "./App.jsx";
@@ -33,24 +33,38 @@ const Tabs = ({ tabs, cur, onTab }) => <div role="tablist" style={{ display: "fl
 // Annonces
 // =====================================================================================
 export function useAnnonces(enabled) {
-  const [d, setD] = useState({ received: [], sent: [] });
-  const load = useCallback(async () => { if (!enabled) return; try { const j = await post("/api/annonces", { action: "list" }); setD({ received: Array.isArray(j.received) ? j.received : [], sent: Array.isArray(j.sent) ? j.sent : [] }); } catch (e) {} }, [enabled]);
+  const [d, setD] = useState({ received: [], sent: [], fils: [] });
+  const load = useCallback(async () => {
+    if (!enabled) return;
+    const [j, k] = await Promise.all([post("/api/annonces", { action: "list" }).catch(() => null), post("/api/annonces", { action: "fils" }).catch(() => null)]);
+    setD((x) => ({
+      received: j ? (Array.isArray(j.received) ? j.received : []) : x.received,
+      sent: j ? (Array.isArray(j.sent) ? j.sent : []) : x.sent,
+      fils: k ? (Array.isArray(k.fils) ? k.fils : []) : x.fils,
+    }));
+  }, [enabled]);
   useEffect(() => { load(); if (!enabled) return; const t = setInterval(load, 3 * 60 * 1000); const v = () => { if (document.visibilityState === "visible") load(); }; document.addEventListener("visibilitychange", v); return () => { clearInterval(t); document.removeEventListener("visibilitychange", v); }; }, [load, enabled]);
-  const unread = d.received.filter((a) => !a.lu || (a.accuse && !a.recu)).length;
+  const unread = d.received.filter((a) => !a.lu || (a.accuse && !a.recu)).length + (d.fils || []).reduce((n, x) => n + (Number(x.unread) || 0), 0);
   return [d, load, unread];
 }
 
-export function AnnoncesPanel({ rights, data, reload, focusId, onClose }) {
+export function AnnoncesPanel({ rights, data, reload, focusId, focusFil, onClose }) {
   const sender = canSend(rights);
-  const [tab, setTab] = useState(focusId ? "recues" : "recues");
+  const [tab, setTab] = useState(focusFil ? "discussions" : "recues");
   const [open, setOpen] = useState(focusId || null);
+  const [fil, setFil] = useState(focusFil || null);
+  const fils = data.fils || [];
+  const filOf = (id) => fils.find((x) => x.fil === "annonce:" + id);
+  const DiscBtn = ({ a }) => { const x = filOf(a.id); return <button className="btn btn-ghost" style={{ alignSelf: "flex-start", minHeight: 40 }} onClick={() => setFil("annonce:" + a.id)}><i className="ti ti-messages" aria-hidden="true" />{x && x.n ? "Discussion · " + x.n + " message(s)" + (x.unread ? " · " + x.unread + " nouveau(x)" : "") : "Répondre"}</button>; };
   const [compose, setCompose] = useState(false);
   const mark = async (a, ack) => { try { await post("/api/annonces", { action: ack ? "ack" : "read", id: a.id }); await reload(); } catch (e) { alert(e.message); } };
   useEffect(() => { const a = data.received.find((x) => x.id === open); if (a && !a.lu) mark(a, false); }, [open]);
   const nUnread = data.received.filter((a) => !a.lu).length;
-  return <Sheet title="Annonces" onClose={onClose} wide>
+  const nDisc = fils.reduce((n, x) => n + (Number(x.unread) || 0), 0);
+  if (fil) return <Sheet title="Discussion" onClose={onClose} wide label="Discussion"><ThreadView fil={fil} onBack={() => { setFil(null); setTab("discussions"); reload(); }} /></Sheet>;
+  return <Sheet title="Annonces & discussions" onClose={onClose} wide>
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-      <Tabs tabs={[["recues", "Reçues", nUnread], sender && ["envoyees", "Envoyées"]].filter(Boolean)} cur={tab} onTab={setTab} />
+      <Tabs tabs={[["recues", "Reçues", nUnread], sender && ["envoyees", "Envoyées"], ["discussions", "Discussions", nDisc]].filter(Boolean)} cur={tab} onTab={setTab} />
       {sender && <button className="btn btn-red" style={{ marginLeft: "auto" }} onClick={() => setCompose(true)}><i className="ti ti-speakerphone" aria-hidden="true" />Nouvelle annonce</button>}
     </div>
     {tab === "recues" && <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -68,6 +82,7 @@ export function AnnoncesPanel({ rights, data, reload, focusId, onClose }) {
         {isOpen && <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 10 }}>
           <div style={{ whiteSpace: "pre-wrap", fontSize: 14.5, lineHeight: 1.55, color: TEXT }}>{a.texte}</div>
           {a.accuse && !a.recu && <button className="btn btn-red" style={{ alignSelf: "flex-start", minHeight: 46 }} onClick={() => mark(a, true)}><i className="ti ti-check" aria-hidden="true" />Bien reçu</button>}
+          <DiscBtn a={a} />
         </div>}
       </div>; })}
     </div>}
@@ -85,10 +100,86 @@ export function AnnoncesPanel({ rights, data, reload, focusId, onClose }) {
         <div style={{ whiteSpace: "pre-wrap", fontSize: 14, lineHeight: 1.5, marginTop: 8 }}>{a.texte}</div>
         {a.nonLus.length > 0 && <div style={{ fontSize: 12.5, color: MUT, marginTop: 8 }}><b>Pas encore lu :</b> {a.nonLus.join(", ")}</div>}
         {a.nonRecus.length > 0 && <div style={{ fontSize: 12.5, color: "#6B4A00", marginTop: 4 }}><b>Pas encore confirmé :</b> {a.nonRecus.join(", ")}</div>}
+        <div style={{ marginTop: 8 }}><DiscBtn a={a} /></div>
       </details>)}
+    </div>}
+    {tab === "discussions" && <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ fontSize: 12.5, color: MUT }}>Le fil du staff de chacune de tes équipes, et les réponses aux annonces.</div>
+      {!fils.length && <div style={{ color: MUT, fontSize: 13.5 }}>Aucune discussion pour l'instant. Tu n'es rattaché à aucune équipe et personne n'a encore répondu à une annonce.</div>}
+      {fils.map((x) => <button key={x.fil} onClick={() => setFil(x.fil)} style={{ display: "flex", gap: 12, alignItems: "center", background: x.unread ? "#FFF9E6" : "#F7F8FA", border: "none", borderLeft: "4px solid " + (x.unread ? YELLOW : BORDER), borderRadius: 14, padding: "12px 14px", cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
+        <span aria-hidden="true" style={{ width: 40, height: 40, borderRadius: 12, background: x.type === "equipe" ? BLACK : "#E9EBEF", color: x.type === "equipe" ? YELLOW : TEXT, display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto", fontSize: 18 }}><i className={"ti " + (x.type === "equipe" ? "ti-users-group" : "ti-speakerphone")} /></span>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: "flex", gap: 8, alignItems: "center" }}><b style={{ fontSize: 14.5, color: TEXT, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.titre}</b>{x.last && <span style={{ fontSize: 11.5, color: MUT, whiteSpace: "nowrap" }}>{fmtShort(x.last.date)}</span>}</span>
+          <span style={{ display: "block", fontSize: 13, color: x.unread ? TEXT : MUT, fontWeight: x.unread ? 700 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.last ? (x.last.moi ? "Toi" : x.last.auteur) + " : " + x.last.texte : "Aucun message · écris le premier"}</span>
+        </span>
+        {x.unread > 0 && <span aria-label={x.unread + " non lu(s)"} style={{ background: RED, color: "#fff", borderRadius: 10, minWidth: 20, height: 20, fontSize: 11.5, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 6px" }}>{x.unread}</span>}
+      </button>)}
     </div>}
     {compose && <ComposeAnnonce onClose={() => setCompose(false)} onSent={async () => { setCompose(false); setTab("envoyees"); await reload(); }} />}
   </Sheet>;
+}
+
+const fmtShort = (iso) => {
+  if (!iso) return ""; const d = new Date(iso), now = new Date();
+  if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+};
+// Fil de discussion : rechargé toutes les 20 secondes tant qu'il est ouvert et visible.
+export function ThreadView({ fil, onBack }) {
+  const [d, setD] = useState(null);
+  const [err, setErr] = useState("");
+  const [txt, setTxt] = useState("");
+  const [busy, setBusy] = useState(false);
+  const endRef = React.useRef(null);
+  const lastN = React.useRef(-1);
+  const load = useCallback(async () => { try { const j = await post("/api/annonces", { action: "fil", fil }); setD(j); setErr(""); } catch (e) { setErr(e.message); } }, [fil]);
+  useEffect(() => {
+    load();
+    const t = setInterval(() => { if (document.visibilityState === "visible") load(); }, 20000);
+    return () => clearInterval(t);
+  }, [load]);
+  useEffect(() => { if (d && d.messages.length !== lastN.current) { lastN.current = d.messages.length; setTimeout(() => endRef.current && endRef.current.scrollIntoView({ block: "end" }), 30); } }, [d]);
+  const send = async () => {
+    const t = txt.trim(); if (!t || busy) return;
+    setBusy(true);
+    try { await post("/api/annonces", { action: "poster", fil, texte: t }); setTxt(""); await load(); } catch (e) { alert(e.message); }
+    setBusy(false);
+  };
+  const del = async (m) => { if (!confirm("Retirer ce message ?")) return; try { await post("/api/annonces", { action: "effacer", id: m.id }); await load(); } catch (e) { alert(e.message); } };
+  let prevDay = "";
+  return <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+    <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+      <button className="btn btn-ghost" onClick={onBack} aria-label="Retour aux discussions" style={{ minHeight: 38, padding: "0 12px", whiteSpace: "nowrap", flex: "0 0 auto" }}><span aria-hidden="true">‹</span> Retour</button>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontWeight: 800, fontSize: 16, color: TEXT }}>{d ? d.titre : "…"}</div>
+        {d && <div style={{ fontSize: 12, color: MUT }}>{d.sous} · {d.participants.join(", ")}</div>}
+      </div>
+    </div>
+    {err && <div style={{ color: "#9E1B1B", fontSize: 13.5 }}>{err}</div>}
+    {!d && !err && <div style={{ color: MUT }}>Chargement…</div>}
+    {d && <div role="log" aria-label="Messages" style={{ display: "flex", flexDirection: "column", gap: 6, background: "#F4F5F8", borderRadius: 16, padding: 10, minHeight: 160 }}>
+      {!d.messages.length && <div style={{ color: MUT, fontSize: 13.5, textAlign: "center", padding: 20 }}>Aucun message. Écris le premier !</div>}
+      {d.messages.map((m) => {
+        const day = new Date(m.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+        const sep = day !== prevDay; prevDay = day;
+        return <React.Fragment key={m.id}>
+          {sep && <div style={{ alignSelf: "center", fontSize: 11.5, fontWeight: 800, color: MUT, padding: "4px 10px", background: "#E9EBEF", borderRadius: 10, margin: "4px 0" }}>{day}</div>}
+          <div style={{ alignSelf: m.moi ? "flex-end" : "flex-start", maxWidth: "85%", display: "flex", flexDirection: "column", alignItems: m.moi ? "flex-end" : "flex-start" }}>
+            {!m.moi && <span style={{ fontSize: 11.5, fontWeight: 800, color: "#3A3F47", margin: "0 8px 2px" }}>{m.auteur}</span>}
+            <div style={{ background: m.moi ? BLACK : "#fff", color: m.moi ? "#fff" : TEXT, borderRadius: m.moi ? "16px 16px 4px 16px" : "16px 16px 16px 4px", padding: "8px 12px", fontSize: 14.5, lineHeight: 1.45, whiteSpace: "pre-wrap", wordBreak: "break-word", boxShadow: "0 1px 2px rgba(0,0,0,.06)" }}>{m.texte}</div>
+            <span style={{ fontSize: 11, color: MUT, margin: "2px 8px 0" }}>{new Date(m.date).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}{m.moi && <> · <button onClick={() => del(m)} style={{ background: "none", border: "none", padding: 0, color: MUT, textDecoration: "underline", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>retirer</button></>}</span>
+          </div>
+        </React.Fragment>;
+      })}
+      <div ref={endRef} />
+    </div>}
+    {d && <div style={{ display: "flex", gap: 8, alignItems: "flex-end", position: "sticky", bottom: 0, background: "#fff", paddingTop: 6 }}>
+      <label htmlFor="msg-txt" style={{ position: "absolute", left: -9999 }}>Ton message</label>
+      <textarea id="msg-txt" className="ta" rows={2} maxLength={2000} value={txt} placeholder="Écrire un message…" onChange={(e) => setTxt(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !("ontouchstart" in window)) { e.preventDefault(); send(); } }} style={{ flex: 1, minHeight: 46, resize: "vertical" }} />
+      <button className="btn btn-red" disabled={busy || !txt.trim()} onClick={send} aria-label="Envoyer" style={{ minHeight: 46 }}><i className="ti ti-send" aria-hidden="true" />Envoyer</button>
+    </div>}
+    <div style={{ fontSize: 11.5, color: MUT }}>Les autres participants reçoivent une notification. Les nouveaux messages s'affichent toutes les 20 secondes environ.</div>
+  </div>;
 }
 
 function ComposeAnnonce({ onClose, onSent }) {
@@ -164,6 +255,7 @@ const GUIDES = {
     ["Installer l'appli", "iPhone : Safari › Partager › « Sur l'écran d'accueil ». Android : Chrome › menu ⋮ › « Installer l'application »."],
     ["Mot de passe oublié", "Sur l'écran de connexion : « Première connexion ou mot de passe oublié » ; le lien reçu par mail est valable 30 minutes."],
     ["Annonces", "Le mégaphone en haut : les annonces reçues. Si on te demande « Bien reçu », touche le bouton pour confirmer."],
+    ["Discussions", "Dans le mégaphone, onglet « Discussions » : le fil du staff de chacune de tes équipes, et les réponses aux annonces (bouton « Répondre » sous une annonce). Les autres participants reçoivent une notification."],
     ["Notifications et silence", "Mon espace (ton avatar) › Notifications : période de silence (par défaut 21h–8h) et copies par mail."],
     ["Un problème ?", "Aide › « Signaler un problème » : décris-le, ajoute une capture si tu peux. Tu suis la réponse dans « Mes demandes »."],
   ]],
