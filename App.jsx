@@ -557,7 +557,7 @@ function ProfileForm({ me, poles, onSaved }) {
 function Header({ me, space, setSpace, view, setView, outilView, setOutilView, adminView, setAdminView, sportView, setSportView, rights, isAdmin, onLogout, unread, onBell, onProfile, onHelp, onAnnonces, annUnread, sportClub, counts }) {
   const caTabs = [["dash", "Accueil"], ["taches", "Tâches"], ["sujets", "Sujets"], ["ca", "Réunions"], ["cal", "Agenda"], ["annuaire", "Annuaire"]];
   const outilTabs = [["couts", "Coût de la pratique"]];
-  const sportTabs = [["accueil", sportClub ? "Club" : "Aujourd'hui"], ["seances", "Séances"], ["joueurs", "Joueurs"]].concat(canPrimes(rights) ? [["primes", "Primes"]] : []);
+  const sportTabs = [["accueil", sportClub ? "Équipes" : "Aujourd'hui"], ["seances", "Séances"], ["joueurs", "Joueurs"]].concat(canPrimes(rights) ? [["primes", "Primes"]] : []);
   const tabs = space === "outils" ? outilTabs : space === "admin" ? adminTabsFor(rights) : space === "sport" ? sportTabs : caTabs;
   const cur = space === "outils" ? outilView : space === "admin" ? adminView : space === "sport" ? sportView : view;
   const onTab = space === "outils" ? setOutilView : space === "admin" ? setAdminView : space === "sport" ? setSportView : setView;
@@ -3355,7 +3355,7 @@ function BottomNav({ space, view, setView, outilView, setOutilView, setSpace, ad
   if (space === "sport") {
     return (
       <nav className="bottomnav">
-        <button className={sportView === "accueil" ? "on" : ""} onClick={() => setSportView("accueil")}><i className={"ti " + (sportClub ? "ti-building-community" : "ti-home")} aria-hidden="true" /><span>{sportClub ? "Club" : "Aujourd'hui"}</span></button>
+        <button className={sportView === "accueil" ? "on" : ""} onClick={() => setSportView("accueil")}><i className={"ti " + (sportClub ? "ti-building-community" : "ti-home")} aria-hidden="true" /><span>{sportClub ? "Équipes" : "Aujourd'hui"}</span></button>
         <button className={sportView === "seances" ? "on" : ""} onClick={() => setSportView("seances")}><i className="ti ti-calendar" aria-hidden="true" /><span>Séances</span></button>
         <button className={sportView === "joueurs" ? "on" : ""} onClick={() => setSportView("joueurs")}><i className="ti ti-users" aria-hidden="true" /><span>Joueurs</span></button>
         {canPrimes(rights) && <button className={sportView === "primes" ? "on" : ""} onClick={() => setSportView("primes")}><i className="ti ti-coin-euro" aria-hidden="true" /><span>Primes</span></button>}

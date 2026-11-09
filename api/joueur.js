@@ -138,10 +138,11 @@ export default async function handler(req, res) {
       }
       mois = [...byKey.values()].map((o) => ({ periode: o.periode, equipe: o.equipe, montant: Math.round(o.montant * 100) / 100,
         statut: o.pay.every((x) => x === "Payé") ? "Payé" : o.pay.every((x) => x === "Payé" || x === "Mis en paiement") ? "Mis en paiement" : "Validé" }));
-      const cur = today.slice(0, 7), prevM = (() => { const d = new Date(cur + "-01T12:00:00Z"); d.setUTCMonth(d.getUTCMonth() - 1); return d.toISOString().slice(0, 7); })();
+      const cur = today.slice(0, 7);
       for (const t of teams.filter((x) => fv(x, "Primes actives"))) {
-        for (const m of [prevM, cur]) {
-          if (m < from.slice(0, 7)) continue;
+        // Tous les mois de la saison non encore validés (pas seulement le mois en cours et le précédent).
+        const months = []; for (let m = from.slice(0, 7); m <= cur; m = nextMonth(m)) months.push(m);
+        for (const m of months) {
           const val = (await listAll(T("Primes – Mois"), "{Mois}='" + m + "'")).some((r) => (fv(r, "Équipe") || []).includes(t.id) && fv(r, "Statut") === "Validé");
           if (val) continue;
           const sm = (await listAll(T("Séances"), "AND(IS_AFTER({Date}, '" + (() => { const d = new Date(m + "-01T12:00:00Z"); d.setUTCDate(0); return d.toISOString().slice(0, 10); })() + "'), IS_BEFORE({Date}, '" + nextMonth(m) + "-01'))")).filter((x) => (fv(x, "Équipe") || []).includes(t.id));
@@ -156,7 +157,8 @@ export default async function handler(req, res) {
       mois.sort((a, c) => String(c.periode).localeCompare(String(a.periode)));
     }
     res.status(200).json({
-      joueur: { id: p.id, nom: fv(p, "Nom") || "", prenom: fv(p, "Prénom") || "", annee: fv(p, "Année de naissance") || null, licence: fv(p, "Licence") || "" },
+      joueur: { id: p.id, nom: fv(p, "Nom") || "", prenom: fv(p, "Prénom") || "", annee: fv(p, "Année de naissance") || null, licence: fv(p, "Licence") || "", poste: fv(p, "Poste") || "" },
+      canEditPoste: canAny(sess, ["eff"]) && (sess.scope === "all" || perTeam.some((x) => seesTeam(sess, x.teamId))),
       saison: from.slice(0, 4) + "-" + (Number(from.slice(0, 4)) + 1), teams: perTeam, recent, primes, mois, today,
     });
   } catch (e) {

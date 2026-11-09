@@ -191,6 +191,13 @@ export function PrimesView({ rights, teams, users, initialTeam }) {
       return [...byJ.values()].sort((a, b) => a.tri.localeCompare(b.tri, "fr"));
     })()
     : data.lines || [];
+  // Deux blocs : l'effectif d'abord, les renforts en bas (chacun avec son sous-total).
+  const ORANGE_R = "#E8800C";
+  const groups = [
+    { key: "eff", label: "Effectif", sub: "", color: OK, rows: rows.filter((r) => r.statut !== "Renfort") },
+    { key: "ren", label: "Renforts", sub: "pas de prime de présence", color: ORANGE_R, rows: rows.filter((r) => r.statut === "Renfort") },
+  ].filter((g) => g.rows.length);
+  const subTotal = (g) => Math.round(g.rows.reduce((t, r) => t + (Number(r.total) || 0), 0) * 100) / 100;
   const totals = validated ? { total: rows.reduce((t, r) => t + r.total, 0) } : (data && data.totals) || {};
   const counters = validated ? (data.detail && data.detail.counters) || {} : (data && data.counters) || {};
 
@@ -203,7 +210,9 @@ export function PrimesView({ rights, teams, users, initialTeam }) {
   };
   const exportCsv = () => {
     const head = ["Joueur", "Statut", "Entraînements", "Matchs", "Présences", "Séances", "Taux (%)", "Prime présence", "Victoires", "Prime victoire", "Exceptionnelles / régularisations", "Total"];
-    downloadCsv("primes-" + norm(f(team, "Nom")).replace(/[^a-z0-9]+/g, "-") + "-" + month + ".csv", [head].concat(rows.map((r) => [r.nom, r.statut, r.entrainements, r.matchs, r.presences, r.seances, Math.round(r.taux * 1000) / 10, r.primePresence, r.victoires, r.primeVictoire, Math.round(r.extra * 100) / 100, Math.round(r.total * 100) / 100]), [["Total", "", "", "", "", "", "", "", "", "", "", Math.round((totals.total || 0) * 100) / 100]]));
+    const line = (r) => [r.nom, r.statut, r.entrainements, r.matchs, r.presences, r.seances, Math.round(r.taux * 1000) / 10, r.primePresence, r.victoires, r.primeVictoire, Math.round(r.extra * 100) / 100, Math.round(r.total * 100) / 100];
+    const body = [].concat(...groups.map((g) => g.rows.map(line).concat([["Sous-total " + g.label.toLowerCase(), "", "", "", "", "", "", "", "", "", "", subTotal(g)]])));
+    downloadCsv("primes-" + norm(f(team, "Nom")).replace(/[^a-z0-9]+/g, "-") + "-" + month + ".csv", [head].concat(body, [["Total", "", "", "", "", "", "", "", "", "", "", Math.round((totals.total || 0) * 100) / 100]]));
   };
 
   return (
@@ -243,15 +252,17 @@ export function PrimesView({ rights, teams, users, initialTeam }) {
       </div>}
 
       {data && narrow && <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {rows.map((r) => <button key={r.joueur} className="card" onClick={() => setDetail(r)} style={{ display: "flex", alignItems: "center", gap: 10, textAlign: "left", border: "none", cursor: "pointer", fontFamily: "inherit", padding: "12px 14px" }}>
+        {groups.map((g) => <React.Fragment key={g.key}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 8, padding: "8px 2px 0" }}><span style={{ width: 4, height: 14, borderRadius: 2, background: g.color, alignSelf: "center" }} /><b style={{ fontSize: 14 }}>{g.label}</b><span style={{ fontSize: 12, color: MUT, flex: 1 }}>{g.rows.length} joueur{g.rows.length > 1 ? "s" : ""}{g.sub ? " · " + g.sub : ""}</span><b style={{ fontSize: 14 }}>{eur(subTotal(g))}</b></div>
+        {g.rows.map((r) => <button key={r.joueur} className="card" onClick={() => setDetail(r)} style={{ display: "flex", alignItems: "center", gap: 10, textAlign: "left", border: "none", borderLeft: "4px solid " + g.color, borderRadius: 14, cursor: "pointer", fontFamily: "inherit", padding: "12px 14px" }}>
           <span style={{ flex: 1, minWidth: 0 }}>
             <span style={{ display: "block", fontWeight: 800, fontSize: 15 }}>{r.nom}</span>
             <span style={{ display: "block", fontSize: 12.5, color: MUT }}>{r.presences}/{r.seances} séances · {r.seances ? pct(r.taux) : "—"} · {r.entrainements} entr. · {r.matchs} match(s){r.victoires ? " · " + r.victoires + " V" : ""}</span>
-            {r.statut === "Renfort" && <span style={{ display: "block", fontSize: 11.5, fontWeight: 800, color: "#8A6A00" }}>Renfort</span>}
             {r.extra ? <span style={{ display: "block", fontSize: 12, color: r.extra < 0 ? "#9E1B1B" : MUT }}>Autres : {eur(r.extra)}</span> : null}
           </span>
           <span style={{ textAlign: "right" }}><span style={{ display: "block", fontWeight: 800, fontSize: 16 }}>{eur(r.total)}</span>{validated && [...new Set(r.pay)].map((p) => <Chip key={p} bg={(PAY_TONE[p] || [])[0]} fg={(PAY_TONE[p] || [])[1]}>{p}</Chip>)}</span>
         </button>)}
+        </React.Fragment>)}
         {!rows.length && <div className="card" style={{ color: MUT }}>Aucun joueur évalué ce mois-ci.</div>}
       </div>}
       {data && !narrow && <div className="card" style={{ padding: 0, overflowX: "auto" }}>
@@ -260,8 +271,10 @@ export function PrimesView({ rights, teams, users, initialTeam }) {
             {["JOUEUR", "ENTRAÎN.", "MATCHS", "TOTAL", "TAUX", "PRÉSENCE", "VICTOIRES", "AUTRES", "TOTAL €"].concat(validated ? ["PAIEMENT"] : []).map((h, i) => <th key={h} style={{ padding: "12px 10px", textAlign: i === 0 ? "left" : "right", borderBottom: "1px solid " + BORDER, fontWeight: 800 }}>{h}</th>)}
           </tr></thead>
           <tbody>
-            {rows.map((r) => <tr key={r.joueur} onClick={() => setDetail(r)} style={{ cursor: "pointer", borderBottom: "1px solid " + BORDER }}>
-              <td style={{ padding: "10px", textAlign: "left" }}><div style={{ fontWeight: 800 }}>{r.nom}</div>{r.statut === "Renfort" && <div style={{ fontSize: 11.5, fontWeight: 800, color: "#8A6A00" }}>Renfort · pas de prime de présence</div>}{r.excuses > 0 && <div style={{ fontSize: 11.5, color: MUT }}>{r.excuses} absence(s) excusée(s)</div>}</td>
+            {groups.map((g, gi) => <React.Fragment key={g.key}>
+            <tr><td colSpan={validated ? 10 : 9} style={{ padding: "10px", paddingTop: gi ? 22 : 10, background: "#F4F5F8", borderLeft: "4px solid " + g.color, borderBottom: "1px solid " + BORDER, fontWeight: 800, fontSize: 14 }}>{g.label} <span style={{ fontWeight: 600, color: MUT, fontSize: 12.5 }}>· {g.rows.length} joueur{g.rows.length > 1 ? "s" : ""}{g.sub ? " · " + g.sub : ""}</span></td></tr>
+            {g.rows.map((r) => <tr key={r.joueur} onClick={() => setDetail(r)} style={{ cursor: "pointer", borderBottom: "1px solid " + BORDER }}>
+              <td style={{ padding: "10px", textAlign: "left", borderLeft: "4px solid " + g.color }}><div style={{ fontWeight: 800 }}>{r.nom}</div>{r.excuses > 0 && <div style={{ fontSize: 11.5, color: MUT }}>{r.excuses} absence(s) excusée(s)</div>}</td>
               <td style={{ padding: 10, textAlign: "right" }}>{r.entrainements}</td>
               <td style={{ padding: 10, textAlign: "right" }}>{r.matchs}</td>
               <td style={{ padding: 10, textAlign: "right" }}>{r.presences}/{r.seances}</td>
@@ -272,6 +285,8 @@ export function PrimesView({ rights, teams, users, initialTeam }) {
               <td style={{ padding: 10, textAlign: "right", fontWeight: 800 }}>{eur(r.total)}</td>
               {validated && <td style={{ padding: 10, textAlign: "right" }}>{[...new Set(r.pay)].map((p) => <Chip key={p} bg={(PAY_TONE[p] || [])[0]} fg={(PAY_TONE[p] || [])[1]}>{p}</Chip>)}</td>}
             </tr>)}
+            <tr style={{ borderBottom: "1px solid " + BORDER }}><td colSpan={8} style={{ padding: "8px 10px", textAlign: "right", color: MUT, fontWeight: 700, fontSize: 13 }}>Sous-total {g.label.toLowerCase()}</td><td style={{ padding: "8px 10px", textAlign: "right", fontWeight: 800 }}>{eur(subTotal(g))}</td>{validated && <td />}</tr>
+            </React.Fragment>)}
             {!rows.length && <tr><td colSpan={10} style={{ padding: 16, color: MUT }}>Aucun joueur évalué ce mois-ci (pas de séance pointée, ou effectif vide).</td></tr>}
           </tbody>
           {rows.length > 0 && <tfoot><tr><td style={{ padding: 10, fontWeight: 800 }}>Total</td><td colSpan={4} /><td style={{ padding: 10, textAlign: "right", fontWeight: 800 }}>{validated ? "" : eur(totals.presence)}</td><td style={{ padding: 10, textAlign: "right", fontWeight: 800 }}>{validated ? "" : eur(totals.victoire)}</td><td style={{ padding: 10, textAlign: "right", fontWeight: 800 }}>{validated ? "" : eur(totals.extra)}</td><td style={{ padding: 10, textAlign: "right", fontWeight: 800, fontSize: 15 }}>{eur(totals.total)}</td>{validated && <td />}</tr></tfoot>}

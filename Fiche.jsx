@@ -2,7 +2,10 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { printReleve } from "./Primes.jsx";
-import { f, RED, YELLOW, BLACK, TEXT, MUT, BORDER, OK } from "./App.jsx";
+import { db, f, RED, YELLOW, BLACK, TEXT, MUT, BORDER, OK } from "./App.jsx";
+
+export const POSTES = ["Gardien", "Ailier gauche", "Arrière gauche", "Demi-centre", "Arrière droit", "Ailier droit", "Pivot"];
+export const GbChip = () => <span title="Gardien de but" style={{ fontSize: 11, fontWeight: 800, padding: "2px 7px", borderRadius: 8, background: BLACK, color: "#fff", marginLeft: 8, verticalAlign: "2px", letterSpacing: ".04em" }}>GB</span>;
 
 const MOIS = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];
 const MOIS_LONG = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
@@ -51,12 +54,21 @@ const capit = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 const MOIS_CAP = (m) => capit(MOIS_LONG[Number(String(m).slice(5, 7)) - 1]);
 const shortFr = (iso) => new Date(iso + "T12:00:00").toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
 
-export function PlayerCard({ joueurId, teamId, backLabel, onClose }) {
+export function PlayerCard({ joueurId, teamId, backLabel, onClose, onPoste }) {
   const [d, setD] = useState(null);
   const [err, setErr] = useState("");
   const [tid, setTid] = useState(teamId || null);
   const [detail, setDetail] = useState(false);
   const back = useBackClose(onClose);
+  const [poste, setPoste] = useState("");
+  const [posteBusy, setPosteBusy] = useState(false);
+  useEffect(() => { if (d) setPoste(d.joueur.poste || ""); }, [d]);
+  const savePoste = async (v) => {
+    const old = poste; setPoste(v); setPosteBusy(true);
+    try { await db({ action: "update", table: "Joueurs", recordId: joueurId, fields: { "Poste": v || null } }); if (onPoste) onPoste(joueurId, v); }
+    catch (e) { setPoste(old); alert(e.message); }
+    setPosteBusy(false);
+  };
   useEffect(() => { api({ action: "fiche", joueurId }).then((x) => (x && x.joueur ? setD(x) : setErr("Fiche indisponible pour le moment."))).catch((e) => setErr(e.message)); }, [joueurId]);
   useEffect(() => { const o = document.body.style.overflow; document.body.style.overflow = "hidden"; return () => { document.body.style.overflow = o; }; }, []);
   const teams = (d && d.teams) || [];
@@ -95,6 +107,11 @@ export function PlayerCard({ joueurId, teamId, backLabel, onClose }) {
               <span style={{ background: "#fff", color: renfort ? "#B5660A" : "#1F5C30", fontSize: 13, fontWeight: 800, padding: "4px 11px", borderRadius: 12 }}>{eff.statut}</span>
               <span style={{ fontSize: 14, fontWeight: 600 }}>{eff.entree ? "dans l'effectif depuis le " + shortFr(eff.entree) : "dans l'effectif " + d.saison}{eff.sortie ? " · jusqu'au " + shortFr(eff.sortie) : ""}</span>
             </div>}
+            {d && (d.canEditPoste ? <label style={{ display: "inline-flex", alignItems: "center", gap: 8, marginTop: 8, fontSize: 13.5, fontWeight: 700 }}>Poste
+                <select aria-label="Poste du joueur" value={poste} disabled={posteBusy} onChange={(e) => savePoste(e.target.value)} style={{ minHeight: 34, borderRadius: 12, border: "none", padding: "0 10px", fontFamily: "inherit", fontSize: 13.5, fontWeight: 800, color: BLACK, background: "#fff", cursor: "pointer" }}>
+                  <option value="">Non renseigné</option>{POSTES.map((x) => <option key={x} value={x}>{x === "Gardien" ? "Gardien (GB)" : x}</option>)}
+                </select></label>
+              : poste ? <div style={{ marginTop: 8 }}><span style={{ background: "rgba(255,255,255,.18)", fontSize: 13, fontWeight: 800, padding: "4px 11px", borderRadius: 12 }}>{poste === "Gardien" ? "Gardien (GB)" : poste}</span></div> : null)}
             {d && (d.joueur.annee || d.joueur.licence) && <div style={{ fontSize: 12.5, opacity: .85, marginTop: 6 }}>{[d.joueur.annee ? "Né en " + d.joueur.annee : null, d.joueur.licence ? "Licence " + d.joueur.licence : null].filter(Boolean).join(" · ")}</div>}
           </div>
         </div>
@@ -181,6 +198,7 @@ export function RosterView({ teams, efx, players, initialTeam, onManage }) {
   const [q, setQ] = useState("");
   const [sort, setSort] = useState("nom");
   const [open, setOpen] = useState(null);
+  const [posteOv, setPosteOv] = useState({});
   const load = useCallback(async () => {
     if (!teamId) return; setErr(""); setData(null);
     try { setData(await api({ action: "assiduite", teamId, month })); } catch (e) { setErr(e.message); }
@@ -190,7 +208,7 @@ export function RosterView({ teams, efx, players, initialTeam, onManage }) {
   // Effectif actuel de l'équipe (même les joueurs sans séance ce mois-ci).
   const today = new Date().toISOString().slice(0, 10);
   const roster = efx.filter((e) => (f(e, "Équipe") || []).includes(teamId) && (!f(e, "Sortie") || f(e, "Sortie") >= month + "-01"))
-    .map((e) => { const p = players.find((x) => x.id === (f(e, "Joueur") || [])[0]); return p && { id: p.id, nom: ((f(p, "Prénom") || "") + " " + (f(p, "Nom") || "")).trim(), tri: norm(f(p, "Nom")) + " " + norm(f(p, "Prénom")), statut: f(e, "Statut") || "Effectif", futur: f(e, "Entrée") && f(e, "Entrée") > today }; })
+    .map((e) => { const p = players.find((x) => x.id === (f(e, "Joueur") || [])[0]); return p && { id: p.id, nom: ((f(p, "Prénom") || "") + " " + (f(p, "Nom") || "")).trim(), tri: norm(f(p, "Nom")) + " " + norm(f(p, "Prénom")), statut: f(e, "Statut") || "Effectif", poste: posteOv[p.id] !== undefined ? posteOv[p.id] : (f(p, "Poste") || ""), futur: f(e, "Entrée") && f(e, "Entrée") > today }; })
     .filter(Boolean);
   const seen = new Set(); const rows = roster.filter((r) => !seen.has(r.id) && seen.add(r.id))
     .map((r) => ({ ...r, a: data && (data.lines || []).find((l) => l.joueur === r.id) }))
@@ -221,7 +239,7 @@ export function RosterView({ teams, efx, players, initialTeam, onManage }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       {rows.map((r) => <button key={r.id} className="card" onClick={() => setOpen(r.id)} style={{ display: "flex", alignItems: "center", gap: 12, textAlign: "left", border: "none", borderLeft: "4px solid " + (r.statut === "Renfort" ? "#E8800C" : OK), cursor: "pointer", fontFamily: "inherit", padding: "12px 14px" }}>
         <span style={{ flex: 1, minWidth: 0 }}>
-          <span style={{ display: "block", fontWeight: 800, fontSize: 15 }}>{r.nom}</span>
+          <span style={{ display: "block", fontWeight: 800, fontSize: 15 }}>{r.nom}{r.poste === "Gardien" && <GbChip />}</span>
           <span style={{ display: "block", fontSize: 12.5, color: MUT }}><b style={{ color: r.statut === "Renfort" ? "#B5660A" : "#1F5C30", fontWeight: 700 }}>{r.statut}</b>{r.futur ? " · arrive bientôt" : ""}{r.a ? " · " + r.a.presences + "/" + r.a.seances + " séances" + (r.a.excuses ? " · " + r.a.excuses + " excusée(s)" : "") : data ? " · pas de séance ce mois-ci" : ""}</span>
         </span>
         <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -232,6 +250,6 @@ export function RosterView({ teams, efx, players, initialTeam, onManage }) {
       {!rows.length && <div className="card" style={{ color: MUT }}>{q ? "Aucun joueur ne correspond." : "Aucun joueur dans cette équipe." + (onManage ? " Ajoute-les avec « Ajouter ou modifier des joueurs »." : "")}</div>}
     </div>
     <div style={{ fontSize: 12.5, color: MUT }}>Touche un joueur pour ouvrir sa fiche : assiduité de la saison, dernières séances{" "}et primes pour les personnes qui y ont accès.</div>
-    {open && <PlayerCard joueurId={open} teamId={teamId} backLabel={"Effectif " + (f(teams.find((t) => t.id === teamId), "Nom") || "")} onClose={() => setOpen(null)} />}
+    {open && <PlayerCard joueurId={open} teamId={teamId} backLabel={"Effectif " + (f(teams.find((t) => t.id === teamId), "Nom") || "")} onClose={() => setOpen(null)} onPoste={(id, v) => setPosteOv((o) => ({ ...o, [id]: v }))} />}
   </div>;
 }
