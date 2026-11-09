@@ -92,7 +92,7 @@ export default async function handler(req, res) {
       const done = S.filter((s) => (fv(s, "Équipe") || []).includes(tid) && fv(s, "Statut") === "Pointée" && counts(s));
       const byMonth = months.map((m) => {
         const ms = done.filter((s) => monthOf(fv(s, "Date")) === m);
-        let seances = 0, pres = 0, exc = 0, entr = 0, matchs = 0, teamPres = 0, teamTot = 0;
+        let seances = 0, pres = 0, exc = 0, entr = 0, matchs = 0, teamPres = 0, teamTot = 0, vict = 0;
         for (const s of ms) {
           const d = fv(s, "Date");
           // Moyenne de l'équipe : pointages de la séance ÷ joueurs dans l'effectif ce jour-là.
@@ -101,10 +101,10 @@ export default async function handler(req, res) {
           if (!efxT.some((e) => inRange(e, d))) continue;
           const st = stateOf.get(s.id);
           seances++;
-          if (st === "Présent") { pres++; fv(s, "Type") === "Match" ? matchs++ : entr++; }
+          if (st === "Présent") { pres++; fv(s, "Type") === "Match" ? matchs++ : entr++; if (fv(s, "Type") === "Match" && fv(s, "Résultat") === "Victoire") vict++; }
           else if (st === "Excusé") exc++;
         }
-        return { month: m, seances, presences: pres, excuses: exc, entrainements: entr, matchs, taux: seances ? pres / seances : null, moyenne: teamTot ? teamPres / teamTot : null };
+        return { month: m, seances, presences: pres, excuses: exc, entrainements: entr, matchs, taux: seances ? pres / seances : null, moyenne: teamTot ? teamPres / teamTot : null, teamPres, teamTot, victoires: vict };
       });
       return {
         teamId: tid, nom: teamName(tid), primes: !!fv(teams.find((t) => t.id === tid), "Primes actives"),
@@ -117,7 +117,7 @@ export default async function handler(req, res) {
       .filter((s) => myEfx.some((e) => (fv(e, "Équipe") || []).some((t) => (fv(s, "Équipe") || []).includes(t)) && inRange(e, fv(s, "Date"))))
       .sort((a, c) => String(fv(c, "Date") + (fv(c, "Heure") || "")).localeCompare(String(fv(a, "Date") + (fv(a, "Heure") || ""))))
       .slice(0, 20)
-      .map((s) => ({ id: s.id, date: fv(s, "Date"), heure: fv(s, "Heure") || "", type: fv(s, "Type"), equipe: teamName((fv(s, "Équipe") || [])[0]), adversaire: fv(s, "Adversaire") || "", resultat: fv(s, "Résultat") || "", score: fv(s, "Score VHB") != null && fv(s, "Score adverse") != null ? fv(s, "Score VHB") + "-" + fv(s, "Score adverse") : "", etat: stateOf.get(s.id) || "Absent" }));
+      .map((s) => ({ id: s.id, teamId: (fv(s, "Équipe") || [])[0], date: fv(s, "Date"), heure: fv(s, "Heure") || "", type: fv(s, "Type"), equipe: teamName((fv(s, "Équipe") || [])[0]), adversaire: fv(s, "Adversaire") || "", resultat: fv(s, "Résultat") || "", score: fv(s, "Score VHB") != null && fv(s, "Score adverse") != null ? fv(s, "Score VHB") + "-" + fv(s, "Score adverse") : "", etat: stateOf.get(s.id) || "Absent" }));
     // Primes (lignes validées ou ajoutées), seulement pour les droits Primes.
     let primes = null;
     if (canAny(sess, READ_PRIMES)) {
@@ -127,9 +127,37 @@ export default async function handler(req, res) {
         .map((l) => ({ id: l.id, periode: fv(l, "Période"), type: fv(l, "Type"), montant: Number(fv(l, "Montant")) || 0, motif: fv(l, "Motif") || "", paiement: fv(l, "Paiement") || "À payer", valide: !!(fv(l, "Mois") || []).length, payeLe: fv(l, "Payé le") || null, equipe: teamName((fv(l, "Équipe") || [])[0]) }))
         .sort((a, c) => String(c.periode).localeCompare(String(a.periode)));
     }
+    // Primes regroupées par mois : mois validés (montant figé + état du paiement) et mois encore ouverts
+    // (mois en cours et mois précédent non validé : montant provisoire calculé en direct).
+    let mois = null;
+    if (primes) {
+      const byKey = new Map();
+      for (const l of primes.filter((x) => x.valide)) {
+        const k = l.periode + "|" + l.equipe; const o = byKey.get(k) || { periode: l.periode, equipe: l.equipe, montant: 0, pay: [] };
+        o.montant += l.montant; o.pay.push(l.paiement); byKey.set(k, o);
+      }
+      mois = [...byKey.values()].map((o) => ({ periode: o.periode, equipe: o.equipe, montant: Math.round(o.montant * 100) / 100,
+        statut: o.pay.every((x) => x === "Payé") ? "Payé" : o.pay.every((x) => x === "Payé" || x === "Mis en paiement") ? "Mis en paiement" : "Validé" }));
+      const cur = today.slice(0, 7), prevM = (() => { const d = new Date(cur + "-01T12:00:00Z"); d.setUTCMonth(d.getUTCMonth() - 1); return d.toISOString().slice(0, 7); })();
+      for (const t of teams.filter((x) => fv(x, "Primes actives"))) {
+        for (const m of [prevM, cur]) {
+          if (m < from.slice(0, 7)) continue;
+          const val = (await listAll(T("Primes – Mois"), "{Mois}='" + m + "'")).some((r) => (fv(r, "Équipe") || []).includes(t.id) && fv(r, "Statut") === "Validé");
+          if (val) continue;
+          const sm = (await listAll(T("Séances"), "AND(IS_AFTER({Date}, '" + (() => { const d = new Date(m + "-01T12:00:00Z"); d.setUTCDate(0); return d.toISOString().slice(0, 10); })() + "'), IS_BEFORE({Date}, '" + nextMonth(m) + "-01'))")).filter((x) => (fv(x, "Équipe") || []).includes(t.id));
+          const pIds = [].concat(...sm.map((x) => fv(x, "Pointages") || []));
+          const pts = pIds.length ? await byIds(T("Pointages"), pIds) : [];
+          const extras = ((fv(p, "Primes") || []).length ? await byIds(T("Primes – Lignes"), fv(p, "Primes")) : []).filter((l) => !(fv(l, "Mois") || []).length && fv(l, "Période") === m && fv(l, "Type") !== "Normale" && (fv(l, "Équipe") || []).includes(t.id));
+          const r = computeMonth({ team: t, month: m, seances: sm, pointages: pts, effectifs: allEfx, players: [p], extras, today });
+          const line = r.lines.find((l) => l.joueur === p.id);
+          if (line && (line.seances || line.total)) mois.push({ periode: m, equipe: fv(t, "Nom") || "", montant: line.total, statut: "Provisoire" });
+        }
+      }
+      mois.sort((a, c) => String(c.periode).localeCompare(String(a.periode)));
+    }
     res.status(200).json({
       joueur: { id: p.id, nom: fv(p, "Nom") || "", prenom: fv(p, "Prénom") || "", annee: fv(p, "Année de naissance") || null, licence: fv(p, "Licence") || "" },
-      saison: from.slice(0, 4) + "-" + (Number(from.slice(0, 4)) + 1), teams: perTeam, recent, primes,
+      saison: from.slice(0, 4) + "-" + (Number(from.slice(0, 4)) + 1), teams: perTeam, recent, primes, mois, today,
     });
   } catch (e) {
     res.status(500).json({ error: String((e && e.message) || e) });

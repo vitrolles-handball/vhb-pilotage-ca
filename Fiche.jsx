@@ -26,87 +26,146 @@ async function api(payload) {
 const Chip = ({ children, bg, fg }) => <span style={{ fontSize: 11.5, fontWeight: 800, padding: "4px 9px", borderRadius: 10, background: bg || "#EEF0F3", color: fg || "#3A3F47", whiteSpace: "nowrap" }}>{children}</span>;
 const ETAT = { "Présent": ["#E7F4EA", "#1F5C30"], "Excusé": ["#FFF6D6", "#6B4A00"], "Absent": ["#FDECEC", "#9E1B1B"] };
 
-// ---------------------------------------------------------------------------- Fiche joueur (plein écran)
-export function PlayerCard({ joueurId, onClose }) {
+// ---------------------------------------------------------------------------- Fiche joueur (page entière)
+// Le bouton « retour » du téléphone ferme la page du dessus (au lieu de quitter l'appli).
+const PAGES = [];
+export function useBackClose(onClose) {
+  const ref = React.useRef(onClose); ref.current = onClose;
+  const tag = React.useRef("vhbpage" + Math.random().toString(36).slice(2, 8));
+  useEffect(() => {
+    const me = tag.current; PAGES.push(me);
+    try { window.history.pushState({ vhbpage: me }, ""); } catch (e) {}
+    const pop = () => { if (PAGES[PAGES.length - 1] === me) { PAGES.pop(); ref.current(); } };
+    const key = (e) => { if (e.key === "Escape" && PAGES[PAGES.length - 1] === me) back(); };
+    window.addEventListener("popstate", pop); window.addEventListener("keydown", key);
+    return () => { window.removeEventListener("popstate", pop); window.removeEventListener("keydown", key); const i = PAGES.indexOf(me); if (i >= 0) PAGES.splice(i, 1); };
+  }, []);
+  const back = () => {
+    try { if (window.history.state && window.history.state.vhbpage === tag.current) { window.history.back(); return; } } catch (e) {}
+    const i = PAGES.indexOf(tag.current); if (i >= 0) PAGES.splice(i, 1); ref.current();
+  };
+  return back;
+}
+const PAY_TONE = { "Provisoire": ["#E3EEFB", "#1B5E9B"], "Validé": ["#FFF3C4", "#6B4A00"], "Mis en paiement": ["#FDEBD3", "#8A4B00"], "Payé": ["#E2F3E6", "#1F5C30"] };
+const capit = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+const MOIS_CAP = (m) => capit(MOIS_LONG[Number(String(m).slice(5, 7)) - 1]);
+const shortFr = (iso) => new Date(iso + "T12:00:00").toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+
+export function PlayerCard({ joueurId, teamId, backLabel, onClose }) {
   const [d, setD] = useState(null);
   const [err, setErr] = useState("");
+  const [tid, setTid] = useState(teamId || null);
+  const [detail, setDetail] = useState(false);
+  const back = useBackClose(onClose);
   useEffect(() => { api({ action: "fiche", joueurId }).then((x) => (x && x.joueur ? setD(x) : setErr("Fiche indisponible pour le moment."))).catch((e) => setErr(e.message)); }, [joueurId]);
-  useEffect(() => { const h = (e) => { if (e.key === "Escape") onClose(); }; window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h); }, [onClose]);
+  useEffect(() => { const o = document.body.style.overflow; document.body.style.overflow = "hidden"; return () => { document.body.style.overflow = o; }; }, []);
+  const teams = (d && d.teams) || [];
+  const t = teams.find((x) => x.teamId === tid) || teams[0];
   const initials = d ? ((d.joueur.prenom[0] || "") + (d.joueur.nom[0] || "")).toUpperCase() : "";
-  return createPortal(<div role="dialog" aria-modal="true" aria-label="Fiche joueur" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{ position: "fixed", inset: 0, background: "rgba(16,17,20,.55)", zIndex: 210, display: "flex", justifyContent: "center", alignItems: "flex-start", overflowY: "auto", padding: "calc(12px + env(safe-area-inset-top)) 12px 40px" }}>
-    <div className="card" style={{ position: "relative", width: "100%", maxWidth: 760, display: "flex", flexDirection: "column", gap: 14 }}>
-      <div style={{ position: "sticky", top: 0, alignSelf: "flex-end", height: 0, zIndex: 3 }}><button aria-label="Fermer" onClick={onClose} style={{ position: "relative", top: -4, right: -6, boxShadow: "0 2px 8px rgba(0,0,0,.12)", width: 40, height: 40, borderRadius: 20, border: "none", background: "#EEF0F3", cursor: "pointer", fontSize: 22, lineHeight: 1 }}><span aria-hidden="true">×</span></button></div>
-      {err && <div style={{ color: "#9E1B1B", paddingRight: 48 }}>{err}</div>}
-      {!d && !err && <div style={{ color: MUT }}>Chargement de la fiche…</div>}
-      {d && <>
-        <div style={{ display: "flex", alignItems: "center", gap: 14, paddingRight: 48 }}>
-          <span style={{ width: 56, height: 56, borderRadius: 28, background: BLACK, color: YELLOW, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 20, flex: "0 0 auto" }}>{initials}</span>
+  const label = backLabel || (t ? "Effectif " + t.nom : "Retour");
+  // Indicateurs de la saison
+  const tot = t ? t.months.reduce((a, m) => ({ s: a.s + m.seances, p: a.p + m.presences, tp: a.tp + (m.teamPres || 0), tt: a.tt + (m.teamTot || 0), v: a.v + (m.victoires || 0) }), { s: 0, p: 0, tp: 0, tt: 0, v: 0 }) : null;
+  const seasonRate = tot && tot.s ? tot.p / tot.s : null, teamRate = tot && tot.tt ? tot.tp / tot.tt : null;
+  // Mois affichés : du premier mois avec séance (septembre par défaut) au mois en cours, puis le mois suivant à venir.
+  const cur = d ? String(d.today || new Date().toISOString()).slice(0, 7) : "";
+  const bars = (() => {
+    if (!t) return [];
+    const withS = t.months.filter((m) => m.seances);
+    const sept = d.saison.slice(0, 4) + "-09";
+    const start = withS.length ? withS[0].month : (cur < sept ? cur : sept);
+    const list = t.months.filter((m) => m.month >= start && m.month <= cur);
+    return list.slice(-5).concat([{ month: shiftMonth(cur, 1), future: true }]);
+  })();
+  const cur10 = d ? d.recent.filter((s) => !t || !s.teamId || s.teamId === t.teamId).slice(0, 10).reverse() : [];
+  const eff = t ? t.effectifs[t.effectifs.length - 1] : null;
+  const renfort = eff && eff.statut === "Renfort";
+  const mois = d && d.mois ? d.mois.filter((m) => !t || teams.length < 2 || m.equipe === t.nom) : null;
+  const card = { background: "#fff", borderRadius: 20, padding: "16px 16px", boxShadow: "0 1px 3px rgba(20,22,30,.06)" };
+  const H = ({ children, right }) => <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 12 }}><div style={{ fontSize: 16, fontWeight: 800, color: TEXT, flex: 1 }}>{children}</div>{right}</div>;
+
+  return createPortal(<div role="dialog" aria-modal="true" aria-label="Fiche joueur" style={{ position: "fixed", inset: 0, zIndex: 210, background: "#F2F3F6", overflowY: "auto", WebkitOverflowScrolling: "touch" }} className="fade">
+    <div style={{ backgroundColor: "#E8590C", backgroundImage: "linear-gradient(rgba(28,10,0,.18), rgba(28,10,0,.34)), url(/accent.jpg)", backgroundSize: "cover", backgroundPosition: "center", color: "#fff", padding: "calc(10px + env(safe-area-inset-top)) 16px 26px" }}>
+      <div style={{ maxWidth: 760, margin: "0 auto" }}>
+        <button onClick={back} aria-label={"Retour · " + label} style={{ display: "inline-flex", alignItems: "center", gap: 10, background: "none", border: "none", color: "#fff", fontFamily: "inherit", fontSize: 15, fontWeight: 800, cursor: "pointer", padding: "8px 4px", minHeight: 44 }}><i className="ti ti-chevron-left" aria-hidden="true" style={{ fontSize: 22 }} />{label}</button>
+        <div style={{ display: "flex", alignItems: "center", gap: 16, marginTop: 8 }}>
+          <span style={{ width: 72, height: 72, borderRadius: 36, background: "#fff", color: "#C2261B", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 24, flex: "0 0 auto", boxShadow: "0 4px 14px rgba(0,0,0,.18)" }}>{initials || "…"}</span>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 21, fontWeight: 800, color: TEXT }}>{d.joueur.prenom} {d.joueur.nom}</div>
-            <div style={{ fontSize: 13, color: MUT }}>{["Saison " + d.saison, d.joueur.annee ? "né en " + d.joueur.annee : null, d.joueur.licence ? "licence " + d.joueur.licence : null].filter(Boolean).join(" · ")}</div>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
-              {d.teams.map((t) => <Chip key={t.teamId} bg={t.effectifs.some((e) => e.statut === "Renfort") ? "#FFF6D6" : "#EEF0F3"} fg={t.effectifs.some((e) => e.statut === "Renfort") ? "#6B4A00" : "#3A3F47"}>{t.nom} · {t.effectifs.map((e) => e.statut + (e.entree ? " depuis le " + new Date(e.entree + "T12:00:00").toLocaleDateString("fr-FR") : "") + (e.sortie ? " jusqu'au " + new Date(e.sortie + "T12:00:00").toLocaleDateString("fr-FR") : "")).join(", ")}</Chip>)}
-            </div>
+            <div style={{ fontSize: 26, fontWeight: 800, lineHeight: 1.15 }}>{d ? d.joueur.prenom + " " + d.joueur.nom : "Chargement…"}</div>
+            {eff && <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+              <span style={{ background: "#fff", color: renfort ? "#B5660A" : "#1F5C30", fontSize: 13, fontWeight: 800, padding: "4px 11px", borderRadius: 12 }}>{eff.statut}</span>
+              <span style={{ fontSize: 14, fontWeight: 600 }}>{eff.entree ? "dans l'effectif depuis le " + shortFr(eff.entree) : "dans l'effectif " + d.saison}{eff.sortie ? " · jusqu'au " + shortFr(eff.sortie) : ""}</span>
+            </div>}
+            {d && (d.joueur.annee || d.joueur.licence) && <div style={{ fontSize: 12.5, opacity: .85, marginTop: 6 }}>{[d.joueur.annee ? "Né en " + d.joueur.annee : null, d.joueur.licence ? "Licence " + d.joueur.licence : null].filter(Boolean).join(" · ")}</div>}
           </div>
         </div>
-
-        {d.teams.map((t) => {
-          const ms = t.months.filter((m) => m.seances || m.moyenne != null);
-          const tot = t.months.reduce((a, m) => ({ s: a.s + m.seances, p: a.p + m.presences, e: a.e + m.entrainements, mt: a.mt + m.matchs }), { s: 0, p: 0, e: 0, mt: 0 });
-          return <div key={t.teamId} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
-              <span style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".06em", color: MUT }}>ASSIDUITÉ · {t.nom.toUpperCase()}</span>
-              <span style={{ fontSize: 13, color: TEXT }}><b>{tot.p}/{tot.s}</b> séances sur la saison · {pct(tot.s ? tot.p / tot.s : null)} · {tot.e} entraînement(s), {tot.mt} match(s)</span>
-            </div>
-            {!ms.length && <div style={{ fontSize: 13, color: MUT }}>Aucune séance pointée pour l'instant.</div>}
-            {ms.length > 0 && <div role="img" aria-label="Assiduité par mois comparée à la moyenne de l'équipe" style={{ display: "flex", gap: 10, alignItems: "flex-end", overflowX: "auto", padding: "4px 2px" }}>
-              {ms.map((m) => <div key={m.month} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, minWidth: 54 }}>
-                <span style={{ fontSize: 12.5, fontWeight: 800, color: TEXT }}>{pct(m.taux)}</span>
-                <div style={{ position: "relative", width: 34, height: 96, background: "#F1F2F5", borderRadius: 8, overflow: "hidden" }}>
-                  <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: (m.taux || 0) * 100 + "%", background: rateTone(m.taux), borderRadius: 8 }} />
-                  {m.moyenne != null && <div title={"Moyenne de l'équipe : " + pct(m.moyenne)} style={{ position: "absolute", left: -3, right: -3, bottom: "calc(" + m.moyenne * 100 + "% - 1px)", height: 2, background: BLACK }} />}
-                </div>
-                <span style={{ fontSize: 12, color: MUT, textTransform: "capitalize" }}>{mShort(m.month)}</span>
-                <span style={{ fontSize: 11, color: MUT }}>{m.presences}/{m.seances}{m.excuses ? " · " + m.excuses + " exc." : ""}</span>
-              </div>)}
-            </div>}
-            {ms.length > 0 && <div style={{ fontSize: 12, color: MUT, display: "flex", gap: 6, alignItems: "center" }}><span style={{ display: "inline-block", width: 14, height: 2, background: BLACK }} />trait noir : moyenne de l'équipe sur le mois</div>}
-          </div>;
-        })}
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".06em", color: MUT }}>DERNIÈRES SÉANCES</div>
-          {!d.recent.length && <div style={{ fontSize: 13, color: MUT }}>Aucune séance pointée.</div>}
-          {d.recent.map((s) => <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: "#F7F8FA", borderRadius: 12 }}>
-            <i className={"ti " + (s.type === "Match" ? "ti-trophy" : "ti-run")} aria-hidden="true" style={{ color: s.type === "Match" ? RED : MUT }} />
-            <span style={{ flex: 1, fontSize: 13.5, minWidth: 0 }}><b>{fmtDate(s.date)}</b> · {s.type === "Match" ? "Match" + (s.adversaire ? " vs " + s.adversaire : "") + (s.score ? " · " + s.score : "") + (s.resultat ? " · " + s.resultat : "") : s.type}{d.teams.length > 1 ? " · " + s.equipe : ""}</span>
-            <Chip bg={ETAT[s.etat][0]} fg={ETAT[s.etat][1]}>{s.etat}</Chip>
+      </div>
+    </div>
+    <div style={{ maxWidth: 760, margin: "0 auto", padding: "14px 12px calc(40px + env(safe-area-inset-bottom))", display: "flex", flexDirection: "column", gap: 12 }}>
+      {err && <div style={{ ...card, color: "#9E1B1B" }}>{err}</div>}
+      {!d && !err && <div style={{ ...card, color: MUT }}>Chargement de la fiche…</div>}
+      {d && <>
+        {teams.length > 1 && <div role="group" aria-label="Équipe" style={{ display: "inline-flex", gap: 4, background: "#E6E8EC", borderRadius: 30, padding: 4, alignSelf: "flex-start", flexWrap: "wrap" }}>
+          {teams.map((x) => <button key={x.teamId} aria-pressed={x.teamId === t.teamId} onClick={() => setTid(x.teamId)} style={{ minHeight: 36, padding: "0 14px", border: "none", borderRadius: 30, cursor: "pointer", fontFamily: "inherit", fontSize: 13, fontWeight: 800, background: x.teamId === t.teamId ? BLACK : "transparent", color: x.teamId === t.teamId ? "#fff" : "#3A3F47" }}>{x.nom}</button>)}
+        </div>}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
+          {[["Saison", pct(seasonRate), TEXT], ["Moy. équipe", pct(teamRate), "#6B7079"], ["Victoires", tot ? String(tot.v) : "—", TEXT]].map(([l, v, c]) => <div key={l} style={{ ...card, padding: "14px 14px" }}>
+            <div style={{ fontSize: 13, color: "#3A3F47", fontWeight: 600 }}>{l}</div>
+            <div style={{ fontSize: 26, fontWeight: 800, color: c, marginTop: 4, whiteSpace: "nowrap" }}>{v}</div>
           </div>)}
         </div>
 
-        {d.primes && <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-            <span style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".06em", color: MUT }}>PRIMES</span>
-            {d.primes.length > 0 && d.teams.filter((t) => t.primes).map((t) => <button key={t.teamId} className="btn btn-ghost" style={{ minHeight: 32, padding: "0 10px", fontSize: 12.5, marginLeft: "auto", order: 2 }} onClick={async () => {
-              const w = window.open("", "_blank"); // ouvert tout de suite, sinon le téléphone bloque la page
-              if (w) w.document.write("<p style='font-family:Arial;margin:24px'>Préparation du relevé…</p>");
-              try {
-                const r = await fetch("/api/primes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "annual", teamId: t.teamId, season: Number(d.saison.slice(0, 4)) }) });
-                const j = await r.json(); if (!r.ok) throw new Error(j.error || "Erreur");
-                const pl = j.players.filter((x) => x.joueur === joueurId);
-                if (!pl.length) { if (w) w.close(); alert("Aucune prime validée cette saison pour ce joueur."); return; }
-                if (w) { w.document.open(); }
-                printReleve({ team: j.team.nom, season: j.season, players: pl, months: j.months, win: w });
-              } catch (e) { if (w) w.close(); alert(e.message); }
-            }}><i className="ti ti-printer" aria-hidden="true" />Relevé annuel{d.teams.filter((x) => x.primes).length > 1 ? " · " + t.nom : ""}</button>)}
-            {d.primes.length > 0 && <span style={{ fontSize: 13 }}>Saison : <b>{eur(d.primes.filter((l) => l.valide).reduce((t, l) => t + l.montant, 0))}</b> validés · dont {eur(d.primes.filter((l) => l.paiement === "Payé").reduce((t, l) => t + l.montant, 0))} payés</span>}
+        <div style={card}>
+          <H right={<span style={{ fontSize: 12.5, color: MUT, display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 18, borderTop: "2px dashed #6B7079" }} />moyenne équipe</span>}>Assiduité par mois</H>
+          <div role="img" aria-label={"Assiduité par mois" + (teamRate != null ? ", moyenne de l'équipe " + pct(teamRate) : "")} style={{ position: "relative", display: "grid", gridTemplateColumns: "repeat(" + bars.length + ", minmax(0, 1fr))", gap: 14, alignItems: "end", height: 170, padding: "0 4px" }}>
+            {teamRate != null && <div aria-hidden="true" style={{ position: "absolute", left: 0, right: 0, bottom: "calc(26px + " + (teamRate * 118) + "px)", borderTop: "2px dashed #6B7079", zIndex: 2 }} />}
+            {bars.map((m) => { const has = !m.future && m.seances > 0; const isCur = m.month === cur; return <div key={m.month} style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", height: "100%", gap: 6 }} title={has ? m.presences + " présence(s) sur " + m.seances + " séance(s)" + (m.moyenne != null ? " · équipe " + pct(m.moyenne) : "") : ""}>
+              <span style={{ fontSize: 13, fontWeight: 800, color: has ? TEXT : "#B8BDC4" }}>{has ? pct(m.taux) : "–"}</span>
+              <div style={{ width: "100%", maxWidth: 58, height: has ? Math.max(6, m.taux * 118) : 6, borderRadius: "10px 10px 4px 4px", background: has ? (isCur ? "#F3A5A0" : "#D92B26") : "#ECEEF1" }} />
+              <span style={{ fontSize: 13, fontWeight: 700, color: "#3A3F47", height: 18 }}>{capit(mShort(m.month))}</span>
+            </div>; })}
           </div>
-          {!d.primes.length && <div style={{ fontSize: 13, color: MUT }}>Aucune prime validée pour l'instant (le mois en cours se voit dans Sportif › Primes).</div>}
-          {d.primes.map((l) => { const tone = l.paiement === "Payé" ? ["#E7F4EA", "#1F5C30"] : l.paiement === "Mis en paiement" ? ["#FFF6D6", "#6B4A00"] : ["#FDECEC", "#9E1B1B"]; return <div key={l.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: "#F7F8FA", borderRadius: 12 }}>
-            <span style={{ flex: 1, fontSize: 13.5 }}><b style={{ textTransform: "capitalize" }}>{mLong(l.periode)}</b> · {l.type}{l.motif ? " · " + l.motif : ""}</span>
-            <b style={{ color: l.montant < 0 ? "#9E1B1B" : TEXT }}>{eur(l.montant)}</b>
-            <Chip bg={l.valide ? tone[0] : "#EEF0F3"} fg={l.valide ? tone[1] : MUT}>{l.valide ? l.paiement : "Mois ouvert"}</Chip>
+          {!t.months.some((m) => m.seances) && <div style={{ fontSize: 13, color: MUT, marginTop: 8 }}>Aucune séance pointée pour l'instant : le graphique se remplira au fil des pointages.</div>}
+        </div>
+
+        <div style={card}>
+          <H>{cur10.length >= 10 ? "10 dernières séances" : "Dernières séances"}</H>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(10, minmax(0, 46px))", gap: 7 }}>
+            {Array.from({ length: 10 }).map((_, i) => { const s = cur10[i]; if (!s) return <span key={i} style={{ aspectRatio: "1", borderRadius: 9, border: "2px dashed #E2E5E9" }} />;
+              const match = s.type === "Match", pres = s.etat === "Présent";
+              const bg = pres ? (match ? "#F2C318" : "#2E7D46") : s.etat === "Excusé" ? "#F4E6B8" : "#E2E5E9";
+              return <span key={s.id} title={fmtDate(s.date) + " · " + (match ? "Match" + (s.adversaire ? " vs " + s.adversaire : "") + (s.score ? " · " + s.score : "") : s.type) + " · " + s.etat} aria-label={fmtDate(s.date) + " " + s.type + " " + s.etat} style={{ aspectRatio: "1", borderRadius: 9, background: bg, border: pres ? "none" : "1px solid #D4D8DE" }} />; })}
+          </div>
+          <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 12, fontSize: 12.5, color: "#3A3F47" }}>
+            {[["#2E7D46", "Entraînement"], ["#F2C318", "Match joué"], ["#E2E5E9", "Absent"]].concat(cur10.some((s) => s.etat === "Excusé") ? [["#F4E6B8", "Excusé"]] : []).map(([c, l]) => <span key={l} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 12, height: 12, borderRadius: 4, background: c, border: c === "#E2E5E9" ? "1px solid #C9CDD3" : "none" }} />{l}</span>)}
+          </div>
+          {!cur10.length && <div style={{ fontSize: 13, color: MUT, marginTop: 8 }}>Aucune séance pointée pour l'instant.</div>}
+        </div>
+
+        {mois && <div style={card}>
+          <H right={t && t.primes && <button className="btn btn-ghost" style={{ minHeight: 34, padding: "0 10px", fontSize: 12.5 }} onClick={async () => {
+            const w = window.open("", "_blank");
+            if (w) w.document.write("<p style='font-family:Arial;margin:24px'>Préparation du relevé…</p>");
+            try {
+              const r = await fetch("/api/primes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "annual", teamId: t.teamId, season: Number(d.saison.slice(0, 4)) }) });
+              const j = await r.json(); if (!r.ok) throw new Error(j.error || "Erreur");
+              const pl = j.players.filter((x) => x.joueur === joueurId);
+              if (!pl.length) { if (w) w.close(); alert("Aucune prime validée cette saison pour ce joueur."); return; }
+              if (w) { w.document.open(); }
+              printReleve({ team: j.team.nom, season: j.season, players: pl, months: j.months, win: w });
+            } catch (e) { if (w) w.close(); alert(e.message); }
+          }}><i className="ti ti-printer" aria-hidden="true" />Relevé annuel</button>}>Primes</H>
+          {!mois.length && <div style={{ fontSize: 13, color: MUT }}>Pas encore de prime sur cette saison.</div>}
+          {mois.map((m, i) => { const tone = PAY_TONE[m.statut] || PAY_TONE["Validé"]; return <div key={m.periode + m.equipe} style={{ display: "flex", alignItems: "center", gap: 10, padding: "13px 2px", borderTop: i ? "1px solid #EEF0F3" : "none" }}>
+            <span style={{ flex: 1, fontSize: 15, fontWeight: 600, color: TEXT }}>{MOIS_CAP(m.periode)}{teams.length > 1 && teams.filter((x) => x.primes).length > 1 ? <span style={{ color: MUT, fontWeight: 500 }}> · {m.equipe}</span> : null}</span>
+            <span style={{ fontSize: 12.5, fontWeight: 800, padding: "4px 11px", borderRadius: 12, background: tone[0], color: tone[1] }}>{m.statut}</span>
+            <b style={{ minWidth: 84, textAlign: "right", fontSize: 15.5, color: m.montant < 0 ? "#9E1B1B" : TEXT }}>{eur(m.montant)}</b>
           </div>; })}
+          {d.primes && d.primes.length > 0 && <button onClick={() => setDetail(!detail)} style={{ marginTop: 6, background: "none", border: "none", padding: "6px 0", color: "#1B5E9B", textDecoration: "underline", cursor: "pointer", font: "inherit", fontSize: 13 }}>{detail ? "Masquer le détail" : "Voir le détail des lignes (régularisations, primes exceptionnelles)"}</button>}
+          {detail && d.primes.map((l) => <div key={l.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", background: "#F7F8FA", borderRadius: 10, marginTop: 4, fontSize: 13 }}>
+            <span style={{ flex: 1 }}><b>{MOIS_CAP(l.periode)}</b> · {l.type}{l.motif ? " · " + l.motif : ""}</span>
+            <b style={{ color: l.montant < 0 ? "#9E1B1B" : TEXT }}>{eur(l.montant)}</b>
+            <Chip>{l.valide ? l.paiement : "Mois ouvert"}</Chip>
+          </div>)}
         </div>}
       </>}
     </div>
@@ -173,6 +232,6 @@ export function RosterView({ teams, efx, players, initialTeam, onManage }) {
       {!rows.length && <div className="card" style={{ color: MUT }}>{q ? "Aucun joueur ne correspond." : "Aucun joueur dans cette équipe." + (onManage ? " Ajoute-les avec « Ajouter ou modifier des joueurs »." : "")}</div>}
     </div>
     <div style={{ fontSize: 12.5, color: MUT }}>Touche un joueur pour ouvrir sa fiche : assiduité de la saison, dernières séances{" "}et primes pour les personnes qui y ont accès.</div>
-    {open && <PlayerCard joueurId={open} onClose={() => setOpen(null)} />}
+    {open && <PlayerCard joueurId={open} teamId={teamId} backLabel={"Effectif " + (f(teams.find((t) => t.id === teamId), "Nom") || "")} onClose={() => setOpen(null)} />}
   </div>;
 }

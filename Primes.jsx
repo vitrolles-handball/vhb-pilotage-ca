@@ -291,7 +291,7 @@ export function PrimesView({ rights, teams, users, initialTeam }) {
       {detail && <PlayerDetail row={detail} data={data} validated={validated} canCorr={canCorr} onClose={() => setDetail(null)} onChanged={async () => { setDetail(null); await load(); }} onExtra={() => { setExtra({ joueurId: detail.joueur }); setDetail(null); }} />}
       {extra && <ExtraForm teamId={teamId} month={validated ? shiftMonth(month, 1) : month} rows={rows} preset={extra.joueurId} validated={validated} onClose={() => setExtra(null)} onDone={async (m) => { setExtra(null); if (m !== month) setMonth(m); else await load(); }} />}
       {annual && <AnnualSheet teamId={teamId} teamName={f(team, "Nom")} onClose={() => setAnnual(false)} onPlayer={(id) => setCardOf(id)} />}
-      {cardOf && <PlayerCard joueurId={cardOf} onClose={() => setCardOf(null)} />}
+      {cardOf && <PlayerCard joueurId={cardOf} teamId={teamId} backLabel="Primes" onClose={() => setCardOf(null)} />}
     </div>
   );
 }
@@ -338,7 +338,7 @@ function PlayerDetail({ row, data, validated, canCorr, onClose, onChanged, onExt
       <button className="btn btn-ghost" onClick={() => setCard(true)}><i className="ti ti-id" aria-hidden="true" />Voir la fiche du joueur</button>
       {canCorr && <button className="btn btn-ghost" onClick={onExtra}><i className="ti ti-plus" aria-hidden="true" />Ajouter une prime ou une régularisation</button>}
     </div>
-    {card && <PlayerCard joueurId={row.joueur} onClose={() => setCard(false)} />}
+    {card && <PlayerCard joueurId={row.joueur} backLabel="Retour" onClose={() => setCard(false)} />}
   </Sheet>;
 }
 

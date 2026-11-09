@@ -8,7 +8,7 @@
 // ===========================================================================
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { PrimesView } from "./Primes.jsx";
-import { RosterView } from "./Fiche.jsx";
+import { RosterView, PlayerCard } from "./Fiche.jsx";
 import { TeamManager, SAISON } from "./Admin.jsx";
 import { Sheet } from "./Comms.jsx";
 import { db, dbForget, f, RED, YELLOW, BLACK, TEXT, MUT, BORDER, OK } from "./App.jsx";
@@ -102,6 +102,7 @@ export default function SportSpace({ me, rights, scope, teams, view, setView }) 
   const [d, reload] = useSportData(me, rights, scope, teams);
   const club = scope === "all"; // vue de supervision : synthèse du club, puis détail par équipe
   const [open, setOpen] = useState(null); // { seanceId } | { create: "Match" | "Supp" }
+  useEffect(() => { setOpen(null); }, [view]); // changer d'onglet ferme la séance ouverte
   const [manage, setManage] = useState(null); // équipe ouverte dans « Gérer l'équipe »
   const [filter, setFilter] = useState("all");
   const queued = useQueueCount();
@@ -122,7 +123,9 @@ export default function SportSpace({ me, rights, scope, teams, view, setView }) 
     if (open.create) return <CreateSeance kind={open.create} d={d} me={me} onCancel={() => setOpen(null)} onCreated={(id) => { reload().then(() => setOpen({ seanceId: id })); }} />;
     const s = d.seances.find((x) => x.id === open.seanceId);
     if (!s) return <div className="card">Séance introuvable. <button className="btn btn-ghost" onClick={() => setOpen(null)}>Retour</button></div>;
-    return <PointageView s={s} d={d} me={me} rights={rights} onBack={() => setOpen(null)} onDone={done} />;
+    const isM = f(s, "Type") === "Match";
+    if (isM && !open.pointer) return <MatchPage s={s} d={d} rights={rights} onBack={() => setOpen(null)} onPointer={() => setOpen({ seanceId: s.id, pointer: true })} onChanged={reload} />;
+    return <PointageView s={s} d={d} me={me} rights={rights} onBack={() => setOpen(isM ? { seanceId: s.id } : null)} onDone={isM ? async (msg) => { setOpen({ seanceId: s.id }); await reload(); if (msg) setTimeout(() => alert(msg), 50); } : done} />;
   }
   const visTeams = filter === "all" ? d.teams.map((t) => t.id) : [filter];
   const mineS = d.seances.filter((s) => visTeams.includes(teamOf(s)));
@@ -175,7 +178,7 @@ export default function SportSpace({ me, rights, scope, teams, view, setView }) 
       {!todays.length && <div className="card" style={{ fontSize: 13.5, color: MUT }}>Pas de séance prévue aujourd'hui.</div>}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
         <div className="card" style={{ borderLeft: "4px solid " + RED }}><div style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".06em", color: MUT }}>PRÉSENCE DU MOIS</div><div style={{ fontSize: 28, fontWeight: 800, color: "#C21F1F" }}>{rate}</div><div style={{ fontSize: 12.5, color: MUT }}>{filter === "all" && d.teams.length > 1 ? "sur tes " + d.teams.length + " équipes" : "séances pointées"}</div></div>
-        <div className="card" style={{ borderLeft: "4px solid " + YELLOW }}><div style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".06em", color: MUT }}>PROCHAIN MATCH</div>{nextMatch ? <><div style={{ fontSize: 16, fontWeight: 800 }}>{dayLabel(f(nextMatch, "Date"))}</div><div style={{ fontSize: 12.5, color: MUT }}>{tShort(teamOf(nextMatch))}{f(nextMatch, "Adversaire") ? " · vs " + f(nextMatch, "Adversaire") : ""}{f(nextMatch, "Heure") ? " · " + f(nextMatch, "Heure") : ""}</div></> : <div style={{ fontSize: 13.5, color: MUT, marginTop: 4 }}>Aucun match prévu</div>}</div>
+        <button className="card" disabled={!nextMatch} onClick={() => nextMatch && setOpen({ seanceId: nextMatch.id })} aria-label={nextMatch ? "Prochain match : ouvrir la fiche du match" : "Aucun match prévu"} style={{ position: "relative", overflow: "hidden", border: "none", borderLeft: "4px solid " + YELLOW, textAlign: "left", fontFamily: "inherit", color: "inherit", cursor: nextMatch ? "pointer" : "default", opacity: 1 }}>{nextMatch && <span aria-hidden="true" style={{ position: "absolute", right: -6, bottom: -12, fontSize: 72, opacity: .16, pointerEvents: "none" }}>{f(nextMatch, "Domicile") ? "🏠" : "✈️"}</span>}<span style={{ position: "relative", display: "block" }}><div style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".06em", color: MUT }}>PROCHAIN MATCH</div>{nextMatch ? <><div style={{ fontSize: 16, fontWeight: 800 }}>{dayLabel(f(nextMatch, "Date"))}</div><div style={{ fontSize: 12.5, color: MUT }}>{tShort(teamOf(nextMatch))}{f(nextMatch, "Adversaire") ? " · vs " + f(nextMatch, "Adversaire") : ""}{f(nextMatch, "Heure") ? " · " + f(nextMatch, "Heure") : ""}</div></> : <div style={{ fontSize: 13.5, color: MUT, marginTop: 4 }}>Aucun match prévu</div>}</span></button>
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <button className="btn btn-red" onClick={() => setOpen({ create: "Match" })}><i className="ti ti-trophy" aria-hidden="true" />Nouveau match</button>
@@ -575,6 +578,124 @@ function PointageView({ s, d, me, rights, onBack, onDone }) {
           </button>
         </div>}
       </>}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- Fiche match
+const JOURS_L = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
+const MOIS_L2 = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
+const longDay = (s) => { const d = new Date(s + "T12:00:00"); const t = JOURS_L[d.getDay()] + " " + d.getDate() + " " + MOIS_L2[d.getMonth()]; return t.charAt(0).toUpperCase() + t.slice(1); };
+const daysBetween = (a, b) => Math.round((new Date(b + "T12:00:00") - new Date(a + "T12:00:00")) / 864e5);
+function MatchPage({ s, d, rights, onBack, onPointer, onChanged }) {
+  const date = f(s, "Date"), today = TODAY();
+  const home = !!f(s, "Domicile"); // case décochée = champ absent dans Airtable = extérieur
+  const st = f(s, "Statut"), pointed = st === "Pointée", cancelled = st === "Annulée";
+  const team = d.teams.find((t) => t.id === teamOf(s));
+  const teamName = f(team, "Nom") || "";
+  const adv = f(s, "Adversaire") || "Adversaire";
+  const roster = rosterAt(d, teamOf(s), date);
+  const n = daysBetween(today, date);
+  const when = n === 0 ? "Aujourd'hui" : n === 1 ? "Demain" : n === -1 ? "Hier" : n > 1 ? "Dans " + n + " jours" : "Il y a " + -n + " jours";
+  const [sheet, setSheet] = useState(null);
+  const [card, setCard] = useState(null);
+  const [edit, setEdit] = useState(false);
+  const [form, setForm] = useState({ date, heure: f(s, "Heure") || "", adv: f(s, "Adversaire") || "", home });
+  const [busy, setBusy] = useState(false);
+  const canEdit = ["plan", "eff"].some((r) => has(rights, r));
+  const canPoint = has(rights, "point");
+  const [cx, setCx] = useState(false);
+  const [motif, setMotif] = useState("Match reporté");
+  const doCancel = async () => { setBusy(true); try { await callPointage({ action: "cancel", seanceId: s.id, motif }); setCx(false); await onChanged(); } catch (e) { alert("Impossible : " + e.message); } setBusy(false); };
+  useEffect(() => {
+    if (!pointed) return;
+    const ids = f(s, "Pointages") || [];
+    if (!ids.length) { setSheet([]); return; }
+    db({ action: "list", table: "Pointages", filterByFormula: "OR(" + ids.slice(0, 80).map((id) => "RECORD_ID()='" + id + "'").join(",") + ")" })
+      .then((j) => { const pids = new Set((j.records || []).flatMap((r) => f(r, "Joueur") || [])); setSheet(d.players.filter((p) => pids.has(p.id)).sort((a, b) => norm(f(a, "Nom")).localeCompare(norm(f(b, "Nom"))))); }, () => setSheet([]));
+  }, [s.id]);
+  const vhb = f(s, "Score VHB"), sa = f(s, "Score adverse"), res = f(s, "Résultat");
+  const resTone = res === "Victoire" ? ["#E2F3E6", "#1F5C30"] : res === "Défaite" ? ["#FDECEC", "#9E1B1B"] : ["#EEF0F3", "#3A3F47"];
+  const save = async () => {
+    if (!form.date || !form.adv.trim()) { alert("Indique la date et l'adversaire."); return; }
+    setBusy(true);
+    try {
+      await db({ action: "update", table: "Séances", recordId: s.id, fields: { Date: form.date, Heure: form.heure, Adversaire: form.adv.trim(), Domicile: form.home, "Libellé": teamName + " · Match · " + form.date } });
+      setEdit(false); await onChanged();
+    } catch (e) { alert("Modification impossible : " + e.message); }
+    setBusy(false);
+  };
+  const lbl = { fontSize: 12, fontWeight: 800, letterSpacing: ".06em", color: MUT };
+  return (
+    <div className="fade" style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 720, paddingBottom: 90 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <button className="btn btn-ghost" onClick={onBack} aria-label="Retour" style={{ padding: "8px 10px" }}><i className="ti ti-chevron-left" aria-hidden="true" /></button>
+        <div style={{ fontSize: 18, fontWeight: 800, flex: 1 }}>Fiche match</div>
+        {canEdit && !edit && <button className="btn btn-ghost" onClick={() => setEdit(true)}><i className="ti ti-pencil" aria-hidden="true" />Modifier</button>}
+      </div>
+      <div style={{ position: "relative", overflow: "hidden", background: BLACK, color: "#fff", borderRadius: 24, padding: "20px 20px 22px", minHeight: 200, boxShadow: "0 8px 22px rgba(20,22,30,.22)", borderLeft: "6px solid " + YELLOW }}>
+        <span aria-hidden="true" style={{ position: "absolute", right: -18, top: "50%", transform: "translateY(-50%) rotate(" + (home ? "-6deg" : "-14deg") + ")", fontSize: 190, lineHeight: 1, opacity: .2, pointerEvents: "none", userSelect: "none", filter: "saturate(1.2)" }}>{home ? "🏠" : "✈️"}</span>
+        <div style={{ position: "relative", display: "flex", flexDirection: "column", gap: 8, maxWidth: "78%" }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: ".06em", color: YELLOW }}>{teamName.toUpperCase()}</span>
+            <span style={{ fontSize: 12, fontWeight: 800, padding: "4px 10px", borderRadius: 12, background: home ? "#2E7D46" : "#1B5E9B", color: "#fff" }}>{home ? "À domicile" : "À l'extérieur"}</span>
+            {cancelled ? <span style={{ fontSize: 12, fontWeight: 800, padding: "4px 10px", borderRadius: 12, background: "#9AA0A8", color: "#fff" }}>Annulé{f(s, "Motif annulation") ? " · " + f(s, "Motif annulation") : ""}</span>
+              : !pointed && <span style={{ fontSize: 12, fontWeight: 800, padding: "4px 10px", borderRadius: 12, background: "rgba(255,255,255,.14)", color: "#fff" }}>{when}</span>}
+          </div>
+          <div style={{ fontSize: 15, color: "#D5D8DD", fontWeight: 600 }}>{longDay(date)}{f(s, "Heure") ? " · " + f(s, "Heure").replace(":", "h") : ""}</div>
+          <div style={{ fontSize: 30, fontWeight: 800, lineHeight: 1.1 }}>VHB <span style={{ color: YELLOW, fontSize: 20, verticalAlign: "middle", margin: "0 6px" }}>vs</span> {adv}</div>
+          {pointed && vhb != null && sa != null && <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 4, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 40, fontWeight: 800, letterSpacing: ".02em" }}>{vhb} <span style={{ color: "#8A8F98" }}>–</span> {sa}</span>
+            {res && <span style={{ fontSize: 13, fontWeight: 800, padding: "5px 12px", borderRadius: 12, background: resTone[0], color: resTone[1] }}>{res}</span>}
+          </div>}
+        </div>
+      </div>
+
+      {edit && <div className="card" style={{ display: "flex", flexDirection: "column", gap: 10, borderLeft: "4px solid " + YELLOW }}>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ flex: "1 1 150px" }}><label className="lbl" htmlFor="mp-d">Date</label><input id="mp-d" className="inp" type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></div>
+          <div style={{ flex: "1 1 110px" }}><label className="lbl" htmlFor="mp-h">Heure</label><input id="mp-h" className="inp" type="time" value={form.heure} onChange={(e) => setForm({ ...form, heure: e.target.value })} /></div>
+        </div>
+        <div><label className="lbl" htmlFor="mp-a">Adversaire</label><input id="mp-a" className="inp" value={form.adv} onChange={(e) => setForm({ ...form, adv: e.target.value })} /></div>
+        <div role="group" aria-label="Lieu" style={{ display: "inline-flex", gap: 4, background: "#E9EBEF", borderRadius: 30, padding: 4, alignSelf: "flex-start" }}>
+          {[[true, "🏠 À domicile"], [false, "✈️ À l'extérieur"]].map(([v, l]) => <button key={l} type="button" aria-pressed={form.home === v} onClick={() => setForm({ ...form, home: v })} style={{ minHeight: 36, padding: "0 14px", border: "none", borderRadius: 30, cursor: "pointer", fontFamily: "inherit", fontSize: 13, fontWeight: 800, background: form.home === v ? BLACK : "transparent", color: form.home === v ? "#fff" : "#3A3F47" }}>{l}</button>)}
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn btn-red" disabled={busy} onClick={save}>{busy ? "Enregistrement…" : "Enregistrer"}</button>
+          <button className="btn btn-ghost" onClick={() => setEdit(false)}>Annuler</button>
+        </div>
+      </div>}
+
+      {!cancelled && <div className="card" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+          <span style={{ ...lbl, flex: 1 }}>FEUILLE DE MATCH</span>
+          {pointed && sheet && <span style={{ fontSize: 13, fontWeight: 800 }}>{sheet.length} joueur(s)</span>}
+        </div>
+        {!pointed && <div style={{ fontSize: 13.5, color: MUT }}>{date > today ? "Elle se remplit le jour du match : tu cocheras les joueurs inscrits sur la feuille et le score. " : "Pas encore remplie. "}{roster.length} joueur(s) dans l'effectif de {teamName} à cette date.</div>}
+        {pointed && !sheet && <div style={{ fontSize: 13.5, color: MUT }}>Chargement…</div>}
+        {pointed && sheet && !sheet.length && <div style={{ fontSize: 13.5, color: MUT }}>Aucun joueur coché.</div>}
+        {pointed && sheet && sheet.length > 0 && <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 8 }}>
+          {sheet.map((p) => <button key={p.id} onClick={() => setCard(p.id)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", border: "1px solid #ECEEF1", borderRadius: 14, background: "#fff", cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
+            <span style={{ width: 32, height: 32, borderRadius: 16, background: "#FCE9DE", color: "#8A2807", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800, flex: "0 0 auto" }}>{initials(p)}</span>
+            <span style={{ fontSize: 13.5, fontWeight: 700, color: TEXT, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pName(p)}</span>
+          </button>)}
+        </div>}
+        {res === "Victoire" && sheet && sheet.length > 0 && <div style={{ fontSize: 12.5, color: "#1F5C30", fontWeight: 700 }}>Victoire : prime de victoire pour les joueurs de la feuille.</div>}
+      </div>}
+
+      {canPoint && !pointed && !cancelled && (!cx ? <button className="btn btn-ghost" style={{ alignSelf: "flex-start" }} onClick={() => setCx(true)}>Match annulé ou reporté ?</button>
+        : <div className="card" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
+          <div style={{ flex: "1 1 200px" }}><label className="lbl" htmlFor="mx-m">Motif</label>
+            <select id="mx-m" className="sel" value={motif} onChange={(e) => setMotif(e.target.value)}>{["Match reporté", "Gymnase indisponible", "Intempéries", "Autre"].map((m) => <option key={m}>{m}</option>)}</select></div>
+          <button className="btn btn-dark" disabled={busy} onClick={doCancel}>Confirmer l'annulation</button>
+          <button className="btn btn-ghost" onClick={() => setCx(false)}>Non</button>
+        </div>)}
+      {canPoint ? (date <= today || pointed || cancelled) && <div style={{ position: "sticky", bottom: "calc(74px + env(safe-area-inset-bottom))", zIndex: 5 }}>
+        <button className={"btn " + (pointed || cancelled ? "btn-dark" : "btn-red")} onClick={onPointer} style={{ width: "100%", justifyContent: "center", minHeight: 56, fontSize: 16, fontWeight: 800 }}>
+          <i className={"ti " + (pointed ? "ti-pencil" : cancelled ? "ti-eye" : "ti-clipboard-check")} aria-hidden="true" />{pointed ? "Corriger la feuille et le score" : cancelled ? "Voir l'annulation" : "Remplir la feuille de match"}
+        </button>
+      </div> : null}
+      {card && <PlayerCard joueurId={card} teamId={teamOf(s)} backLabel="Fiche match" onClose={() => setCard(null)} />}
     </div>
   );
 }
