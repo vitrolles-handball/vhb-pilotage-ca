@@ -33,6 +33,7 @@ html{overflow-x:clip;}body{margin:0;font-family:'Manrope',system-ui,sans-serif;o
 @keyframes vrise{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:none;}}
 .fade{animation:vfade .4s ease both;}@keyframes vfade{from{opacity:0;}to{opacity:1;}}
 .btn{border:none;border-radius:12px;font-size:13.5px;font-weight:600;cursor:pointer;padding:10px 17px;font-family:inherit;display:inline-flex;align-items:center;gap:7px;transition:transform .15s ease,filter .15s ease;}
+.btn:disabled{opacity:.45;cursor:not-allowed;box-shadow:none;}
 .btn:hover{filter:brightness(1.04);}
 .btn:active{transform:scale(.97);}
 .btn-red{background:#D62828;color:#fff;box-shadow:0 6px 16px rgba(214,40,40,.25);}

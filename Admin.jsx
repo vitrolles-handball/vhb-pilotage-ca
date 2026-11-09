@@ -296,7 +296,7 @@ function UserEditor({ row, d, me, rights, reload, onSelfChanged }) {
       </Section>
       {msg && <div role="status" style={{ fontSize: 13, color: msg.startsWith("Erreur") || msg.startsWith("Envoi") ? RED : OK }}>{msg}</div>}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        {canEdit && <button className="btn btn-red" disabled={!dirty || busy} onClick={save}>{busy ? "…" : "Enregistrer"}</button>}
+        {canEdit && <button className="btn btn-red" disabled={!dirty || busy} onClick={save} title={dirty ? "" : "Coche ou décoche un rôle ou un droit pour pouvoir enregistrer"}>{busy ? "…" : dirty ? "Enregistrer" : "Aucune modification"}</button>}
         {has(rights, "users") && f(u, "Actif") !== false && f(u, "Profil complété") && <button className="btn btn-ghost" disabled={busy} onClick={async () => {
           if (!confirm("Déconnecter " + fullName(u) + " de tous ses appareils ? (téléphone perdu, appareil partagé…) Il devra se reconnecter avec son mot de passe.")) return;
           try { await authApi("logoutAll", { userId: u.id }); setMsg(fullName(u) + " est déconnecté(e) de tous ses appareils."); } catch (e) { setMsg("Impossible : " + e.message); }
