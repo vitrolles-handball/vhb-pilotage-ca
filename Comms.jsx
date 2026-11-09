@@ -3,6 +3,25 @@ import React, { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { db, f, RED, YELLOW, BLACK, TEXT, MUT, BORDER, OK } from "./App.jsx";
 
+// Le bouton « retour » du téléphone ferme la page du dessus (au lieu de quitter l'appli).
+const PAGES = [];
+export function useBackClose(onClose) {
+  const ref = React.useRef(onClose); ref.current = onClose;
+  const tag = React.useRef("vhbpage" + Math.random().toString(36).slice(2, 8));
+  useEffect(() => {
+    const me = tag.current; PAGES.push(me);
+    try { window.history.pushState({ vhbpage: me }, ""); } catch (e) {}
+    const pop = () => { if (PAGES[PAGES.length - 1] === me) { PAGES.pop(); ref.current(); } };
+    const key = (e) => { if (e.key === "Escape" && PAGES[PAGES.length - 1] === me) back(); };
+    window.addEventListener("popstate", pop); window.addEventListener("keydown", key);
+    return () => { window.removeEventListener("popstate", pop); window.removeEventListener("keydown", key); const i = PAGES.indexOf(me); if (i >= 0) PAGES.splice(i, 1); };
+  }, []);
+  const back = () => {
+    try { if (window.history.state && window.history.state.vhbpage === tag.current) { window.history.back(); return; } } catch (e) {}
+    const i = PAGES.indexOf(tag.current); if (i >= 0) PAGES.splice(i, 1); ref.current();
+  };
+  return back;
+}
 const has = (rights, r) => (rights || []).includes("*") || (rights || []).includes(r);
 export const canSend = (rights) => has(rights, "msg") || has(rights, "msgall");
 const fmtDT = (iso) => iso ? new Date(iso).toLocaleString("fr-FR", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
@@ -223,41 +242,48 @@ function ComposeAnnonce({ onClose, onSent }) {
 // =====================================================================================
 // Aide & support
 // =====================================================================================
+// Guide par profil : [nom, icône, couleur, [[titre, texte, icône], …]]
+const ORANGE = "#E8800C";
 const GUIDES = {
-  coach: ["Entraîneur", [
-    ["Pointer une séance", "Espace Sportif › Aujourd'hui : touche la séance. Tout le monde est présent par défaut : touche les absents, puis « Valider ». Ça marche aussi sans réseau, l'envoi se fait au retour du réseau."],
-    ["Pointer un match", "Coche les joueurs de la feuille de match et saisis le score avec + et −. La victoire est déduite du score."],
-    ["Séance supplémentaire, match ajouté", "« Nouveau match » ou « Séance supplémentaire » depuis l'accueil Sportif. Pour un stage, choisis s'il compte dans les primes."],
-    ["Séance annulée", "Ouvre la séance › « Séance annulée ? » et choisis le motif : elle sort du calcul."],
-    ["Mes joueurs", "Onglet Joueurs : l'assiduité du mois de chacun ; touche un joueur pour sa fiche (saison, dernières séances)."],
-    ["Les relances", "Une séance non pointée déclenche un mail le lendemain ; au bout de 3 jours, le directeur sportif est aussi prévenu."],
+  all: ["Pour tous", "ti-users", ORANGE, [
+    ["Première connexion", "Tu reçois un lien personnel par mail ou par WhatsApp, valable 7 jours. Touche-le, choisis ton mot de passe : c'est fait. Tu te connectes ensuite avec ton adresse e-mail.", "ti-key"],
+    ["Installer l'appli", "Un bandeau te le propose une fois connecté. Android et ordinateur (Chrome, Edge) : bouton « Installer ». iPhone et iPad : Safari › Partager › « Sur l'écran d'accueil ». Mac avec Safari : Fichier › « Ajouter au Dock ».", "ti-device-mobile-down"],
+    ["Mes espaces", "En haut de l'écran : Pilotage CA, Sportif, Outils, Admin, selon tes droits. Sur téléphone, touche le nom de l'espace sous « VHB Team » pour en changer ; un point jaune signale ce qui t'attend ailleurs.", "ti-layout-grid"],
+    ["Mot de passe oublié", "Écran de connexion › « Première connexion ou mot de passe oublié ». Le lien reçu par mail est valable 30 minutes.", "ti-lock-question"],
+    ["Annonces et discussions", "Le mégaphone en haut : les annonces reçues (touche « Bien reçu » si on te le demande) et, onglet « Discussions », le fil du staff de chacune de tes équipes.", "ti-speakerphone"],
+    ["Notifications et silence", "Ton avatar › Notifications : période de silence (21h–8h par défaut) et copies par mail.", "ti-bell"],
+    ["Un problème, une idée ?", "Onglet « Signaler un problème » de cette page : décris-le, ajoute une capture si tu peux. Tu suis la réponse dans « Mes demandes ».", "ti-message-report"],
   ]],
-  ds: ["Directeur sportif · primes", [
-    ["Le tableau du mois", "Sportif › Primes : entraînements, matchs, annulées, séances à pointer et le montant de chaque joueur, en direct."],
-    ["Excuser une absence", "Touche le joueur › « Excuser » sur la séance concernée, avec le motif. Le réglage de l'équipe dit si une absence excusée compte comme absence ou ne compte pas."],
-    ["Prime exceptionnelle, régularisation", "Bouton « Prime exceptionnelle ou régularisation » : montant + motif obligatoire. Après validation d'un mois, une correction passe sur le mois suivant."],
-    ["Valider le mois", "Possible quand le mois est terminé et toutes les séances pointées. Les montants sont alors figés."],
-    ["Export", "« Exporter (Excel) » sur le tableau du mois."],
+  coach: ["Entraîneur", "ti-whistle", "#D62828", [
+    ["Pointer un entraînement", "Sportif › Aujourd'hui : touche la séance du jour. Tout le monde est présent par défaut : touche les absents, puis « Valider ». 10 secondes. Ça marche aussi sans réseau, l'envoi se fait au retour du réseau.", "ti-checklist"],
+    ["Pointer un match", "Ouvre le match : coche les joueurs de la feuille de match et saisis le score avec + et −. La victoire est déduite du score.", "ti-trophy"],
+    ["Séance supplémentaire, stage, nouveau match", "Depuis l'accueil Sportif : « Nouveau match » ou « Séance supplémentaire ». Pour un stage, choisis s'il compte dans les primes.", "ti-calendar-plus"],
+    ["Séance annulée", "Ouvre la séance › « Séance annulée ? » et choisis le motif : elle sort du calcul. « Finalement, la séance a eu lieu » la rétablit.", "ti-calendar-off"],
+    ["Corriger un pointage", "Séances : les flèches changent de mois. Une séance reste modifiable tant que le mois de primes n'est pas validé ; ensuite elle est verrouillée.", "ti-pencil"],
+    ["Mes joueurs", "Onglet Joueurs : l'effectif en haut, les renforts en bas, avec l'assiduité du mois. Le badge GB repère les gardiens. Touche un joueur pour sa fiche : saison, 10 dernières séances, poste.", "ti-users-group"],
+    ["Gérer mon équipe", "Séances › « Entraînements récurrents » ou Joueurs › « Ajouter ou modifier des joueurs » : rythme d'entraînement, effectif, statut Effectif ou Renfort, dates d'entrée et de sortie.", "ti-adjustments"],
+    ["Les relances", "Une séance non pointée déclenche un rappel le lendemain ; au bout de 3 jours, le directeur sportif est aussi prévenu.", "ti-alarm"],
   ]],
-  compta: ["Trésorerie · paiements", [
-    ["Où sont les paiements", "Admin › Paiements : les lignes des mois validés, filtrables par mois, équipe, statut et nom."],
-    ["Mettre en paiement, marquer payé", "Coche les lignes (ou « tout sélectionner »), puis « Mettre en paiement » ou « Marquer payé » avec la date, le mode et une référence."],
-    ["Export pour les virements", "« Exporter (Excel) » exporte la liste affichée."],
+  ds: ["Primes", "ti-coin-euro", "#F5C518", [
+    ["Le tableau du mois", "Sportif › Primes : compteurs du mois, puis un bloc Effectif et un bloc Renforts, chacun avec son sous-total. Les montants évoluent en direct tant que le mois est ouvert.", "ti-table"],
+    ["Les règles", "50 € par mois au prorata de la présence (entraînements et matchs), 20 € par victoire pour les joueurs de la feuille de match. Les renforts ne touchent que les primes de victoire. Une séance annulée sort du calcul.", "ti-scale"],
+    ["Excuser une absence", "Touche le joueur › « Excuser » sur la séance concernée, avec le motif.", "ti-user-check"],
+    ["Prime exceptionnelle, régularisation", "Bouton dédié sous le tableau : montant et motif obligatoire. Après validation d'un mois, une correction passe en régularisation sur le mois suivant.", "ti-plus-minus"],
+    ["Valider le mois", "Quand toutes les séances sont pointées : « Valider le mois ». Les montants sont figés et les séances du mois verrouillées.", "ti-circle-check"],
+    ["Export et relevé", "« Exporter (Excel) » pour le tableau du mois, « Relevé annuel » pour le récapitulatif de la saison par joueur.", "ti-file-spreadsheet"],
   ]],
-  admin: ["Administration", [
-    ["Inviter une personne", "Admin › Utilisateurs › « Nouvel utilisateur » : elle reçoit un mail pour créer son mot de passe (lien valable 7 jours)."],
-    ["Rôles et droits", "Admin › Rôles : un rôle = un ensemble de droits, avec une portée (ses équipes / toutes). Des droits peuvent être ajoutés à une personne sur sa fiche."],
-    ["Équipes et effectifs", "Admin › Équipes : staff, joueurs (import par copier-coller Excel), barème des primes, rythme d'entraînement et génération des séances."],
-    ["Support", "Admin › Support : les demandes de tout le monde ; réponds, passe « En cours » puis « Résolu » — la personne est prévenue."],
-    ["Journal", "Admin › Journal : toutes les actions sensibles, avec l'auteur et la date."],
+  compta: ["Trésorerie", "ti-cash", "#3B8A4E", [
+    ["Où sont les paiements", "Sportif › Primes › « Suivi des paiements », ou Admin › Paiements : les lignes des mois validés, filtrables par mois, équipe, statut et nom.", "ti-list-search"],
+    ["Mettre en paiement, marquer payé", "Coche les lignes, puis « Mettre en paiement » ou « Marquer payé » avec la date, le mode et une référence.", "ti-cash-banknote"],
+    ["Export pour les virements", "« Exporter (Excel) » exporte la liste affichée.", "ti-download"],
   ]],
-  all: ["Pour tous", [
-    ["Installer l'appli", "iPhone : Safari › Partager › « Sur l'écran d'accueil ». Android : Chrome › menu ⋮ › « Installer l'application »."],
-    ["Mot de passe oublié", "Sur l'écran de connexion : « Première connexion ou mot de passe oublié » ; le lien reçu par mail est valable 30 minutes."],
-    ["Annonces", "Le mégaphone en haut : les annonces reçues. Si on te demande « Bien reçu », touche le bouton pour confirmer."],
-    ["Discussions", "Dans le mégaphone, onglet « Discussions » : le fil du staff de chacune de tes équipes, et les réponses aux annonces (bouton « Répondre » sous une annonce). Les autres participants reçoivent une notification."],
-    ["Notifications et silence", "Mon espace (ton avatar) › Notifications : période de silence (par défaut 21h–8h) et copies par mail."],
-    ["Un problème ?", "Aide › « Signaler un problème » : décris-le, ajoute une capture si tu peux. Tu suis la réponse dans « Mes demandes »."],
+  admin: ["Administration", "ti-shield-lock", "#16171B", [
+    ["Inviter une personne", "Admin › Utilisateurs › « Nouvel utilisateur » (ou Sportif › Équipes › Gérer l'équipe › « Ajouter un entraîneur »). Indique son téléphone si tu veux l'inviter par WhatsApp. Elle reçoit un mail pour créer son mot de passe.", "ti-user-plus"],
+    ["Inviter par WhatsApp", "Sur la fiche de la personne ou sa ligne de staff : « WhatsApp » ouvre ta conversation avec le message et le lien déjà prêts, il reste à appuyer sur Envoyer. « Copier le lien » pour un SMS. Le lien du mail reste valable.", "ti-brand-whatsapp"],
+    ["Équipes, staff et effectifs", "Sportif › Équipes : « + Nouvelle équipe », puis « Gérer l'équipe » pour le staff, les joueurs (import copier-coller depuis Excel), le rythme et la génération des séances.", "ti-building-community"],
+    ["Poste d'un joueur", "Ouvre la fiche du joueur › menu « Poste ». Gardien = badge GB dans les listes.", "ti-shirt-sport"],
+    ["Rôles et droits", "Admin › Rôles : un rôle est un ensemble de droits, avec une portée (ses équipes ou toutes). Des droits peuvent être ajoutés à une personne sur sa fiche.", "ti-key"],
+    ["Support et journal", "Admin › Support : les demandes de tout le monde (réponds, passe « En cours » puis « Résolu »). Admin › Journal : toutes les actions sensibles, avant → après.", "ti-history"],
   ]],
 };
 const profilesFor = (rights) => {
@@ -292,7 +318,7 @@ export function HelpCenter({ rights, page, initialTab, onClose, onOpenCaGuide, s
   const loadMine = useCallback(async () => { try { setMine((await post("/api/support", { action: "mine" })).items); } catch (e) { setMine([]); } }, []);
   useEffect(() => { if (tab === "demandes") loadMine(); }, [tab, loadMine]);
   const ql = q.trim().toLowerCase();
-  const items = ql ? profiles.flatMap((k) => GUIDES[k][1].map((it) => [k, it])).filter(([, [h, b]]) => (h + " " + b).toLowerCase().includes(ql)) : GUIDES[prof][1].map((it) => [prof, it]);
+  const items = ql ? profiles.flatMap((k) => GUIDES[k][3].map((it) => [k, it])).filter(([, [h, b]]) => (h + " " + b).toLowerCase().includes(ql)) : GUIDES[prof][3].map((it) => [prof, it]);
   const submit = async () => {
     if (form.texte.trim().length < 5) return alert("Décris ton problème ou ta question en quelques mots.");
     setBusy(true);
@@ -306,42 +332,69 @@ export function HelpCenter({ rights, page, initialTab, onClose, onOpenCaGuide, s
     setBusy(false);
   };
   const ST = { "Nouveau": ["#FDECEC", "#9E1B1B"], "En cours": ["#FFF6D6", "#6B4A00"], "Résolu": ["#E7F4EA", "#1F5C30"] };
-  return <Sheet title="Aide & support" onClose={onClose} wide>
-    <Tabs tabs={[["guide", "Guide"], ["signaler", "Signaler un problème"], ["demandes", "Mes demandes"]]} cur={tab} onTab={setTab} />
-    {tab === "guide" && <>
-      <input className="inp" aria-label="Rechercher dans le guide" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher (ex. « pointer », « excuser », « mot de passe »)" />
-      {!ql && <div role="group" aria-label="Profil" style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-        {profiles.map((k) => <button key={k} aria-pressed={prof === k} className={"btn " + (prof === k ? "btn-dark" : "btn-ghost")} style={{ minHeight: 36 }} onClick={() => setProf(k)}>{GUIDES[k][0]}</button>)}
-        {has(rights, "ca") && <button className="btn btn-ghost" style={{ minHeight: 36 }} onClick={onOpenCaGuide}><i className="ti ti-book" aria-hidden="true" />Guide du CA</button>}
-      </div>}
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {items.map(([k, [h, b]], i) => <div key={k + i} style={{ background: "#F7F8FA", borderRadius: 12, padding: "11px 13px" }}>
-          <div style={{ fontSize: 14, fontWeight: 800, color: TEXT }}>{h}{ql && <span style={{ fontWeight: 600, color: MUT, fontSize: 12 }}> · {GUIDES[k][0]}</span>}</div>
-          <div style={{ fontSize: 13.5, color: "#3A3F47", lineHeight: 1.55, marginTop: 2 }}>{b}</div>
+  const back = useBackClose(onClose);
+  useEffect(() => { const o = document.body.style.overflow; document.body.style.overflow = "hidden"; return () => { document.body.style.overflow = o; }; }, []);
+  const card = { background: "#fff", borderRadius: 20, padding: "16px", boxShadow: "0 1px 3px rgba(20,22,30,.06)" };
+  const TABS = [["guide", "Guide", "ti-book-2"], ["signaler", "Signaler un problème", "ti-message-report"], ["demandes", "Mes demandes", "ti-inbox"]];
+  return createPortal(<div role="dialog" aria-modal="true" aria-label="Aide et guide" className="fade" style={{ position: "fixed", inset: 0, zIndex: 215, background: "#F2F3F6", overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
+    <div style={{ backgroundColor: "#E8590C", backgroundImage: "linear-gradient(rgba(28,10,0,.18), rgba(28,10,0,.38)), url(/accent.jpg)", backgroundSize: "cover", backgroundPosition: "center", color: "#fff", padding: "calc(10px + env(safe-area-inset-top)) 16px 22px" }}>
+      <div style={{ maxWidth: 860, margin: "0 auto" }}>
+        <button onClick={back} aria-label="Retour" style={{ display: "inline-flex", alignItems: "center", gap: 10, background: "none", border: "none", color: "#fff", fontFamily: "inherit", fontSize: 15, fontWeight: 800, cursor: "pointer", padding: "8px 4px", minHeight: 44 }}><i className="ti ti-chevron-left" aria-hidden="true" style={{ fontSize: 22 }} />Retour</button>
+        <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 6 }}>
+          <span style={{ width: 60, height: 60, borderRadius: 30, background: YELLOW, color: BLACK, display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto", boxShadow: "0 4px 14px rgba(0,0,0,.18)" }}><i className="ti ti-help" aria-hidden="true" style={{ fontSize: 32 }} /></span>
+          <div><div style={{ fontSize: 26, fontWeight: 800, lineHeight: 1.1 }}>Aide &amp; guide</div><div style={{ fontSize: 14, fontWeight: 600, opacity: .9, marginTop: 4 }}>VHB Team · Tous Hand'semble</div></div>
+        </div>
+        <div role="tablist" style={{ display: "flex", gap: 4, background: "rgba(0,0,0,.25)", borderRadius: 30, padding: 4, marginTop: 16, width: "fit-content", maxWidth: "100%", overflowX: "auto" }}>
+          {TABS.map(([k, l, ic]) => <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)} style={{ minHeight: 38, padding: "0 14px", border: "none", borderRadius: 30, cursor: "pointer", fontFamily: "inherit", fontSize: 13.5, fontWeight: 800, whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 6, background: tab === k ? "#fff" : "transparent", color: tab === k ? BLACK : "#fff" }}><i className={"ti " + ic} aria-hidden="true" />{l}</button>)}
+        </div>
+      </div>
+    </div>
+    <div style={{ maxWidth: 860, margin: "0 auto", padding: "16px 12px calc(40px + env(safe-area-inset-bottom))", display: "flex", flexDirection: "column", gap: 14 }}>
+      {tab === "guide" && <>
+        <div style={{ position: "relative" }}><i className="ti ti-search" aria-hidden="true" style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: MUT, fontSize: 18 }} /><input className="inp" aria-label="Rechercher dans le guide" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher : pointer, excuser, WhatsApp, mot de passe…" style={{ paddingLeft: 40, borderRadius: 16, minHeight: 48, background: "#fff", border: "none", boxShadow: "0 1px 3px rgba(20,22,30,.06)" }} /></div>
+        {!ql && <div role="group" aria-label="Profil" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {profiles.map((k) => { const on = prof === k; const [l, ic, col] = GUIDES[k]; return <button key={k} aria-pressed={on} onClick={() => setProf(k)} style={{ minHeight: 40, padding: "0 14px", borderRadius: 30, cursor: "pointer", fontFamily: "inherit", fontSize: 13.5, fontWeight: 800, display: "inline-flex", alignItems: "center", gap: 7, border: on ? "none" : "1px solid #D9DCE1", background: on ? BLACK : "#fff", color: on ? "#fff" : TEXT }}><i className={"ti " + ic} aria-hidden="true" style={{ color: on ? (col === BLACK ? YELLOW : col) : col }} />{l}</button>; })}
+          {has(rights, "ca") && <button onClick={onOpenCaGuide} style={{ minHeight: 40, padding: "0 14px", borderRadius: 30, cursor: "pointer", fontFamily: "inherit", fontSize: 13.5, fontWeight: 800, display: "inline-flex", alignItems: "center", gap: 7, border: "1px dashed #B8BDC4", background: "transparent", color: TEXT }}><i className="ti ti-book" aria-hidden="true" />Guide du CA</button>}
+        </div>}
+        {!ql && <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "4px 2px" }}><span style={{ width: 5, height: 22, borderRadius: 3, background: GUIDES[prof][2] }} /><span style={{ fontSize: 19, fontWeight: 800, color: TEXT }}>{GUIDES[prof][0]}</span><span style={{ fontSize: 13, color: MUT }}>{GUIDES[prof][3].length} fiches</span></div>}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 340px), 1fr))", gap: 12 }}>
+          {items.map(([k, [h, b, ic]], i) => { const col = GUIDES[k][2]; return <div key={k + i} style={{ ...card, display: "flex", gap: 12, alignItems: "flex-start", borderTop: "4px solid " + col }}>
+            <span style={{ width: 42, height: 42, borderRadius: 14, flex: "0 0 auto", display: "flex", alignItems: "center", justifyContent: "center", background: col === BLACK ? BLACK : col + "22", color: col === BLACK ? YELLOW : col === YELLOW ? "#8A6A00" : col }}><i className={"ti " + (ic || "ti-info-circle")} aria-hidden="true" style={{ fontSize: 22 }} /></span>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 15.5, fontWeight: 800, color: TEXT }}>{h}</div>
+              {ql && <div style={{ fontSize: 11.5, fontWeight: 800, color: MUT, marginTop: 2, letterSpacing: ".04em" }}>{GUIDES[k][0].toUpperCase()}</div>}
+              <div style={{ fontSize: 14, color: "#3A3F47", lineHeight: 1.6, marginTop: 4 }}>{b}</div>
+            </div>
+          </div>; })}
+        </div>
+        {!items.length && <div style={{ ...card, color: MUT, fontSize: 14 }}>Rien trouvé : essaie un autre mot, ou pose ta question dans « Signaler un problème ».</div>}
+        <button onClick={() => setTab("signaler")} style={{ ...card, border: "none", cursor: "pointer", fontFamily: "inherit", textAlign: "left", display: "flex", alignItems: "center", gap: 12, background: BLACK, color: "#fff" }}>
+          <i className="ti ti-message-question" aria-hidden="true" style={{ fontSize: 26, color: YELLOW }} />
+          <span style={{ flex: 1 }}><span style={{ display: "block", fontWeight: 800, fontSize: 15 }}>Tu ne trouves pas ta réponse ?</span><span style={{ fontSize: 13, opacity: .8 }}>Pose ta question, on te répond dans l'appli.</span></span>
+          <i className="ti ti-chevron-right" aria-hidden="true" style={{ fontSize: 20 }} />
+        </button>
+      </>}
+      {tab === "signaler" && <div style={{ ...card, display: "flex", flexDirection: "column", gap: 12, borderTop: "4px solid " + RED }}>{!sessionOk ? <div style={{ fontSize: 13.5, color: "#5C4600", background: "#FFF6D6", borderRadius: 12, padding: 12 }}>Pour envoyer une demande, connecte-toi avec ton mot de passe (bandeau « Créer mon mot de passe »).</div> : <>
+        <div role="group" aria-label="Type" style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{[["Bug", "Un bug", "ti-bug"], ["Question", "Une question", "ti-help"], ["Idée", "Une idée", "ti-bulb"]].map(([k, l, ic]) => <button key={k} aria-pressed={form.type === k} className={"btn " + (form.type === k ? "btn-dark" : "btn-ghost")} onClick={() => setForm({ ...form, type: k })}><i className={"ti " + ic} aria-hidden="true" />{l}</button>)}</div>
+        <div><label className="lbl" htmlFor="sp-t">{form.type === "Bug" ? "Que s'est-il passé ? (ce que tu faisais, ce que tu attendais)" : form.type === "Idée" ? "Ton idée" : "Ta question"}</label><textarea id="sp-t" className="ta" rows={6} value={form.texte} onChange={(e) => setForm({ ...form, texte: e.target.value })} /></div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <label className="btn btn-ghost" style={{ cursor: "pointer" }}><i className="ti ti-camera" aria-hidden="true" />{form.capture ? "Changer la capture" : "Ajouter une capture d'écran"}<input type="file" accept="image/*" style={{ display: "none" }} onChange={async (e) => { const fl = e.target.files && e.target.files[0]; if (fl) { try { setForm({ ...form, capture: await shrinkImage(fl) }); } catch (er) { alert("Image illisible."); } } }} /></label>
+          {form.capture && <><img src={form.capture.preview} alt="Capture jointe" style={{ height: 56, borderRadius: 8, border: "1px solid " + BORDER }} /><button className="btn btn-ghost" onClick={() => setForm({ ...form, capture: null })}>Retirer</button></>}
+        </div>
+        <div style={{ fontSize: 12.5, color: MUT }}>Joints automatiquement : la page « {page} », l'heure et le type d'appareil.</div>
+        <button className="btn btn-red" disabled={busy} onClick={submit} style={{ alignSelf: "flex-start" }}><i className="ti ti-send" aria-hidden="true" />Envoyer</button>
+      </>}</div>}
+      {tab === "demandes" && <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {mine === null && <div style={{ ...card, color: MUT }}>Chargement…</div>}
+        {mine && !mine.length && <div style={{ ...card, color: MUT, fontSize: 14 }}>Aucune demande envoyée.</div>}
+        {(mine || []).map((x) => <div key={x.id} style={{ ...card, display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}><Chip>{x.type}</Chip><span style={{ fontSize: 12.5, color: MUT, flex: 1 }}>{fmtDT(x.date)}{x.page ? " · " + x.page : ""}</span><Chip bg={ST[x.statut][0]} fg={ST[x.statut][1]}>{x.statut}</Chip></div>
+          <div style={{ whiteSpace: "pre-wrap", fontSize: 14, color: TEXT }}>{x.texte}</div>
+          {x.reponse && <div style={{ background: "#F4F8F5", borderRadius: 12, padding: "10px 12px", borderLeft: "3px solid " + OK }}><div style={{ fontSize: 12, fontWeight: 800, color: "#1F5C30" }}>Réponse{x.reponduPar ? " de " + x.reponduPar : ""} · {fmtDT(x.reponduLe)}</div><div style={{ whiteSpace: "pre-wrap", fontSize: 14, marginTop: 2 }}>{x.reponse}</div></div>}
         </div>)}
-        {!items.length && <div style={{ color: MUT, fontSize: 13.5 }}>Rien trouvé : essaie un autre mot, ou pose ta question dans « Signaler un problème ».</div>}
-      </div>
-    </>}
-    {tab === "signaler" && (!sessionOk ? <div style={{ fontSize: 13.5, color: "#5C4600", background: "#FFF6D6", borderRadius: 12, padding: 12 }}>Pour envoyer une demande, connecte-toi avec ton mot de passe (bandeau « Créer mon mot de passe »).</div> : <>
-      <div role="group" aria-label="Type" style={{ display: "flex", gap: 6 }}>{[["Bug", "Un bug"], ["Question", "Une question"], ["Idée", "Une idée"]].map(([k, l]) => <button key={k} aria-pressed={form.type === k} className={"btn " + (form.type === k ? "btn-dark" : "btn-ghost")} onClick={() => setForm({ ...form, type: k })}>{l}</button>)}</div>
-      <div><label className="lbl" htmlFor="sp-t">{form.type === "Bug" ? "Que s'est-il passé ? (ce que tu faisais, ce que tu attendais)" : form.type === "Idée" ? "Ton idée" : "Ta question"}</label><textarea id="sp-t" className="ta" rows={5} value={form.texte} onChange={(e) => setForm({ ...form, texte: e.target.value })} /></div>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-        <label className="btn btn-ghost" style={{ cursor: "pointer" }}><i className="ti ti-camera" aria-hidden="true" />{form.capture ? "Changer la capture" : "Ajouter une capture d'écran"}<input type="file" accept="image/*" style={{ display: "none" }} onChange={async (e) => { const fl = e.target.files && e.target.files[0]; if (fl) { try { setForm({ ...form, capture: await shrinkImage(fl) }); } catch (er) { alert("Image illisible."); } } }} /></label>
-        {form.capture && <><img src={form.capture.preview} alt="Capture jointe" style={{ height: 56, borderRadius: 8, border: "1px solid " + BORDER }} /><button className="btn btn-ghost" onClick={() => setForm({ ...form, capture: null })}>Retirer</button></>}
-      </div>
-      <div style={{ fontSize: 12.5, color: MUT }}>Joints automatiquement : la page « {page} », l'heure et le type d'appareil.</div>
-      <button className="btn btn-red" disabled={busy} onClick={submit} style={{ alignSelf: "flex-start" }}><i className="ti ti-send" aria-hidden="true" />Envoyer</button>
-    </>)}
-    {tab === "demandes" && <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      {mine === null && <div style={{ color: MUT }}>Chargement…</div>}
-      {mine && !mine.length && <div style={{ color: MUT, fontSize: 13.5 }}>Aucune demande envoyée.</div>}
-      {(mine || []).map((x) => <div key={x.id} style={{ background: "#F7F8FA", borderRadius: 14, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 6 }}>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}><Chip>{x.type}</Chip><span style={{ fontSize: 12.5, color: MUT, flex: 1 }}>{fmtDT(x.date)}{x.page ? " · " + x.page : ""}</span><Chip bg={ST[x.statut][0]} fg={ST[x.statut][1]}>{x.statut}</Chip></div>
-        <div style={{ whiteSpace: "pre-wrap", fontSize: 14, color: TEXT }}>{x.texte}</div>
-        {x.reponse && <div style={{ background: "#fff", borderRadius: 10, padding: "9px 11px", borderLeft: "3px solid " + OK }}><div style={{ fontSize: 12, fontWeight: 800, color: "#1F5C30" }}>Réponse{x.reponduPar ? " de " + x.reponduPar : ""} · {fmtDT(x.reponduLe)}</div><div style={{ whiteSpace: "pre-wrap", fontSize: 14, marginTop: 2 }}>{x.reponse}</div></div>}
-      </div>)}
-    </div>}
-  </Sheet>;
+      </div>}
+    </div>
+  </div>, document.body);
 }
 
 // ---------------------------------------------------------------- Admin › Support
