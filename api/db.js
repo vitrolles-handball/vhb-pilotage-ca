@@ -127,6 +127,22 @@ export default async function handler(req, res) {
     } catch (e) {}
     if (!ok) { res.status(403).json({ error: "Ce joueur ne fait partie d'aucune de tes équipes." }); return; }
   }
+  // Séances d'un mois de primes validé : plus de création, modification ni suppression.
+  if (sess && table === "Séances" && isWrite) {
+    let pairs = writeList.map((fl) => [((fl && fl["Équipe"]) || [])[0], String((fl && fl["Date"]) || "").slice(0, 7)]);
+    if (recordId && (action === "update" || action === "delete")) {
+      try { const cur = (await at("GET", encodeURIComponent("Séances") + "/" + encodeURIComponent(recordId))).fields || {}; const t0 = (cur["Équipe"] || [])[0], m0 = String(cur["Date"] || "").slice(0, 7);
+        pairs = pairs.map(([t, m]) => [t || t0, /^\d{4}-\d{2}$/.test(m) ? m : m0]); pairs.push([t0, m0]); } catch (e) {}
+    }
+    pairs = pairs.filter(([t, m]) => t && /^\d{4}-\d{2}$/.test(m));
+    if (pairs.length) {
+      const months = [...new Set(pairs.map((p) => p[1]))];
+      const q = new URLSearchParams({ filterByFormula: "AND({Statut}='Validé', OR(" + months.map((m) => "{Mois}='" + m + "'").join(",") + "))" });
+      const val = (await at("GET", encodeURIComponent("Primes – Mois") + "?" + q.toString())).records || [];
+      const hit = pairs.find(([t, m]) => val.some((v) => (v.fields || {})["Mois"] === m && ((v.fields || {})["Équipe"] || []).includes(t)));
+      if (hit) { res.status(409).json({ error: "Le mois de primes " + hit[1] + " est validé : ses séances ne se modifient plus. Pour corriger un montant, passe par une régularisation (Primes).", code: "locked" }); return; }
+    }
+  }
   if (sess && table === "Séances" && action === "delete" && !canAny(sess, ["plan", "eff"])) { res.status(403).json({ error: "Seul le responsable du planning peut supprimer une séance." }); return; }
   // ---- Portée « ses équipes » : on n'écrit que dans ses équipes.
   if (sess && isWrite && rule && rule.teamField && sess.scope !== "all") {

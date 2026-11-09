@@ -347,38 +347,109 @@ function SeanceBanner({ s, team, n, onClick }) {
   );
 }
 
+// Numéro de semaine ISO (lundi → dimanche).
+function isoWeek(iso) {
+  const d = new Date(iso + "T12:00:00Z"); const day = (d.getUTCDay() + 6) % 7;
+  d.setUTCDate(d.getUTCDate() - day + 3);
+  const y = d.getUTCFullYear(), first = new Date(Date.UTC(y, 0, 4));
+  return 1 + Math.round(((d - first) / 864e5 - 3 + ((first.getUTCDay() + 6) % 7)) / 7);
+}
+const mondayOf = (iso) => { const d = new Date(iso + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7)); return d.toISOString().slice(0, 10); };
+const addD = (iso, n) => { const d = new Date(iso + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+const shortD = (iso) => new Date(iso + "T12:00:00").toLocaleDateString("fr-FR", { day: "numeric", month: "short" }).replace(".", "");
+// Couleurs de la charte par type de séance (liseré gauche).
+const TYPE_TONE = (s) => {
+  const t = f(s, "Type") || "Entraînement";
+  if (f(s, "Statut") === "Annulée") return ["#9AA0A8", "Annulée"];
+  if (t === "Match") return [YELLOW, "Match"];
+  if (t === "Stage") return ["#1B5E9B", "Stage"];
+  if (/suppl/i.test(t)) return [BLACK, "Séance supplémentaire"];
+  return [RED, "Entraînement"];
+};
+
 function SeancesList({ d, mineS, tName, filter, setFilter, onOpen, banner, onManage }) {
   const [month, setMonth] = useState(TODAY().slice(0, 7));
   const cur = TODAY().slice(0, 7);
   const plus = (m, k) => { const [y, mo] = m.split("-").map(Number); const x = new Date(Date.UTC(y, mo - 1 + k, 1)); return x.toISOString().slice(0, 7); };
   const months = [...new Set(d.seances.map((s) => String(f(s, "Date")).slice(0, 7)).concat([plus(cur, -1), cur, plus(cur, 1), plus(cur, 2)]))].sort();
+  const mi = months.indexOf(month);
   const list = mineS.filter((s) => String(f(s, "Date")).startsWith(month)).sort((a, b) => (String(f(a, "Date")) + f(a, "Heure")).localeCompare(String(f(b, "Date")) + f(b, "Heure")));
-  const cnt = (t) => list.filter((s) => f(s, "Type") === t && f(s, "Statut") === "Pointée").length;
-  const ST = { "Pointée": ["#E7F4EA", "#1F5C30"], "Annulée": ["#EEF0F3", MUT], "Prévue": ["#FDECEC", "#9E1B1B"] };
   const today = TODAY();
+  const isTrain = (s) => f(s, "Type") !== "Match";
+  const live = list.filter((s) => f(s, "Statut") !== "Annulée");
+  const kTrain = live.filter(isTrain), kMatch = live.filter((s) => !isTrain(s));
+  const done = (arr) => arr.filter((s) => f(s, "Statut") === "Pointée").length;
+  const late = live.filter((s) => f(s, "Statut") !== "Pointée" && f(s, "Date") < today).length;
+  const wins = kMatch.filter((s) => f(s, "Résultat") === "Victoire").length;
+  // Regroupement par semaine
+  const weeks = [];
+  list.forEach((s) => { const mon = mondayOf(f(s, "Date")); let w = weeks.find((x) => x.mon === mon); if (!w) { w = { mon, items: [] }; weeks.push(w); } w.items.push(s); });
+  const Kpi = ({ label, value, sub, tone, alert }) => <div className="card" style={{ borderLeft: "4px solid " + tone, padding: "12px 14px", minWidth: 0 }}>
+    <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".06em", color: MUT }}>{label}</div>
+    <div style={{ fontSize: 24, fontWeight: 800, color: alert ? "#B42318" : TEXT }}>{value}</div>
+    <div style={{ fontSize: 12, color: MUT }}>{sub}</div>
+  </div>;
+  const status = (s) => {
+    const st = f(s, "Statut") || "Prévue", dt = f(s, "Date");
+    if (st === "Annulée") return ["#EEF0F3", MUT, "Annulée" + (f(s, "Motif annulation") ? " · " + f(s, "Motif annulation") : "")];
+    if (st === "Pointée") {
+      if (f(s, "Type") === "Match" && f(s, "Résultat")) { const r = f(s, "Résultat"); return [r === "Victoire" ? "#E7F4EA" : r === "Défaite" ? "#FDECEC" : "#EEF0F3", r === "Victoire" ? "#1F5C30" : r === "Défaite" ? "#9E1B1B" : MUT, r + " " + (f(s, "Score VHB") ?? "") + "-" + (f(s, "Score adverse") ?? "")]; }
+      return ["#E7F4EA", "#1F5C30", (f(s, "Pointages") || []).length + " présents"];
+    }
+    if (dt < today) return ["#FDECEC", "#9E1B1B", "À pointer"];
+    if (dt === today) return ["#FFF6D6", "#6B4A00", "Aujourd'hui"];
+    return ["#F4F5F8", "#3A3F47", "À venir"];
+  };
   return (
     <div className="fade" style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 820 }}>
       {banner}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-        <label htmlFor="sl-m" style={{ fontSize: 13, fontWeight: 700 }}>Mois</label>
-        <select id="sl-m" className="sel" value={month} onChange={(e) => setMonth(e.target.value)} style={{ width: "auto" }}>{months.map((m) => <option key={m} value={m}>{MOIS[Number(m.slice(5)) - 1]} {m.slice(0, 4)}</option>)}</select>
-        <label htmlFor="sl-t" style={{ fontSize: 13, fontWeight: 700 }}>Équipe</label>
-        <select id="sl-t" className="sel" value={filter} onChange={(e) => setFilter(e.target.value)} style={{ width: "auto" }}><option value="all">Toutes</option>{d.teams.map((t) => <option key={t.id} value={t.id}>{f(t, "Nom")}</option>)}</select>
+        <div role="group" aria-label="Mois" style={{ display: "flex", alignItems: "center", gap: 4, background: "#E9EBEF", borderRadius: 30, padding: 4 }}>
+          <button aria-label="Mois précédent" className="btn btn-ghost" disabled={mi <= 0} style={{ minHeight: 36, padding: "0 10px", borderRadius: 30 }} onClick={() => setMonth(months[mi - 1])}><span aria-hidden="true" style={{ fontSize: 20 }}>‹</span></button>
+          <span style={{ fontWeight: 800, fontSize: 14.5, minWidth: 128, textAlign: "center", textTransform: "capitalize" }}>{MOIS[Number(month.slice(5)) - 1]} {month.slice(0, 4)}</span>
+          <button aria-label="Mois suivant" className="btn btn-ghost" disabled={mi >= months.length - 1} style={{ minHeight: 36, padding: "0 10px", borderRadius: 30 }} onClick={() => setMonth(months[mi + 1])}><span aria-hidden="true" style={{ fontSize: 20 }}>›</span></button>
+        </div>
+        {d.teams.length > 1 && <><label htmlFor="sl-t" style={{ position: "absolute", left: -9999 }}>Équipe</label>
+        <select id="sl-t" className="sel" value={filter} onChange={(e) => setFilter(e.target.value)} style={{ width: "auto", minWidth: 140 }}><option value="all">Toutes les équipes</option>{d.teams.map((t) => <option key={t.id} value={t.id}>{f(t, "Nom")}</option>)}</select></>}
         {onManage && <button className="btn btn-dark" style={{ marginLeft: "auto" }} onClick={() => onManage(filter !== "all" ? filter : (d.teams[0] || {}).id, "rythme")}><i className="ti ti-repeat" aria-hidden="true" />Entraînements récurrents</button>}
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
-        <div className="card" style={{ borderLeft: "4px solid " + RED, padding: 12 }}><div style={{ fontSize: 11, fontWeight: 800, color: MUT }}>ENTRAÎNEMENTS</div><div style={{ fontSize: 24, fontWeight: 800 }}>{cnt("Entraînement") + cnt("Entraînement supplémentaire")}</div></div>
-        <div className="card" style={{ borderLeft: "4px solid " + YELLOW, padding: 12 }}><div style={{ fontSize: 11, fontWeight: 800, color: MUT }}>MATCHS</div><div style={{ fontSize: 24, fontWeight: 800 }}>{cnt("Match")}</div></div>
-        <div className="card" style={{ borderLeft: "4px solid #9AA0A8", padding: 12 }}><div style={{ fontSize: 11, fontWeight: 800, color: MUT }}>ANNULÉES</div><div style={{ fontSize: 24, fontWeight: 800 }}>{list.filter((s) => f(s, "Statut") === "Annulée").length}</div></div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
+        <Kpi label="ENTRAÎNEMENTS" value={kTrain.length} sub={done(kTrain) + " pointé(s)"} tone={RED} />
+        <Kpi label="MATCHS" value={kMatch.length} sub={kMatch.length ? wins + " victoire(s)" : "aucun match"} tone={YELLOW} />
+        <Kpi label="À POINTER" value={late} sub={late ? "séance(s) passée(s)" : "tout est à jour"} tone={late ? RED : OK} alert={late > 0} />
+        <Kpi label="ANNULÉES" value={list.length - live.length} sub="hors calcul" tone="#9AA0A8" />
       </div>
-      <div className="card" style={{ padding: 0 }}>
-        {list.map((s) => { const st = f(s, "Statut") || "Prévue"; const late = st === "Prévue" && f(s, "Date") < today; const c = ST[st]; return (
-          <button key={s.id} onClick={() => onOpen(s.id)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", border: "none", borderBottom: "1px solid #F0F1F4", background: "#fff", cursor: "pointer", fontFamily: "inherit", textAlign: "left", flexWrap: "wrap" }}>
-            <span style={{ minWidth: 100, fontWeight: 700, fontSize: 13.5 }}>{dayLabel(f(s, "Date"))}{f(s, "Heure") ? " · " + f(s, "Heure") : ""}</span>
-            <span style={{ flex: "1 1 160px", fontSize: 14 }}>{tName(teamOf(s))} · {f(s, "Type")}{f(s, "Adversaire") ? " vs " + f(s, "Adversaire") : ""}{f(s, "Résultat") ? " · " + f(s, "Résultat") + " " + (f(s, "Score VHB") ?? "") + "-" + (f(s, "Score adverse") ?? "") : ""}</span>
-            <span style={{ fontSize: 12, fontWeight: 800, padding: "4px 9px", borderRadius: 10, background: late ? "#FDECEC" : c[0], color: late ? "#9E1B1B" : c[1] }}>{late ? "À pointer" : st === "Pointée" ? (f(s, "Pointages") || []).length + " présents" : st === "Annulée" ? "Annulée" + (f(s, "Motif annulation") ? " · " + f(s, "Motif annulation") : "") : "Prévue"}</span>
-          </button>); })}
-        {!list.length && <div style={{ padding: 14, fontSize: 13.5, color: MUT }}>Aucune séance ce mois-ci.{onManage ? " Pour créer les entraînements de toute la saison d'un coup, utilise « Entraînements récurrents »." : ""}</div>}
+      {weeks.map((w) => {
+        const sun = addD(w.mon, 6), cw = w.mon <= today && today <= sun;
+        const wl = w.items.filter((s) => f(s, "Statut") !== "Annulée");
+        return <section key={w.mon} aria-label={"Semaine " + isoWeek(w.mon)} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 10, padding: "6px 4px 0", flexWrap: "wrap" }}>
+            <span style={{ fontSize: 15, fontWeight: 800, color: TEXT }}>Semaine {isoWeek(w.mon)}</span>
+            <span style={{ fontSize: 13, color: MUT }}>du {shortD(w.mon)} au {shortD(sun)}</span>
+            {cw && <span style={{ fontSize: 11, fontWeight: 800, padding: "3px 9px", borderRadius: 10, background: YELLOW, color: BLACK }}>Cette semaine</span>}
+            <span style={{ marginLeft: "auto", fontSize: 12.5, color: MUT }}>{wl.filter(isTrain).length} entraînement(s){wl.some((s) => !isTrain(s)) ? " · " + wl.filter((s) => !isTrain(s)).length + " match(s)" : ""}</span>
+          </div>
+          {w.items.map((s) => {
+            const [tone, tl] = TYPE_TONE(s), [bg, fg, txt] = status(s), dt = f(s, "Date"), isToday = dt === today;
+            const dd = new Date(dt + "T12:00:00");
+            return <button key={s.id} className="card" onClick={() => onOpen(s.id)} style={{ display: "flex", alignItems: "center", gap: 14, textAlign: "left", border: "none", borderLeft: "4px solid " + tone, cursor: "pointer", fontFamily: "inherit", padding: "10px 14px", opacity: f(s, "Statut") === "Annulée" ? .7 : 1, boxShadow: isToday ? "0 0 0 2px " + YELLOW : undefined }}>
+              <span aria-hidden="true" style={{ width: 46, flex: "0 0 auto", textAlign: "center", lineHeight: 1.05 }}>
+                <span style={{ display: "block", fontSize: 11, fontWeight: 800, color: MUT, textTransform: "uppercase" }}>{dd.toLocaleDateString("fr-FR", { weekday: "short" }).replace(".", "")}</span>
+                <span style={{ display: "block", fontSize: 22, fontWeight: 800, color: TEXT }}>{dd.getDate()}</span>
+              </span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: "block", fontSize: 15, fontWeight: 800, color: TEXT, textDecoration: f(s, "Statut") === "Annulée" ? "line-through" : "none" }}>{tl === "Annulée" ? f(s, "Type") : tl}{f(s, "Adversaire") ? " · " + (f(s, "Domicile") ? "vs " : "à ") + f(s, "Adversaire") : ""}</span>
+                <span style={{ display: "block", fontSize: 12.5, color: MUT }}>{[f(s, "Heure") ? f(s, "Heure").replace(":", "h") : null, tName(teamOf(s)), f(s, "Lieu")].filter(Boolean).join(" · ")}</span>
+              </span>
+              <span style={{ fontSize: 12, fontWeight: 800, padding: "5px 10px", borderRadius: 10, background: bg, color: fg, whiteSpace: "nowrap" }}>{txt}</span>
+              <span aria-hidden="true" style={{ color: MUT, fontSize: 18 }}>›</span>
+            </button>;
+          })}
+        </section>;
+      })}
+      {!list.length && <div className="card" style={{ fontSize: 13.5, color: MUT }}>Aucune séance ce mois-ci.{onManage ? " Pour créer les entraînements de toute la saison d'un coup, utilise « Entraînements récurrents »." : ""}</div>}
+      <div style={{ display: "flex", gap: 14, flexWrap: "wrap", fontSize: 12, color: MUT, padding: "0 4px" }}>
+        {[[RED, "Entraînement"], [YELLOW, "Match"], [BLACK, "Supplémentaire"], ["#1B5E9B", "Stage"], ["#9AA0A8", "Annulée"]].map(([c, l]) => <span key={l} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 4, height: 14, borderRadius: 2, background: c }} />{l}</span>)}
       </div>
     </div>
   );
@@ -398,6 +469,12 @@ function PointageView({ s, d, me, rights, onBack, onDone }) {
   const [busy, setBusy] = useState(false);
   const [cancelMode, setCancelMode] = useState(false);
   const [motif, setMotif] = useState("Gymnase indisponible");
+  // Mois de primes validé : la séance est verrouillée (lecture seule).
+  const [lock, setLock] = useState(null);
+  useEffect(() => {
+    callPointage({ action: "etat", seanceId: s.id }).then((j) => { if (j && j.locked) setLock({ at: j.validatedAt, by: j.validatedBy }); }).catch(() => {});
+  }, [s.id]);
+  const lockMsg = (e) => { if (e && e.status === 409 && /valid/i.test(e.message)) { setLock({}); setBusy(false); return true; } return false; };
   // Qui a pointé, et quand (« déjà pointée par Karim le 8 nov. à 19h45 »).
   const [byName, setByName] = useState("");
   const byId = (f(s, "Pointée par") || [])[0];
@@ -427,24 +504,24 @@ function PointageView({ s, d, me, rights, onBack, onDone }) {
       onDone(j.skipped ? j.reason : null);
     } catch (e) {
       if (!e.status) { writeQueue(readQueue().filter((q) => q.seanceId !== s.id).concat(payload)); onDone("Pas de réseau : le pointage est gardé sur le téléphone et partira tout seul dès le retour de la connexion."); }
-      else { alert("Pointage refusé : " + e.message); setBusy(false); }
+      else if (!lockMsg(e)) { alert("Pointage refusé : " + e.message); setBusy(false); }
     }
   };
   const doCancel = async () => {
     setBusy(true);
-    try { await callPointage({ action: "cancel", seanceId: s.id, motif }); onDone(); } catch (e) { alert("Impossible : " + e.message); setBusy(false); }
+    try { await callPointage({ action: "cancel", seanceId: s.id, motif }); onDone(); } catch (e) { if (!lockMsg(e)) { alert("Impossible : " + e.message); setBusy(false); } }
   };
   const reopen = async () => {
     setBusy(true);
-    try { await callPointage({ action: "reopen", seanceId: s.id }); onDone(); } catch (e) { alert("Impossible : " + e.message); setBusy(false); }
+    try { await callPointage({ action: "reopen", seanceId: s.id }); onDone(); } catch (e) { if (!lockMsg(e)) { alert("Impossible : " + e.message); setBusy(false); } }
   };
   const result = isMatch ? (score.vhb > score.adv ? "Victoire" : score.vhb === score.adv ? "Match nul" : "Défaite") : null;
   const stepper = (k, label) => <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
     <div style={{ fontSize: 12, fontWeight: 800, color: MUT }}>{label}</div>
     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-      <button type="button" className="btn btn-ghost" style={{ width: 44, height: 44, justifyContent: "center", padding: 0, fontSize: 22 }} aria-label={"Retirer un but " + label} onClick={() => setScore({ ...score, [k]: Math.max(0, Number(score[k]) - 1) })}>−</button>
-      <input aria-label={"Score " + label} inputMode="numeric" value={score[k]} onChange={(e) => setScore({ ...score, [k]: Number(e.target.value.replace(/\D/g, "") || 0) })} style={{ width: 60, textAlign: "center", fontSize: 30, fontWeight: 800, border: "none", fontFamily: "inherit", background: "transparent" }} />
-      <button type="button" className="btn btn-ghost" style={{ width: 44, height: 44, justifyContent: "center", padding: 0, fontSize: 22 }} aria-label={"Ajouter un but " + label} onClick={() => setScore({ ...score, [k]: Number(score[k]) + 1 })}>+</button>
+      <button type="button" disabled={!!lock} className="btn btn-ghost" style={{ width: 44, height: 44, justifyContent: "center", padding: 0, fontSize: 22 }} aria-label={"Retirer un but " + label} onClick={() => setScore({ ...score, [k]: Math.max(0, Number(score[k]) - 1) })}>−</button>
+      <input aria-label={"Score " + label} disabled={!!lock} inputMode="numeric" value={score[k]} onChange={(e) => setScore({ ...score, [k]: Number(e.target.value.replace(/\D/g, "") || 0) })} style={{ width: 60, textAlign: "center", fontSize: 30, fontWeight: 800, border: "none", fontFamily: "inherit", background: "transparent" }} />
+      <button type="button" disabled={!!lock} className="btn btn-ghost" style={{ width: 44, height: 44, justifyContent: "center", padding: 0, fontSize: 22 }} aria-label={"Ajouter un but " + label} onClick={() => setScore({ ...score, [k]: Number(score[k]) + 1 })}>+</button>
     </div>
   </div>;
   return (
@@ -456,10 +533,15 @@ function PointageView({ s, d, me, rights, onBack, onDone }) {
           <div style={{ fontSize: 13, color: MUT }}>{dayLabel(date)} · {teamName}{pointedTxt}</div>
         </div>
       </div>
+      {lock && <div className="card" role="status" style={{ borderLeft: "4px solid " + BLACK, background: "#F4F5F8", display: "flex", gap: 10, alignItems: "flex-start" }}>
+        <i className="ti ti-lock" aria-hidden="true" style={{ fontSize: 22, marginTop: 2 }} />
+        <div><div style={{ fontWeight: 800 }}>Mois de primes validé{lock.at ? " le " + new Date(lock.at).toLocaleDateString("fr-FR", { day: "numeric", month: "long" }) : ""}{lock.by ? " par " + lock.by : ""} : pointage verrouillé</div>
+        <div style={{ fontSize: 13, color: MUT }}>Tu peux consulter la séance mais plus la modifier. Pour corriger un montant, passe par une régularisation dans Primes.</div></div>
+      </div>}
       {cancelled ? <div className="card" style={{ borderLeft: "4px solid #9AA0A8" }}>
         <div style={{ fontWeight: 800, marginBottom: 4 }}>Séance annulée{f(s, "Motif annulation") ? " · " + f(s, "Motif annulation") : ""}</div>
         <div style={{ fontSize: 13, color: MUT, marginBottom: 10 }}>Elle ne compte pas dans le calcul des primes.</div>
-        <button className="btn btn-ghost" disabled={busy} onClick={reopen}>Finalement, la séance a eu lieu</button>
+        {!lock && <button className="btn btn-ghost" disabled={busy} onClick={reopen}>Finalement, la séance a eu lieu</button>}
       </div> : <>
         {isMatch && <div className="card" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>{stepper("vhb", "VHB")}{stepper("adv", f(s, "Adversaire") ? String(f(s, "Adversaire")).toUpperCase().slice(0, 14) : "ADVERSAIRE")}</div>
@@ -469,10 +551,10 @@ function PointageView({ s, d, me, rights, onBack, onDone }) {
           <div style={{ background: "#E7F4EA", borderRadius: 14, padding: "10px 14px" }}><span style={{ fontSize: 24, fontWeight: 800, color: "#1F5C30" }}>{nPres}</span> <span style={{ fontSize: 13, fontWeight: 700, color: "#1F5C30" }}>{isMatch ? "sur la feuille" : "présents"}</span></div>
           <div style={{ background: "#EEF0F3", borderRadius: 14, padding: "10px 14px" }}><span style={{ fontSize: 24, fontWeight: 800, color: "#3A3F47" }}>{roster.length - nPres}</span> <span style={{ fontSize: 13, fontWeight: 700, color: "#3A3F47" }}>{isMatch ? "non retenus" : "absents"}</span></div>
         </div>
-        <div style={{ fontSize: 13, color: MUT }}>{isMatch ? "Coche les joueurs de la feuille de match, sans limite de nombre. Cocher vaut présence." : "Tout le monde est présent par défaut. Touche un joueur pour le marquer absent."}</div>
+        {!lock && <div style={{ fontSize: 13, color: MUT }}>{isMatch ? "Coche les joueurs de la feuille de match, sans limite de nombre. Cocher vaut présence." : "Tout le monde est présent par défaut. Touche un joueur pour le marquer absent."}</div>}
         {loading ? <div className="card" style={{ color: MUT }}>Chargement du pointage…</div> : <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           {roster.map(({ e, p }) => { const on = sel.has(p.id); return (
-            <button key={p.id} onClick={() => toggle(p.id)} aria-pressed={on} style={{ width: "100%", minHeight: 58, border: "1px solid " + (on ? "#fff" : "#D9DCE1"), background: on ? "#fff" : "#F4F5F8", borderRadius: 14, padding: "8px 12px", display: "flex", alignItems: "center", gap: 12, cursor: "pointer", fontFamily: "inherit", textAlign: "left", boxShadow: on ? "0 1px 3px rgba(20,22,30,.08)" : "none" }}>
+            <button key={p.id} disabled={!!lock} onClick={() => toggle(p.id)} aria-pressed={on} style={{ cursor: lock ? "default" : "pointer", width: "100%", minHeight: 58, border: "1px solid " + (on ? "#fff" : "#D9DCE1"), background: on ? "#fff" : "#F4F5F8", borderRadius: 14, padding: "8px 12px", display: "flex", alignItems: "center", gap: 12, fontFamily: "inherit", textAlign: "left", boxShadow: on ? "0 1px 3px rgba(20,22,30,.08)" : "none" }}>
               <span style={{ width: 38, height: 38, borderRadius: 19, flex: "0 0 auto", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 800, background: on ? "#FCE9DE" : "#E2E5E9", color: on ? "#8A2807" : MUT }}>{initials(p)}</span>
               <span style={{ flex: 1, minWidth: 0 }}><span style={{ display: "block", fontSize: 15, fontWeight: 700, color: TEXT }}>{pName(p)}</span>{f(e, "Statut") === "Renfort" && <span style={{ fontSize: 11.5, fontWeight: 700, color: "#6B4A00" }}>Renfort</span>}</span>
               {isMatch ? <span aria-hidden="true" style={{ width: 26, height: 26, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", background: on ? RED : "#fff", border: "2px solid " + (on ? RED : "#B8BDC4") }}>{on && <i className="ti ti-check" style={{ color: "#fff" }} />}</span>
@@ -480,18 +562,18 @@ function PointageView({ s, d, me, rights, onBack, onDone }) {
             </button>); })}
           {!roster.length && <div className="card" style={{ color: MUT, fontSize: 13.5 }}>Aucun joueur dans l'effectif de l'équipe à cette date. L'effectif se gère dans Admin › Équipes.</div>}
         </div>}
-        {!cancelMode ? <button className="btn btn-ghost" style={{ alignSelf: "flex-start" }} onClick={() => setCancelMode(true)}>Séance annulée ?</button>
+        {lock ? null : !cancelMode ? <button className="btn btn-ghost" style={{ alignSelf: "flex-start" }} onClick={() => setCancelMode(true)}>Séance annulée ?</button>
           : <div className="card" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
             <div style={{ flex: "1 1 200px" }}><label className="lbl" htmlFor="cx-m">Motif</label>
               <select id="cx-m" className="sel" value={motif} onChange={(e) => setMotif(e.target.value)}>{["Gymnase indisponible", "Vacances", "Mise au repos", "Intempéries", "Match reporté", "Autre"].map((m) => <option key={m}>{m}</option>)}</select></div>
             <button className="btn btn-dark" disabled={busy} onClick={doCancel}>Confirmer l'annulation</button>
             <button className="btn btn-ghost" onClick={() => setCancelMode(false)}>Non</button>
           </div>}
-        <div style={{ position: "sticky", bottom: "calc(74px + env(safe-area-inset-bottom))", zIndex: 5 }}>
+        {!lock && <div style={{ position: "sticky", bottom: "calc(74px + env(safe-area-inset-bottom))", zIndex: 5 }}>
           <button className="btn btn-red" disabled={busy || loading} onClick={save} style={{ width: "100%", justifyContent: "center", minHeight: 56, fontSize: 16, fontWeight: 800 }}>
             <i className="ti ti-check" aria-hidden="true" />{busy ? "Enregistrement…" : (isMatch ? "Valider le match · " + nPres + " joueurs" : "Valider · " + nPres + " présents")}
           </button>
-        </div>
+        </div>}
       </>}
     </div>
   );

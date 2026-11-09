@@ -155,6 +155,8 @@ export function PrimesView({ rights, teams, users, initialTeam }) {
   const [extra, setExtra] = useState(null);     // { joueurId? }
   const [annual, setAnnual] = useState(false);
   const [cardOf, setCardOf] = useState(null);
+  const [payView, setPayView] = useState(false);
+  const canPay = ["compta", "valid", "param"].some((r) => has(rights, r));
   const canCorr = has(rights, "corr"), canValid = has(rights, "valid");
   const narrow = useNarrow();
   const [ref, setRef] = useState({ users: users || [], players: [] });
@@ -169,6 +171,10 @@ export function PrimesView({ rights, teams, users, initialTeam }) {
   const pNameOf = (id) => { const p = ref.players.find((x) => x.id === id); return p ? ((f(p, "Prénom") || "") + " " + (f(p, "Nom") || "")).trim() : null; };
   const userName = (id) => { const u = (ref.users || []).find((x) => x.id === id); return u ? ((f(u, "Prénom") || "") + " " + (f(u, "Nom") || "")).trim() || f(u, "Email") : ""; };
 
+  const payToggle = canPay && <div role="group" aria-label="Vue primes" style={{ display: "inline-flex", gap: 4, background: "#E9EBEF", borderRadius: 30, padding: 4, alignSelf: "flex-start" }}>
+    {[[false, "Primes du mois", "ti-calculator"], [true, "Suivi des paiements", "ti-cash"]].map(([v, l, ic]) => <button key={l} aria-pressed={payView === v} onClick={() => setPayView(v)} style={{ minHeight: 36, padding: "0 14px", border: "none", borderRadius: 30, cursor: "pointer", fontFamily: "inherit", fontSize: 13, fontWeight: 800, display: "inline-flex", alignItems: "center", gap: 6, background: payView === v ? BLACK : "transparent", color: payView === v ? "#fff" : "#3A3F47" }}><i className={"ti " + ic} aria-hidden="true" />{l}</button>)}
+  </div>;
+  if (payView) return <div className="fade" style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 1100 }}>{payToggle}<PaymentsPanel rights={rights} /></div>;
   if (!primeTeams.length) return <div className="card" style={{ color: MUT }}>Aucune équipe.</div>;
   const validated = data && data.status === "Validé";
   // Lignes uniformisées (calcul en direct ou lignes figées).
@@ -202,6 +208,7 @@ export function PrimesView({ rights, teams, users, initialTeam }) {
 
   return (
     <div className="fade" style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 1100 }}>
+      {payToggle}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
         {primeTeams.length > 1 && <select className="sel" aria-label="Équipe" value={teamId} onChange={(e) => setTeamId(e.target.value)} style={{ width: "auto", minWidth: 150 }}>
           {primeTeams.map((t) => <option key={t.id} value={t.id}>{f(t, "Nom")}{f(t, "Primes actives") ? "" : " (sans primes)"}</option>)}
