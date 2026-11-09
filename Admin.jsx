@@ -26,7 +26,9 @@ export const RIGHT_GROUPS = [
 const RIGHT_LABEL = Object.fromEntries(RIGHT_GROUPS.flatMap(([, l]) => l));
 export const has = (rights, r) => (rights || []).includes("*") || (rights || []).includes(r);
 export const ADMIN_RIGHTS = ["users", "roles", "eff", "journal", "param", "plan", "compta", "support"];
-export const hasAdminAccess = (rights) => ADMIN_RIGHTS.some((r) => has(rights, r));
+// « Gérer les effectifs » et « Modifier le planning » n'ouvrent l'espace Admin qu'avec la portée « toutes les équipes » :
+// un entraîneur gère son équipe depuis l'espace Sportif (« Gérer l'équipe », « Entraînements récurrents »).
+export const hasAdminAccess = (rights, scope = "all") => ADMIN_RIGHTS.some((r) => has(rights, r) && (scope === "all" || !["eff", "plan"].includes(r)));
 export function adminTabsFor(rights) {
   const t = [];
   if (has(rights, "users")) t.push(["users", "Utilisateurs"]);
@@ -470,7 +472,7 @@ function TeamsPanel({ d, rights, reload }) {
   );
 }
 
-function TeamDetail({ team, d, rights, reload }) {
+function TeamDetail({ team, d, rights, reload, limited }) {
   const canEff = has(rights, "eff"), canParam = has(rights, "param");
   const [edit, setEdit] = useState(false);
   const [form, setForm] = useState({ nom: f(team, "Nom") || "", cat: f(team, "Catégorie") || "", primes: !!f(team, "Primes actives"), pp: f(team, "Prime présence") ?? "", pv: f(team, "Prime victoire") ?? "", exc: f(team, "Excusé compte comme") || "Absence" });
@@ -536,7 +538,7 @@ function TeamDetail({ team, d, rights, reload }) {
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button className="btn btn-red" disabled={busy} onClick={saveTeam}>Enregistrer</button>
             <button className="btn btn-ghost" onClick={() => setEdit(false)}>Annuler</button>
-            {canEff && <button className="btn btn-ghost" style={{ marginLeft: "auto" }} onClick={archive}>Archiver l'équipe</button>}
+            {canEff && !limited && <button className="btn btn-ghost" style={{ marginLeft: "auto" }} onClick={archive}>Archiver l'équipe</button>}
           </div>
         </div>}
       </div>
@@ -676,7 +678,7 @@ function StaffBlock({ team, d, rights, reload }) {
 }
 
 // Fenêtre « Gérer l'équipe » ouverte depuis la vue Club (Sportif) : même écran que Admin › Équipes.
-export function TeamManager({ teamId, rights, onClose, focus }) {
+export function TeamManager({ teamId, rights, onClose, focus, limited }) {
   const [d, reload] = useAdminData(rights);
   // Ouvre directement la bonne partie (« rythme » = entraînements récurrents, « joueurs » = effectif).
   const focused = React.useRef(false);
@@ -694,7 +696,7 @@ export function TeamManager({ teamId, rights, onClose, focus }) {
       {!d.loaded && <div className="card" style={{ color: MUT }}>Chargement…</div>}
       {d.error && <div className="card" style={{ color: "#9E1B1B" }}>{d.error}</div>}
       {d.loaded && !team && !d.error && <div className="card" style={{ color: MUT }}>Équipe introuvable.</div>}
-      {team && <TeamDetail key={team.id} team={team} d={d} rights={rights} reload={reload} />}
+      {team && <TeamDetail key={team.id} team={team} d={d} rights={rights} reload={reload} limited={limited} />}
     </div>
   </div>, document.body);
 }

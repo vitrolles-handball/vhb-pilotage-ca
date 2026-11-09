@@ -109,7 +109,7 @@ export default function SportSpace({ me, rights, scope, teams, view, setView }) 
   if (!d.teams || !d.teams.length) return <div className="card fade" style={{ borderLeft: "4px solid " + YELLOW, maxWidth: 560 }}><div style={{ fontSize: 17, fontWeight: 800, marginBottom: 6 }}>Aucune équipe pour l'instant</div><div style={{ fontSize: 13.5, color: MUT, lineHeight: 1.55 }}>Tu n'es rattaché à aucune équipe. Demande à un responsable de te rattacher à la tienne (Admin › Utilisateurs › ta fiche).</div></div>;
   const pick = filter !== "all" ? filter : null;
   const mId = manage && (manage.id || manage), mFocus = manage && manage.focus;
-  const manageUI = manage && <TeamManager key={mId + (mFocus || "")} teamId={mId} focus={mFocus} rights={rights} onClose={() => { setManage(null); ["Équipes", "Staff", "Effectifs", "Rythmes", "Séances", "Joueurs"].forEach((x) => dbForget(x)); reload(); }} />;
+  const manageUI = manage && <TeamManager key={mId + (mFocus || "")} teamId={mId} focus={mFocus} limited={scope !== "all"} rights={rights} onClose={() => { setManage(null); ["Équipes", "Staff", "Effectifs", "Rythmes", "Séances", "Joueurs"].forEach((x) => dbForget(x)); reload(); }} />;
   const onManage = canManage(rights) && d.teams.length ? (id, fo) => setManage({ id, focus: fo }) : null;
   if (view === "primes") return <PrimesView key={"p" + (pick || "")} rights={rights} teams={d.teams} initialTeam={pick} />;
   if (view === "joueurs") return <><RosterView key={"r" + (pick || "")} teams={d.teams} efx={d.efx} players={d.players} initialTeam={pick} onManage={onManage} />{manageUI}</>;

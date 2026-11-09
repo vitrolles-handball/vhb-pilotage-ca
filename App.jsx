@@ -540,7 +540,7 @@ function Header({ me, space, setSpace, view, setView, outilView, setOutilView, a
   const tabs = space === "outils" ? outilTabs : space === "admin" ? adminTabsFor(rights) : space === "sport" ? sportTabs : caTabs;
   const cur = space === "outils" ? outilView : space === "admin" ? adminView : space === "sport" ? sportView : view;
   const onTab = space === "outils" ? setOutilView : space === "admin" ? setAdminView : space === "sport" ? setSportView : setView;
-  const spaces = [hasRight(rights, "ca") && ["ca", "Pilotage CA", "ti-layout-dashboard"], hasSport(rights) && ["sport", "Sportif", "ti-ball-football"], hasRight(rights, "ca") && ["outils", "Outils", "ti-tools"], hasAdminAccess(rights) && ["admin", "Admin", "ti-shield-lock"]].filter(Boolean);
+  const spaces = [hasRight(rights, "ca") && ["ca", "Pilotage CA", "ti-layout-dashboard"], hasSport(rights) && ["sport", "Sportif", "ti-ball-football"], hasRight(rights, "ca") && ["outils", "Outils", "ti-tools"], hasAdminAccess(rights, sportClub ? "all" : "mine") && ["admin", "Admin", "ti-shield-lock"]].filter(Boolean);
   const [spOpen, setSpOpen] = useState(false);
   const cnt = (k) => Number((counts || {})[k]) || 0;
   const CNT_TXT = { ca: "à traiter (mentions, invitations, signatures)", sport: "séance(s) en retard de pointage", admin: "demande(s) de support nouvelle(s)" };
@@ -3337,8 +3337,8 @@ function BottomNav({ space, view, setView, outilView, setOutilView, setSpace, ad
         <button className={sportView === "seances" ? "on" : ""} onClick={() => setSportView("seances")}><i className="ti ti-calendar" aria-hidden="true" /><span>Séances</span></button>
         <button className={sportView === "joueurs" ? "on" : ""} onClick={() => setSportView("joueurs")}><i className="ti ti-users" aria-hidden="true" /><span>Joueurs</span></button>
         {canPrimes(rights) && <button className={sportView === "primes" ? "on" : ""} onClick={() => setSportView("primes")}><i className="ti ti-coin-euro" aria-hidden="true" /><span>Primes</span></button>}
-        {hasAdminAccess(rights) && <button onClick={() => setSpace("admin")}><i className="ti ti-shield-lock" aria-hidden="true" /><span>Admin</span></button>}
-        {hasRight(rights, "ca") && !(canPrimes(rights) && hasAdminAccess(rights)) && <button onClick={() => setSpace("ca")}><i className="ti ti-layout-dashboard" aria-hidden="true" /><span>CA</span></button>}
+        {hasAdminAccess(rights, sportClub ? "all" : "mine") && <button onClick={() => setSpace("admin")}><i className="ti ti-shield-lock" aria-hidden="true" /><span>Admin</span></button>}
+        {hasRight(rights, "ca") && !(canPrimes(rights) && hasAdminAccess(rights, sportClub ? "all" : "mine")) && <button onClick={() => setSpace("ca")}><i className="ti ti-layout-dashboard" aria-hidden="true" /><span>CA</span></button>}
       </nav>
     );
   }
@@ -3460,7 +3460,7 @@ export default function App() {
       if (fl && /^(annonce|equipe):[A-Za-z0-9]{2,24}$/.test(fl)) setModal({ type: "annonces", fil: fl });
       else if (an) setModal({ type: "annonces", focus: an });
       else if (ai) setModal({ type: "aide", tab: ai === "demandes" ? "demandes" : "guide" });
-      else if (su && hasAdminAccess(rights)) { setSupportFocus(su); setAdminView("support"); setSpace("admin"); }
+      else if (su && hasAdminAccess(rights, access.scope)) { setSupportFocus(su); setAdminView("support"); setSpace("admin"); }
       if (an || ai || su || fl) window.history.replaceState(null, "", window.location.pathname);
     } catch (e) {}
   }, [me && me.id, rights.join(",")]);
@@ -3536,7 +3536,7 @@ export default function App() {
       {modal && modal.type === "meeting" && <NewMeeting onClose={() => setModal(null)} reload={reload} data={data} />}
       {modal && modal.type === "planif" && <PlanificateurCA data={data} onClose={() => setModal(null)} reload={reload} />}
       {modal && modal.type === "meetingDetail" && <MeetingDetail meetingId={modal.id} me={me} data={data} isAdmin={isAdmin} onClose={() => setModal(null)} reload={reload} onStart={() => { setModal(null); setLiveOpen(modal.id); }} onSign={() => { setModal(null); setSignOpen(modal.id); }} />}
-      {modal && modal.type === "profile" && <MonCompte me={me} data={data} onClose={() => setModal(null)} reload={reload} onLogout={logout} onUsers={() => { setModal(null); if (hasAdminAccess(rights)) { setAdminView("users"); setSpace("admin"); } else setView("admin"); }} onHelp={() => setModal({ type: "aide" })} />}
+      {modal && modal.type === "profile" && <MonCompte me={me} data={data} onClose={() => setModal(null)} reload={reload} onLogout={logout} onUsers={() => { setModal(null); if (hasAdminAccess(rights, access.scope)) { setAdminView("users"); setSpace("admin"); } else setView("admin"); }} onHelp={() => setModal({ type: "aide" })} />}
       {modal && modal.type === "cr" && <CRView meetingId={modal.id} data={data} onClose={() => setModal(null)} />}
       {modal && modal.type === "sujetDetail" && <SujetDetail sujetId={modal.id} me={me} data={data} isAdmin={isAdmin} reload={reload} onClose={() => setModal(null)} />}
       {modal && modal.type === "help" && <HelpView onClose={() => setModal(null)} />}

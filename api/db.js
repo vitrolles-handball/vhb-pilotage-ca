@@ -28,9 +28,9 @@ const RULES = {
   "Utilisateurs": { read: ANY, write: ANY /* règles fines plus bas */ },
   "Rôles": { read: ANY, write: ["roles"], strict: true, log: true },
   "Équipes": { read: ANY, write: ["eff", "param"], strict: true, log: true },
-  "Staff": { read: ANY, write: ["users", "eff"], strict: true, log: true },
+  "Staff": { read: ANY, write: ["users", "eff"], strict: true, log: true, teamField: "Équipe" },
   "Joueurs": { read: READ_PLAYERS, write: ["eff"], strict: true, log: true },
-  "Effectifs": { read: READ_PLAYERS, write: ["eff"], strict: true, log: true, teamField: "Équipe" },
+  "Effectifs": { read: READ_PLAYERS, write: ["eff"], strict: true, log: true, teamField: "Équipe", teamRead: "Équipe" },
   "Journal": { read: ["journal"], write: NOBODY, strict: true },
   "Rythmes": { read: ANY, write: ["plan", "eff"], strict: true, log: true, teamField: "Équipe" },
   "Séances": { read: READ_PLAYERS.concat(["plan"]), write: ["point", "plan", "eff"], strict: true, teamField: "Équipe" },
@@ -104,6 +104,29 @@ export default async function handler(req, res) {
   if (sess && table === "Équipes" && isWrite && !can(sess, "eff")) {
     if (action !== "update" || writeList.some((fl) => Object.keys(fl || {}).some((k) => !PRIME_FIELDS.includes(k)))) { res.status(403).json({ error: "Avec le droit « Paramétrer les barèmes », seuls les montants des primes se modifient." }); return; }
   }
+  // Barèmes de primes : toujours le droit « Paramétrer les barèmes », même avec « Gérer les effectifs ».
+  if (sess && table === "Équipes" && isWrite && can(sess, "eff") && !can(sess, "param") && writeList.some((fl) => Object.keys(fl || {}).some((k) => PRIME_FIELDS.includes(k) && k !== "Nom"))) {
+    res.status(403).json({ error: "Les montants des primes demandent le droit « Paramétrer les barèmes »." }); return;
+  }
+  // Portée « ses équipes » : on ne crée ni ne supprime d'équipe, on ne modifie que les siennes.
+  if (sess && table === "Équipes" && isWrite && sess.scope !== "all") {
+    if (action !== "update" || !recordId || !seesTeam(sess, recordId)) { res.status(403).json({ error: "Seules les personnes qui voient toutes les équipes créent ou suppriment une équipe." }); return; }
+    if (writeList.some((fl) => Object.keys(fl || {}).some((k) => ["Archivée", "Saison", "Ordre"].includes(k)))) { res.status(403).json({ error: "Archiver une équipe ou changer sa saison est réservé aux responsables de toutes les équipes." }); return; }
+  }
+  // Portée « ses équipes » : on ne modifie / supprime un joueur que s'il est dans une de ses équipes.
+  if (sess && table === "Joueurs" && (action === "update" || action === "delete") && sess.scope !== "all") {
+    let ok = false;
+    try {
+      const pl = await at("GET", encodeURIComponent("Joueurs") + "/" + encodeURIComponent(recordId));
+      const efIds = (pl.fields || {})["Effectifs"] || [];
+      if (efIds.length) {
+        const q = new URLSearchParams({ filterByFormula: "OR(" + efIds.slice(0, 50).map((id) => "RECORD_ID()='" + id + "'").join(",") + ")" });
+        const ef = await at("GET", encodeURIComponent("Effectifs") + "?" + q.toString());
+        ok = (ef.records || []).some((e) => ((e.fields || {})["Équipe"] || []).some((t) => seesTeam(sess, t)));
+      }
+    } catch (e) {}
+    if (!ok) { res.status(403).json({ error: "Ce joueur ne fait partie d'aucune de tes équipes." }); return; }
+  }
   if (sess && table === "Séances" && action === "delete" && !canAny(sess, ["plan", "eff"])) { res.status(403).json({ error: "Seul le responsable du planning peut supprimer une séance." }); return; }
   // ---- Portée « ses équipes » : on n'écrit que dans ses équipes.
   if (sess && isWrite && rule && rule.teamField && sess.scope !== "all") {
@@ -172,6 +195,13 @@ export default async function handler(req, res) {
         all = all.concat(j.records || []); offset = j.offset;
       } while (offset);
       if (rule.teamRead && sess && sess.scope !== "all") all = all.filter((r) => ((r.fields || {})[rule.teamRead] || []).some((tm) => seesTeam(sess, tm)));
+      // Données des joueurs (souvent mineurs) : avec la portée « ses équipes », seulement les joueurs de ses équipes.
+      if (table === "Joueurs" && sess && sess.scope !== "all") {
+        let ef = [], off2;
+        do { const q = new URLSearchParams({ pageSize: "100" }); q.append("fields[]", "Équipe"); q.append("fields[]", "Joueur"); if (off2) q.set("offset", off2); const j = await at("GET", encodeURIComponent("Effectifs") + "?" + q.toString()); ef = ef.concat(j.records || []); off2 = j.offset; } while (off2);
+        const ok = new Set(ef.filter((e) => ((e.fields || {})["Équipe"] || []).some((tm) => seesTeam(sess, tm))).flatMap((e) => (e.fields || {})["Joueur"] || []));
+        all = all.filter((r) => ok.has(r.id));
+      }
       res.status(200).json({ records: all.map(stripRecord) });
       return;
     }
