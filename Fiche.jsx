@@ -150,7 +150,8 @@ export function RosterView({ teams, efx, players, initialTeam, onManage }) {
     </div>
     {c && <div className="card" style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center", padding: "12px 14px", fontSize: 13.5 }}>
       <span><b>{c.entrainements}</b> entraînement(s)</span><span><b>{c.matchs}</b> match(s)</span><span><b>{c.annulees}</b> annulée(s)</span>
-      {c.aPointer > 0 && <span style={{ color: "#9E1B1B", fontWeight: 800 }}>{c.aPointer} à pointer</span>}
+      {(c.enRetard ?? c.aPointer) > 0 && <span style={{ color: "#9E1B1B", fontWeight: 800 }}>{c.enRetard ?? c.aPointer} à pointer</span>}
+      {c.aVenir > 0 && <span style={{ color: MUT }}>{c.aVenir} à venir</span>}
       <span style={{ marginLeft: "auto" }}>Présence moyenne : <b>{c.comptees ? pct(data.tauxMoyen) : "—"}</b></span>
     </div>}
     {err && <div className="card" style={{ color: "#9E1B1B" }}>{err}</div>}

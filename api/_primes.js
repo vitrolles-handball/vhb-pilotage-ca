@@ -123,6 +123,7 @@ export function computeMonth({ team, month, seances, pointages, effectifs, playe
       entrainements: done.filter((s) => fv(s, "Type") !== "Match").length,
       matchs: done.filter((s) => fv(s, "Type") === "Match").length,
       annulees: cancelled.length, comptees: done.length, aPointer: pending.length,
+      enRetard: today ? pending.filter((s) => String(fv(s, "Date")) < today).length : pending.length, aVenir: today ? pending.filter((s) => String(fv(s, "Date")) >= today).length : 0,
       victoires: done.filter((s) => fv(s, "Type") === "Match" && fv(s, "Résultat") === "Victoire").length,
     },
     seances: inMonth.map((s) => ({ id: s.id, date: fv(s, "Date"), heure: fv(s, "Heure") || "", type: fv(s, "Type"), statut: fv(s, "Statut"), compte: counts(s), adversaire: fv(s, "Adversaire") || "", resultat: fv(s, "Résultat") || "" })),

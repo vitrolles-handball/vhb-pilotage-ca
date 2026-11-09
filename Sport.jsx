@@ -347,38 +347,109 @@ function SeanceBanner({ s, team, n, onClick }) {
   );
 }
 
+// Numéro de semaine ISO (lundi → dimanche).
+function isoWeek(iso) {
+  const d = new Date(iso + "T12:00:00Z"); const day = (d.getUTCDay() + 6) % 7;
+  d.setUTCDate(d.getUTCDate() - day + 3);
+  const y = d.getUTCFullYear(), first = new Date(Date.UTC(y, 0, 4));
+  return 1 + Math.round(((d - first) / 864e5 - 3 + ((first.getUTCDay() + 6) % 7)) / 7);
+}
+const mondayOf = (iso) => { const d = new Date(iso + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7)); return d.toISOString().slice(0, 10); };
+const addD = (iso, n) => { const d = new Date(iso + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+const shortD = (iso) => new Date(iso + "T12:00:00").toLocaleDateString("fr-FR", { day: "numeric", month: "short" }).replace(".", "");
+// Couleurs de la charte par type de séance (liseré gauche).
+const TYPE_TONE = (s) => {
+  const t = f(s, "Type") || "Entraînement";
+  if (f(s, "Statut") === "Annulée") return ["#9AA0A8", "Annulée"];
+  if (t === "Match") return [YELLOW, "Match"];
+  if (t === "Stage") return ["#1B5E9B", "Stage"];
+  if (/suppl/i.test(t)) return [BLACK, "Séance supplémentaire"];
+  return [RED, "Entraînement"];
+};
+
 function SeancesList({ d, mineS, tName, filter, setFilter, onOpen, banner, onManage }) {
   const [month, setMonth] = useState(TODAY().slice(0, 7));
   const cur = TODAY().slice(0, 7);
   const plus = (m, k) => { const [y, mo] = m.split("-").map(Number); const x = new Date(Date.UTC(y, mo - 1 + k, 1)); return x.toISOString().slice(0, 7); };
   const months = [...new Set(d.seances.map((s) => String(f(s, "Date")).slice(0, 7)).concat([plus(cur, -1), cur, plus(cur, 1), plus(cur, 2)]))].sort();
+  const mi = months.indexOf(month);
   const list = mineS.filter((s) => String(f(s, "Date")).startsWith(month)).sort((a, b) => (String(f(a, "Date")) + f(a, "Heure")).localeCompare(String(f(b, "Date")) + f(b, "Heure")));
-  const cnt = (t) => list.filter((s) => f(s, "Type") === t && f(s, "Statut") === "Pointée").length;
-  const ST = { "Pointée": ["#E7F4EA", "#1F5C30"], "Annulée": ["#EEF0F3", MUT], "Prévue": ["#FDECEC", "#9E1B1B"] };
   const today = TODAY();
+  const isTrain = (s) => f(s, "Type") !== "Match";
+  const live = list.filter((s) => f(s, "Statut") !== "Annulée");
+  const kTrain = live.filter(isTrain), kMatch = live.filter((s) => !isTrain(s));
+  const done = (arr) => arr.filter((s) => f(s, "Statut") === "Pointée").length;
+  const late = live.filter((s) => f(s, "Statut") !== "Pointée" && f(s, "Date") < today).length;
+  const wins = kMatch.filter((s) => f(s, "Résultat") === "Victoire").length;
+  // Regroupement par semaine
+  const weeks = [];
+  list.forEach((s) => { const mon = mondayOf(f(s, "Date")); let w = weeks.find((x) => x.mon === mon); if (!w) { w = { mon, items: [] }; weeks.push(w); } w.items.push(s); });
+  const Kpi = ({ label, value, sub, tone, alert }) => <div className="card" style={{ borderLeft: "4px solid " + tone, padding: "12px 14px", minWidth: 0 }}>
+    <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".06em", color: MUT }}>{label}</div>
+    <div style={{ fontSize: 24, fontWeight: 800, color: alert ? "#B42318" : TEXT }}>{value}</div>
+    <div style={{ fontSize: 12, color: MUT }}>{sub}</div>
+  </div>;
+  const status = (s) => {
+    const st = f(s, "Statut") || "Prévue", dt = f(s, "Date");
+    if (st === "Annulée") return ["#EEF0F3", MUT, "Annulée" + (f(s, "Motif annulation") ? " · " + f(s, "Motif annulation") : "")];
+    if (st === "Pointée") {
+      if (f(s, "Type") === "Match" && f(s, "Résultat")) { const r = f(s, "Résultat"); return [r === "Victoire" ? "#E7F4EA" : r === "Défaite" ? "#FDECEC" : "#EEF0F3", r === "Victoire" ? "#1F5C30" : r === "Défaite" ? "#9E1B1B" : MUT, r + " " + (f(s, "Score VHB") ?? "") + "-" + (f(s, "Score adverse") ?? "")]; }
+      return ["#E7F4EA", "#1F5C30", (f(s, "Pointages") || []).length + " présents"];
+    }
+    if (dt < today) return ["#FDECEC", "#9E1B1B", "À pointer"];
+    if (dt === today) return ["#FFF6D6", "#6B4A00", "Aujourd'hui"];
+    return ["#F4F5F8", "#3A3F47", "À venir"];
+  };
   return (
     <div className="fade" style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 820 }}>
       {banner}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-        <label htmlFor="sl-m" style={{ fontSize: 13, fontWeight: 700 }}>Mois</label>
-        <select id="sl-m" className="sel" value={month} onChange={(e) => setMonth(e.target.value)} style={{ width: "auto" }}>{months.map((m) => <option key={m} value={m}>{MOIS[Number(m.slice(5)) - 1]} {m.slice(0, 4)}</option>)}</select>
-        <label htmlFor="sl-t" style={{ fontSize: 13, fontWeight: 700 }}>Équipe</label>
-        <select id="sl-t" className="sel" value={filter} onChange={(e) => setFilter(e.target.value)} style={{ width: "auto" }}><option value="all">Toutes</option>{d.teams.map((t) => <option key={t.id} value={t.id}>{f(t, "Nom")}</option>)}</select>
+        <div role="group" aria-label="Mois" style={{ display: "flex", alignItems: "center", gap: 4, background: "#E9EBEF", borderRadius: 30, padding: 4 }}>
+          <button aria-label="Mois précédent" className="btn btn-ghost" disabled={mi <= 0} style={{ minHeight: 36, padding: "0 10px", borderRadius: 30 }} onClick={() => setMonth(months[mi - 1])}><span aria-hidden="true" style={{ fontSize: 20 }}>‹</span></button>
+          <span style={{ fontWeight: 800, fontSize: 14.5, minWidth: 128, textAlign: "center", textTransform: "capitalize" }}>{MOIS[Number(month.slice(5)) - 1]} {month.slice(0, 4)}</span>
+          <button aria-label="Mois suivant" className="btn btn-ghost" disabled={mi >= months.length - 1} style={{ minHeight: 36, padding: "0 10px", borderRadius: 30 }} onClick={() => setMonth(months[mi + 1])}><span aria-hidden="true" style={{ fontSize: 20 }}>›</span></button>
+        </div>
+        {d.teams.length > 1 && <><label htmlFor="sl-t" style={{ position: "absolute", left: -9999 }}>Équipe</label>
+        <select id="sl-t" className="sel" value={filter} onChange={(e) => setFilter(e.target.value)} style={{ width: "auto", minWidth: 140 }}><option value="all">Toutes les équipes</option>{d.teams.map((t) => <option key={t.id} value={t.id}>{f(t, "Nom")}</option>)}</select></>}
         {onManage && <button className="btn btn-dark" style={{ marginLeft: "auto" }} onClick={() => onManage(filter !== "all" ? filter : (d.teams[0] || {}).id, "rythme")}><i className="ti ti-repeat" aria-hidden="true" />Entraînements récurrents</button>}
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
-        <div className="card" style={{ borderLeft: "4px solid " + RED, padding: 12 }}><div style={{ fontSize: 11, fontWeight: 800, color: MUT }}>ENTRAÎNEMENTS</div><div style={{ fontSize: 24, fontWeight: 800 }}>{cnt("Entraînement") + cnt("Entraînement supplémentaire")}</div></div>
-        <div className="card" style={{ borderLeft: "4px solid " + YELLOW, padding: 12 }}><div style={{ fontSize: 11, fontWeight: 800, color: MUT }}>MATCHS</div><div style={{ fontSize: 24, fontWeight: 800 }}>{cnt("Match")}</div></div>
-        <div className="card" style={{ borderLeft: "4px solid #9AA0A8", padding: 12 }}><div style={{ fontSize: 11, fontWeight: 800, color: MUT }}>ANNULÉES</div><div style={{ fontSize: 24, fontWeight: 800 }}>{list.filter((s) => f(s, "Statut") === "Annulée").length}</div></div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
+        <Kpi label="ENTRAÎNEMENTS" value={kTrain.length} sub={done(kTrain) + " pointé(s)"} tone={RED} />
+        <Kpi label="MATCHS" value={kMatch.length} sub={kMatch.length ? wins + " victoire(s)" : "aucun match"} tone={YELLOW} />
+        <Kpi label="À POINTER" value={late} sub={late ? "séance(s) passée(s)" : "tout est à jour"} tone={late ? RED : OK} alert={late > 0} />
+        <Kpi label="ANNULÉES" value={list.length - live.length} sub="hors calcul" tone="#9AA0A8" />
       </div>
-      <div className="card" style={{ padding: 0 }}>
-        {list.map((s) => { const st = f(s, "Statut") || "Prévue"; const late = st === "Prévue" && f(s, "Date") < today; const c = ST[st]; return (
-          <button key={s.id} onClick={() => onOpen(s.id)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", border: "none", borderBottom: "1px solid #F0F1F4", background: "#fff", cursor: "pointer", fontFamily: "inherit", textAlign: "left", flexWrap: "wrap" }}>
-            <span style={{ minWidth: 100, fontWeight: 700, fontSize: 13.5 }}>{dayLabel(f(s, "Date"))}{f(s, "Heure") ? " · " + f(s, "Heure") : ""}</span>
-            <span style={{ flex: "1 1 160px", fontSize: 14 }}>{tName(teamOf(s))} · {f(s, "Type")}{f(s, "Adversaire") ? " vs " + f(s, "Adversaire") : ""}{f(s, "Résultat") ? " · " + f(s, "Résultat") + " " + (f(s, "Score VHB") ?? "") + "-" + (f(s, "Score adverse") ?? "") : ""}</span>
-            <span style={{ fontSize: 12, fontWeight: 800, padding: "4px 9px", borderRadius: 10, background: late ? "#FDECEC" : c[0], color: late ? "#9E1B1B" : c[1] }}>{late ? "À pointer" : st === "Pointée" ? (f(s, "Pointages") || []).length + " présents" : st === "Annulée" ? "Annulée" + (f(s, "Motif annulation") ? " · " + f(s, "Motif annulation") : "") : "Prévue"}</span>
-          </button>); })}
-        {!list.length && <div style={{ padding: 14, fontSize: 13.5, color: MUT }}>Aucune séance ce mois-ci.{onManage ? " Pour créer les entraînements de toute la saison d'un coup, utilise « Entraînements récurrents »." : ""}</div>}
+      {weeks.map((w) => {
+        const sun = addD(w.mon, 6), cw = w.mon <= today && today <= sun;
+        const wl = w.items.filter((s) => f(s, "Statut") !== "Annulée");
+        return <section key={w.mon} aria-label={"Semaine " + isoWeek(w.mon)} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 10, padding: "6px 4px 0", flexWrap: "wrap" }}>
+            <span style={{ fontSize: 15, fontWeight: 800, color: TEXT }}>Semaine {isoWeek(w.mon)}</span>
+            <span style={{ fontSize: 13, color: MUT }}>du {shortD(w.mon)} au {shortD(sun)}</span>
+            {cw && <span style={{ fontSize: 11, fontWeight: 800, padding: "3px 9px", borderRadius: 10, background: YELLOW, color: BLACK }}>Cette semaine</span>}
+            <span style={{ marginLeft: "auto", fontSize: 12.5, color: MUT }}>{wl.filter(isTrain).length} entraînement(s){wl.some((s) => !isTrain(s)) ? " · " + wl.filter((s) => !isTrain(s)).length + " match(s)" : ""}</span>
+          </div>
+          {w.items.map((s) => {
+            const [tone, tl] = TYPE_TONE(s), [bg, fg, txt] = status(s), dt = f(s, "Date"), isToday = dt === today;
+            const dd = new Date(dt + "T12:00:00");
+            return <button key={s.id} className="card" onClick={() => onOpen(s.id)} style={{ display: "flex", alignItems: "center", gap: 14, textAlign: "left", border: "none", borderLeft: "4px solid " + tone, cursor: "pointer", fontFamily: "inherit", padding: "10px 14px", opacity: f(s, "Statut") === "Annulée" ? .7 : 1, boxShadow: isToday ? "0 0 0 2px " + YELLOW : undefined }}>
+              <span aria-hidden="true" style={{ width: 46, flex: "0 0 auto", textAlign: "center", lineHeight: 1.05 }}>
+                <span style={{ display: "block", fontSize: 11, fontWeight: 800, color: MUT, textTransform: "uppercase" }}>{dd.toLocaleDateString("fr-FR", { weekday: "short" }).replace(".", "")}</span>
+                <span style={{ display: "block", fontSize: 22, fontWeight: 800, color: TEXT }}>{dd.getDate()}</span>
+              </span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: "block", fontSize: 15, fontWeight: 800, color: TEXT, textDecoration: f(s, "Statut") === "Annulée" ? "line-through" : "none" }}>{tl === "Annulée" ? f(s, "Type") : tl}{f(s, "Adversaire") ? " · " + (f(s, "Domicile") ? "vs " : "à ") + f(s, "Adversaire") : ""}</span>
+                <span style={{ display: "block", fontSize: 12.5, color: MUT }}>{[f(s, "Heure") ? f(s, "Heure").replace(":", "h") : null, tName(teamOf(s)), f(s, "Lieu")].filter(Boolean).join(" · ")}</span>
+              </span>
+              <span style={{ fontSize: 12, fontWeight: 800, padding: "5px 10px", borderRadius: 10, background: bg, color: fg, whiteSpace: "nowrap" }}>{txt}</span>
+              <span aria-hidden="true" style={{ color: MUT, fontSize: 18 }}>›</span>
+            </button>;
+          })}
+        </section>;
+      })}
+      {!list.length && <div className="card" style={{ fontSize: 13.5, color: MUT }}>Aucune séance ce mois-ci.{onManage ? " Pour créer les entraînements de toute la saison d'un coup, utilise « Entraînements récurrents »." : ""}</div>}
+      <div style={{ display: "flex", gap: 14, flexWrap: "wrap", fontSize: 12, color: MUT, padding: "0 4px" }}>
+        {[[RED, "Entraînement"], [YELLOW, "Match"], [BLACK, "Supplémentaire"], ["#1B5E9B", "Stage"], ["#9AA0A8", "Annulée"]].map(([c, l]) => <span key={l} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 4, height: 14, borderRadius: 2, background: c }} />{l}</span>)}
       </div>
     </div>
   );
