@@ -2,6 +2,8 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { printReleve } from "./Primes.jsx";
+import { useBackClose } from "./Comms.jsx";
+export { useBackClose };
 import { db, f, RED, YELLOW, BLACK, TEXT, MUT, BORDER, OK } from "./App.jsx";
 
 export const POSTES = ["Gardien", "Ailier gauche", "Arrière gauche", "Demi-centre", "Arrière droit", "Ailier droit", "Pivot"];
@@ -31,24 +33,6 @@ const ETAT = { "Présent": ["#E7F4EA", "#1F5C30"], "Excusé": ["#FFF6D6", "#6B4A
 
 // ---------------------------------------------------------------------------- Fiche joueur (page entière)
 // Le bouton « retour » du téléphone ferme la page du dessus (au lieu de quitter l'appli).
-const PAGES = [];
-export function useBackClose(onClose) {
-  const ref = React.useRef(onClose); ref.current = onClose;
-  const tag = React.useRef("vhbpage" + Math.random().toString(36).slice(2, 8));
-  useEffect(() => {
-    const me = tag.current; PAGES.push(me);
-    try { window.history.pushState({ vhbpage: me }, ""); } catch (e) {}
-    const pop = () => { if (PAGES[PAGES.length - 1] === me) { PAGES.pop(); ref.current(); } };
-    const key = (e) => { if (e.key === "Escape" && PAGES[PAGES.length - 1] === me) back(); };
-    window.addEventListener("popstate", pop); window.addEventListener("keydown", key);
-    return () => { window.removeEventListener("popstate", pop); window.removeEventListener("keydown", key); const i = PAGES.indexOf(me); if (i >= 0) PAGES.splice(i, 1); };
-  }, []);
-  const back = () => {
-    try { if (window.history.state && window.history.state.vhbpage === tag.current) { window.history.back(); return; } } catch (e) {}
-    const i = PAGES.indexOf(tag.current); if (i >= 0) PAGES.splice(i, 1); ref.current();
-  };
-  return back;
-}
 const PAY_TONE = { "Provisoire": ["#E3EEFB", "#1B5E9B"], "Validé": ["#FFF3C4", "#6B4A00"], "Mis en paiement": ["#FDEBD3", "#8A4B00"], "Payé": ["#E2F3E6", "#1F5C30"] };
 const capit = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 const MOIS_CAP = (m) => capit(MOIS_LONG[Number(String(m).slice(5, 7)) - 1]);
