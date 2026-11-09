@@ -115,7 +115,7 @@ export default function SportSpace({ me, rights, scope, teams, view, setView }) 
   const mId = manage && (manage.id || manage), mFocus = manage && manage.focus;
   const manageUI = manage && <TeamManager key={mId + (mFocus || "")} teamId={mId} focus={mFocus} limited={scope !== "all"} rights={rights} onClose={() => { setManage(null); ["Équipes", "Staff", "Effectifs", "Rythmes", "Séances", "Joueurs"].forEach((x) => dbForget(x)); reload(); }} />;
   const onManage = canManage(rights) && d.teams.length ? (id, fo) => setManage({ id, focus: fo }) : null;
-  if (view === "analyse" && !open) return <AnalyseView key={"a" + (pick || "")} teams={d.teams} d={d} initialTeam={pick} onOpenSeance={(id) => setOpen({ seanceId: id })} />;
+  if (view === "analyse" && !open) return <AnalyseView key={"a" + (pick || "")} teams={d.teams} d={d} initialTeam={pick} onOpenSeance={(id) => setOpen({ seanceId: id })} canImport={has(rights, "point")} call={callPointage} onReload={async () => { ["Séances", "Effectifs", "Joueurs"].forEach((x) => dbForget(x)); await reload(); }} />;
   if (view === "joueurs") return <><RosterView key={"r" + (pick || "")} teams={d.teams} efx={d.efx} players={d.players} initialTeam={pick} onManage={onManage} canValidate={has(rights, "eff")} onValidated={() => { dbForget("Effectifs"); reload(); }} />{manageUI}</>;
   const banner = (d.offline || queued > 0) && <div role="status" style={{ background: "#FFF6D6", color: "#5C4600", borderRadius: 14, padding: "10px 14px", fontSize: 13, fontWeight: 700, display: "flex", gap: 8, alignItems: "center" }}>
     <i className="ti ti-wifi-off" aria-hidden="true" />

@@ -45,11 +45,12 @@ function playerTable(ms, d) {
 }
 
 // ------------------------------------------------------------------ Éléments visuels
-function Banner({ title, sub, children }) {
+function Banner({ title, sub, action, children }) {
   return <div style={{ backgroundColor: "#E8590C", backgroundImage: "linear-gradient(rgba(28,10,0,.16), rgba(28,10,0,.38)), url(/accent.jpg)", backgroundSize: "cover", backgroundPosition: "center", color: "#fff", borderRadius: 24, padding: "18px 18px 0", overflow: "hidden" }}>
     <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
       <span aria-hidden="true" style={{ width: 44, height: 44, borderRadius: 22, background: C.black, color: C.yellow, display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}><i className="ti ti-chart-bar" style={{ fontSize: 22 }} /></span>
       <div style={{ minWidth: 0, flex: 1 }}><div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.15 }}>{title}</div><div style={{ fontSize: 13, opacity: .9, fontWeight: 600 }}>{sub}</div></div>
+      {action}
     </div>
     {children}
   </div>;
@@ -178,13 +179,14 @@ export function MatchSheetDetail({ s, F, d, onOpenPlayer }) {
 }
 
 // ------------------------------------------------------------------ Onglet Analyse
-export function AnalyseView({ teams, d, initialTeam, onOpenSeance }) {
+export function AnalyseView({ teams, d, initialTeam, onOpenSeance, canImport, call, onReload }) {
   const withSheets = teams.filter((t) => d.seances.some((s) => (f(s, "Équipe") || []).includes(t.id) && sheetOf(s)));
   const [teamId, setTeamId] = useState(() => (initialTeam && teams.some((t) => t.id === initialTeam) ? initialTeam : (withSheets[0] || teams[0] || {}).id));
   const [tab, setTab] = useState(() => { try { return localStorage.getItem("vhb_analyse_tab") || "equipe"; } catch (e) { return "equipe"; } });
   const [openM, setOpenM] = useState(null);
   const [player, setPlayer] = useState(null);
   const [sort, setSort] = useState("b");
+  const [batch, setBatch] = useState(false);
   const setT = (t) => { setTab(t); setOpenM(null); try { localStorage.setItem("vhb_analyse_tab", t); } catch (e) {} };
   const team = teams.find((t) => t.id === teamId);
   const all = useMemo(() => teamMatches(d, teamId), [d, teamId]);
@@ -199,13 +201,14 @@ export function AnalyseView({ teams, d, initialTeam, onOpenSeance }) {
   const tabs = [["equipe", "Équipe", "ti-users-group"], ["matchs", "Matchs", "ti-ball-football"], ["joueurs", "Joueurs", "ti-list-numbers"]];
   const missing = all.filter((x) => !x.F && f(x.s, "Statut") === "Pointée");
 
-  const header = <Banner title={"Analyse · " + (f(team, "Nom") || "")} sub={(f(team, "Saison") || "") + " · " + n + " feuille" + (n > 1 ? "s" : "") + " de match importée" + (n > 1 ? "s" : "")}>
+  const header = <Banner action={canImport && call ? <button onClick={() => setBatch(true)} style={{ flex: "0 0 auto", border: "none", cursor: "pointer", fontFamily: "inherit", fontSize: 14, fontWeight: 800, padding: "10px 16px", borderRadius: 14, background: C.yellow, color: C.black, display: "inline-flex", alignItems: "center", gap: 8, boxShadow: "0 2px 8px rgba(0,0,0,.18)" }}><i className="ti ti-file-upload" aria-hidden="true" style={{ fontSize: 18 }} />Importer</button> : null} title={"Analyse · " + (f(team, "Nom") || "")} sub={(f(team, "Saison") || "") + " · " + n + " feuille" + (n > 1 ? "s" : "") + " de match importée" + (n > 1 ? "s" : "")}>
     <div style={{ display: "flex", alignItems: "flex-end", gap: 4, marginTop: 14, flexWrap: "wrap" }}>
       {tabs.map(([k, l, ic]) => <button key={k} onClick={() => setT(k)} aria-pressed={tab === k} style={{ border: "none", cursor: "pointer", fontFamily: "inherit", fontSize: 14, fontWeight: 800, padding: "10px 16px", borderRadius: "14px 14px 0 0", background: tab === k ? C.bg : "transparent", color: tab === k ? C.red : "#fff", display: "inline-flex", alignItems: "center", gap: 7 }}><i className={"ti " + ic} aria-hidden="true" />{l}</button>)}
       {teams.length > 1 && <select className="sel" aria-label="Équipe" value={teamId} onChange={(e) => { setTeamId(e.target.value); setOpenM(null); }} style={{ marginLeft: "auto", marginBottom: 8, width: "auto", minWidth: 120, minHeight: 36, borderRadius: 12, border: "none", fontWeight: 800 }}>{teams.map((t) => <option key={t.id} value={t.id}>{f(t, "Nom")}</option>)}</select>}
     </div>
   </Banner>;
 
+  if (batch) return <BatchImport team={team} d={d} call={call} onClose={() => setBatch(false)} onDone={async () => { if (onReload) await onReload(); }} />;
   if (player) return <PlayerCard joueurId={player} teamId={teamId} backLabel="Analyse" onClose={() => setPlayer(null)} />;
 
   let body;
@@ -217,7 +220,7 @@ export function AnalyseView({ teams, d, initialTeam, onOpenSeance }) {
   else if (curM && curM.F) body = <>
     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
       <button className="btn btn-ghost" onClick={() => setOpenM(null)} aria-label="Retour aux matchs" style={{ padding: "8px 10px" }}><i className="ti ti-chevron-left" aria-hidden="true" /></button>
-      <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 800, fontSize: 17 }}>{curM.F.dom ? "VHB – " + curM.F.adv : curM.F.adv + " – VHB"}</div><div style={{ fontSize: 12.5, color: C.mut }}>{curM.F.j} · {dShort(f(curM.s, "Date"))} · {curM.F.dom ? "à domicile" : "à l'extérieur"}</div></div>
+      <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 800, fontSize: 17 }}>{"VHB – " + curM.F.adv}</div><div style={{ fontSize: 12.5, color: C.mut }}>{curM.F.j} · {dShort(f(curM.s, "Date"))} · {curM.F.dom ? "à domicile" : "à l'extérieur"}</div></div>
       {onOpenSeance && <button className="btn btn-ghost" onClick={() => onOpenSeance(curM.s.id)}><i className="ti ti-external-link" aria-hidden="true" />Fiche match</button>}
     </div>
     <div style={{ background: C.black, color: "#fff", borderRadius: 22, padding: "16px 18px", borderLeft: "6px solid " + C.yellow, display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
@@ -439,6 +442,123 @@ export function FeuilleImport({ s, d, roster, call, onDone, onCancel }) {
         </button>
       </div>
     </>}
+  </div>;
+}
+
+// ------------------------------------------------------------------ Import de plusieurs feuilles (depuis l'onglet Analyse)
+const rosterOf = (d, teamId, date) => d.efx.filter((e) => (f(e, "Équipe") || []).includes(teamId) && (!f(e, "Entrée") || f(e, "Entrée") <= date) && (!f(e, "Sortie") || f(e, "Sortie") >= date))
+  .map((e) => d.players.find((p) => p.id === (f(e, "Joueur") || [])[0])).filter(Boolean);
+export function BatchImport({ team, d, call, onClose, onDone }) {
+  const [rows, setRows] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(null);
+  const [done, setDone] = useState(false);
+  const appPlayers = d.players.map((p) => ({ id: p.id, nom: f(p, "Nom") || "", prenom: f(p, "Prénom") || "", licence: f(p, "Licence") || "" }));
+  const nm = (id) => { const p = d.players.find((x) => x.id === id); return p ? ((f(p, "Prénom") || "") + " " + (f(p, "Nom") || "")).trim() : "?"; };
+  const upd = (i, o) => setRows((rs) => rs.map((r, k) => k === i ? { ...r, ...o } : r));
+  const pick = async (files) => {
+    const list = [...(files || [])].filter((x) => /pdf$/i.test(x.name) || x.type === "application/pdf");
+    if (!list.length) return;
+    const start = rows.length;
+    setRows((rs) => rs.concat(list.map((file) => ({ file, status: "lecture" }))));
+    for (let k = 0; k < list.length; k++) {
+      const i = start + k;
+      try {
+        const r = await readFeuille(list[k]);
+        const ui = isUs(r.home) ? 0 : isUs(r.away) ? 1 : -1;
+        if (ui < 0) throw new Error("Vitrolles n'apparaît pas sur cette feuille.");
+        const s = d.seances.find((x) => (f(x, "Équipe") || []).includes(team.id) && f(x, "Type") === "Match" && f(x, "Date") === r.date);
+        const ros = rosterOf(d, team.id, r.date || "");
+        const inRoster = appPlayers.filter((p) => ros.some((x) => x.id === p.id));
+        const map = r.teams[ui].players.map((p) => { const a = matchPlayer(p, inRoster); return a.id ? a : matchPlayer(p, appPlayers); });
+        const sc = ui === 0 ? r.score : [r.score[1], r.score[0]];
+        upd(i, { status: "pret", r, ui, s, map, sc, adv: s ? f(s, "Adversaire") : capName(ui === 0 ? r.away : r.home).replace(/^(Handball Club|Hb Club|Hbc|Club) /i, "") });
+      } catch (e) { upd(i, { status: "erreur", err: e.message || "Lecture impossible." }); }
+    }
+  };
+  const ready = rows.filter((r) => r.status === "pret");
+  const blocked = ready.filter((r) => r.map.some((m) => !m.id));
+  const go = async () => {
+    setBusy(true);
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      if (row.status !== "pret" || row.map.some((m) => !m.id)) continue;
+      upd(i, { status: "import" });
+      try {
+        let sid = row.s && row.s.id;
+        if (!sid) {
+          const fields = { "Libellé": (f(team, "Nom") || "") + " · Match · " + row.r.date, "Équipe": [team.id], "Date": row.r.date, "Heure": row.r.heure || "", "Type": "Match", "Statut": "Prévue", "Compte primes": true, "Adversaire": row.adv || "Adversaire", "Domicile": row.ui === 0 };
+          const j = await db({ action: "create", table: "Séances", fields });
+          sid = ((j.records || [])[0] || {}).id;
+          if (!sid) throw new Error("Création du match impossible.");
+        }
+        const pointed = row.s && f(row.s, "Statut") === "Pointée";
+        const ids = [];
+        const sp = row.r.teams[row.ui].players;
+        for (let k = 0; k < sp.length; k++) {
+          let id = row.map[k].id;
+          if (id === "new") { const parts = sp[k].nom.split(" "); const up = parts.filter((x) => x === x.toUpperCase() && /[A-Z]/.test(x)); const lo = parts.filter((x) => !up.includes(x)); id = (await call({ action: "addPlayer", seanceId: sid, prenom: capName(lo.join(" ")) || "?", nom: capName(up.join(" ")) || sp[k].nom })).joueurId; }
+          ids.push(id && id !== "skip" ? id : null);
+        }
+        const F = buildStored(row.r, row.ui, ids, row.adv);
+        const j = await call({ action: "importSheet", seanceId: sid, feuille: F, presents: ids.filter(Boolean), licences: ids.map((id, k) => id && { joueurId: id, licence: sp[k].licence }).filter(Boolean), applyPresence: !pointed, applyScore: !pointed });
+        upd(i, { status: "ok", msg: j.locked ? "Stats enregistrées (mois validé : présences et score inchangés)" : pointed ? "Stats enregistrées (pointage existant conservé)" : row.s ? "Joueurs cochés, score et stats enregistrés" : "Match créé, joueurs cochés, score et stats enregistrés" });
+      } catch (e) { upd(i, { status: "erreur", err: e.message || "Import impossible." }); }
+    }
+    setBusy(false); setDone(true);
+    await onDone();
+  };
+  const back = () => onClose();
+  return <div className="fade" style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 860, paddingBottom: 100 }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+      <button className="btn btn-ghost" onClick={back} aria-label="Fermer l'import" style={{ padding: "8px 10px" }}><i className="ti ti-x" aria-hidden="true" /></button>
+      <div style={{ fontSize: 18, fontWeight: 800, flex: 1 }}>Importer des feuilles de match · {f(team, "Nom")}</div>
+    </div>
+    <label style={{ ...card, display: "flex", alignItems: "center", gap: 14, padding: rows.length ? "14px 16px" : "28px 18px", border: "2px dashed #F0C49A", background: "#FFF8EF", cursor: busy ? "default" : "pointer", flexDirection: rows.length ? "row" : "column", textAlign: rows.length ? "left" : "center", position: "relative" }}>
+      <span aria-hidden="true" style={{ width: rows.length ? 44 : 60, height: rows.length ? 44 : 60, borderRadius: 30, background: C.orange, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}><i className="ti ti-files" style={{ fontSize: rows.length ? 22 : 30 }} /></span>
+      <span><span style={{ display: "block", fontWeight: 800, fontSize: 16 }}>{rows.length ? "Ajouter d'autres PDF" : "Choisir une ou plusieurs feuilles de match (PDF)"}</span>
+        <span style={{ display: "block", fontSize: 13, color: C.mut, marginTop: 4, maxWidth: 520 }}>Chaque feuille est rattachée au match du même jour. S'il n'existe pas, il est créé. Les matchs déjà pointés gardent leur pointage : seules les stats sont ajoutées.</span></span>
+      <input type="file" multiple accept="application/pdf,.pdf" disabled={busy} onChange={(e) => { pick(e.target.files); e.target.value = ""; }} style={{ position: "absolute", width: 1, height: 1, opacity: 0 }} />
+    </label>
+    {rows.map((row, i) => {
+      const r = row.r, sc = row.sc;
+      const res = sc ? resOf(sc) : null;
+      const bad = row.map ? row.map.filter((m) => !m.id).length : 0, near = row.map ? row.map.filter((m) => m.how === "approché").length : 0;
+      const pointed = row.s && f(row.s, "Statut") === "Pointée";
+      return <div key={i} style={{ ...card, padding: "12px 14px", borderLeft: "5px solid " + (row.status === "erreur" ? C.abs : row.status === "ok" ? C.green : res === "V" ? C.green : res === "N" ? C.yellow : res === "D" ? C.abs : C.grey) }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <div style={{ width: 54, textAlign: "center", flex: "0 0 auto" }}><div style={{ fontSize: 11, fontWeight: 800, color: C.mut }}>{r ? r.journee : ""}</div><div style={{ fontSize: 13, fontWeight: 800 }}>{r && r.date ? dShort(r.date) : "…"}</div></div>
+          <div style={{ flex: "1 1 180px", minWidth: 0 }}>
+            <div style={{ fontWeight: 800, fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r ? "VHB – " + row.adv + (row.ui === 0 ? "" : " (ext.)") : row.file.name}</div>
+            <div style={{ fontSize: 12.5, color: row.status === "erreur" ? "#9E1B1B" : row.status === "ok" ? "#1F5C30" : C.mut, fontWeight: row.status === "erreur" || row.status === "ok" ? 700 : 400 }}>
+              {row.status === "lecture" ? "Lecture du PDF…" : row.status === "erreur" ? row.err : row.status === "import" ? "Import en cours…" : row.status === "ok" ? row.msg
+                : [row.s ? (sheetOf(row.s) ? "feuille déjà importée : sera remplacée" : pointed ? "match déjà pointé : stats ajoutées" : "match trouvé : joueurs cochés + score") : "match à créer", r.teams[row.ui].players.length + " joueurs"].join(" · ")}
+            </div>
+          </div>
+          {sc && <div style={{ textAlign: "right", flex: "0 0 auto" }}><div style={{ fontSize: 20, fontWeight: 800 }}>{sc[0]}–{sc[1]}</div><ResChip s={sc} /></div>}
+        </div>
+        {row.status === "pret" && (bad > 0 || near > 0) && <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 12.5, fontWeight: 800, padding: "4px 10px", borderRadius: 12, background: bad ? "#FDECEC" : "#FFF3C4", color: bad ? "#9E1B1B" : "#6B4A00" }}>{bad ? bad + " joueur(s) à choisir" : near + " nom(s) proche(s) à vérifier"}</span>
+          <button className="btn btn-ghost" onClick={() => setOpen(open === i ? null : i)} style={{ minHeight: 32, fontSize: 12.5 }}>{open === i ? "Fermer" : "Vérifier les joueurs"}</button>
+        </div>}
+        {open === i && row.status === "pret" && <div style={{ marginTop: 10, borderTop: "1px solid " + C.line }}>
+          {r.teams[row.ui].players.map((p, k) => { const m = row.map[k]; if (m.id && m.how !== "approché" && m.how !== "choisi") return null; return <div key={p.licence} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid " + C.line, flexWrap: "wrap" }}>
+            <span style={{ flex: "1 1 150px", fontWeight: 800, fontSize: 13.5 }}>{p.num} · {p.nom}</span>
+            <select className="sel" aria-label={"Joueur de l'appli pour " + p.nom} value={m.id || ""} onChange={(e) => upd(i, { map: row.map.map((x, q) => q === k ? { id: e.target.value || null, how: "choisi" } : x) })} style={{ flex: "0 1 240px", minWidth: 0, minHeight: 38, fontWeight: 700 }}>
+              <option value="">— Choisir le joueur —</option>
+              {[...d.players].sort((a, b) => nm(a.id).localeCompare(nm(b.id), "fr")).map((x) => <option key={x.id} value={x.id}>{nm(x.id)}</option>)}
+              <option value="new">+ Nouveau joueur (renfort à valider)</option>
+              <option value="skip">Ignorer ce joueur</option>
+            </select>
+          </div>; })}
+        </div>}
+      </div>; })}
+    {rows.length > 0 && <div style={{ position: "sticky", bottom: "calc(74px + env(safe-area-inset-bottom))", zIndex: 5, display: "flex", gap: 8 }}>
+      {done && !busy ? <button className="btn btn-dark" onClick={back} style={{ flex: 1, justifyContent: "center", minHeight: 56, fontSize: 16, fontWeight: 800 }}><i className="ti ti-chart-bar" aria-hidden="true" />Voir l'analyse</button>
+        : <button className="btn btn-red" disabled={busy || !ready.length || rows.some((r) => r.status === "lecture")} onClick={go} style={{ flex: 1, justifyContent: "center", minHeight: 56, fontSize: 16, fontWeight: 800 }}>
+          <i className="ti ti-file-check" aria-hidden="true" />{busy ? "Import en cours…" : rows.some((r) => r.status === "lecture") ? "Lecture des feuilles…" : "Importer " + (ready.length - blocked.length) + " feuille" + (ready.length - blocked.length > 1 ? "s" : "") + (blocked.length ? " (" + blocked.length + " à vérifier)" : "")}
+        </button>}
+    </div>}
   </div>;
 }
 
