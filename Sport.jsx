@@ -469,6 +469,12 @@ function PointageView({ s, d, me, rights, onBack, onDone }) {
   const [busy, setBusy] = useState(false);
   const [cancelMode, setCancelMode] = useState(false);
   const [motif, setMotif] = useState("Gymnase indisponible");
+  // Mois de primes validé : la séance est verrouillée (lecture seule).
+  const [lock, setLock] = useState(null);
+  useEffect(() => {
+    callPointage({ action: "etat", seanceId: s.id }).then((j) => { if (j && j.locked) setLock({ at: j.validatedAt, by: j.validatedBy }); }).catch(() => {});
+  }, [s.id]);
+  const lockMsg = (e) => { if (e && e.status === 409 && /valid/i.test(e.message)) { setLock({}); setBusy(false); return true; } return false; };
   // Qui a pointé, et quand (« déjà pointée par Karim le 8 nov. à 19h45 »).
   const [byName, setByName] = useState("");
   const byId = (f(s, "Pointée par") || [])[0];
@@ -498,24 +504,24 @@ function PointageView({ s, d, me, rights, onBack, onDone }) {
       onDone(j.skipped ? j.reason : null);
     } catch (e) {
       if (!e.status) { writeQueue(readQueue().filter((q) => q.seanceId !== s.id).concat(payload)); onDone("Pas de réseau : le pointage est gardé sur le téléphone et partira tout seul dès le retour de la connexion."); }
-      else { alert("Pointage refusé : " + e.message); setBusy(false); }
+      else if (!lockMsg(e)) { alert("Pointage refusé : " + e.message); setBusy(false); }
     }
   };
   const doCancel = async () => {
     setBusy(true);
-    try { await callPointage({ action: "cancel", seanceId: s.id, motif }); onDone(); } catch (e) { alert("Impossible : " + e.message); setBusy(false); }
+    try { await callPointage({ action: "cancel", seanceId: s.id, motif }); onDone(); } catch (e) { if (!lockMsg(e)) { alert("Impossible : " + e.message); setBusy(false); } }
   };
   const reopen = async () => {
     setBusy(true);
-    try { await callPointage({ action: "reopen", seanceId: s.id }); onDone(); } catch (e) { alert("Impossible : " + e.message); setBusy(false); }
+    try { await callPointage({ action: "reopen", seanceId: s.id }); onDone(); } catch (e) { if (!lockMsg(e)) { alert("Impossible : " + e.message); setBusy(false); } }
   };
   const result = isMatch ? (score.vhb > score.adv ? "Victoire" : score.vhb === score.adv ? "Match nul" : "Défaite") : null;
   const stepper = (k, label) => <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
     <div style={{ fontSize: 12, fontWeight: 800, color: MUT }}>{label}</div>
     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-      <button type="button" className="btn btn-ghost" style={{ width: 44, height: 44, justifyContent: "center", padding: 0, fontSize: 22 }} aria-label={"Retirer un but " + label} onClick={() => setScore({ ...score, [k]: Math.max(0, Number(score[k]) - 1) })}>−</button>
-      <input aria-label={"Score " + label} inputMode="numeric" value={score[k]} onChange={(e) => setScore({ ...score, [k]: Number(e.target.value.replace(/\D/g, "") || 0) })} style={{ width: 60, textAlign: "center", fontSize: 30, fontWeight: 800, border: "none", fontFamily: "inherit", background: "transparent" }} />
-      <button type="button" className="btn btn-ghost" style={{ width: 44, height: 44, justifyContent: "center", padding: 0, fontSize: 22 }} aria-label={"Ajouter un but " + label} onClick={() => setScore({ ...score, [k]: Number(score[k]) + 1 })}>+</button>
+      <button type="button" disabled={!!lock} className="btn btn-ghost" style={{ width: 44, height: 44, justifyContent: "center", padding: 0, fontSize: 22 }} aria-label={"Retirer un but " + label} onClick={() => setScore({ ...score, [k]: Math.max(0, Number(score[k]) - 1) })}>−</button>
+      <input aria-label={"Score " + label} disabled={!!lock} inputMode="numeric" value={score[k]} onChange={(e) => setScore({ ...score, [k]: Number(e.target.value.replace(/\D/g, "") || 0) })} style={{ width: 60, textAlign: "center", fontSize: 30, fontWeight: 800, border: "none", fontFamily: "inherit", background: "transparent" }} />
+      <button type="button" disabled={!!lock} className="btn btn-ghost" style={{ width: 44, height: 44, justifyContent: "center", padding: 0, fontSize: 22 }} aria-label={"Ajouter un but " + label} onClick={() => setScore({ ...score, [k]: Number(score[k]) + 1 })}>+</button>
     </div>
   </div>;
   return (
@@ -527,10 +533,15 @@ function PointageView({ s, d, me, rights, onBack, onDone }) {
           <div style={{ fontSize: 13, color: MUT }}>{dayLabel(date)} · {teamName}{pointedTxt}</div>
         </div>
       </div>
+      {lock && <div className="card" role="status" style={{ borderLeft: "4px solid " + BLACK, background: "#F4F5F8", display: "flex", gap: 10, alignItems: "flex-start" }}>
+        <i className="ti ti-lock" aria-hidden="true" style={{ fontSize: 22, marginTop: 2 }} />
+        <div><div style={{ fontWeight: 800 }}>Mois de primes validé{lock.at ? " le " + new Date(lock.at).toLocaleDateString("fr-FR", { day: "numeric", month: "long" }) : ""}{lock.by ? " par " + lock.by : ""} : pointage verrouillé</div>
+        <div style={{ fontSize: 13, color: MUT }}>Tu peux consulter la séance mais plus la modifier. Pour corriger un montant, passe par une régularisation dans Primes.</div></div>
+      </div>}
       {cancelled ? <div className="card" style={{ borderLeft: "4px solid #9AA0A8" }}>
         <div style={{ fontWeight: 800, marginBottom: 4 }}>Séance annulée{f(s, "Motif annulation") ? " · " + f(s, "Motif annulation") : ""}</div>
         <div style={{ fontSize: 13, color: MUT, marginBottom: 10 }}>Elle ne compte pas dans le calcul des primes.</div>
-        <button className="btn btn-ghost" disabled={busy} onClick={reopen}>Finalement, la séance a eu lieu</button>
+        {!lock && <button className="btn btn-ghost" disabled={busy} onClick={reopen}>Finalement, la séance a eu lieu</button>}
       </div> : <>
         {isMatch && <div className="card" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>{stepper("vhb", "VHB")}{stepper("adv", f(s, "Adversaire") ? String(f(s, "Adversaire")).toUpperCase().slice(0, 14) : "ADVERSAIRE")}</div>
@@ -540,10 +551,10 @@ function PointageView({ s, d, me, rights, onBack, onDone }) {
           <div style={{ background: "#E7F4EA", borderRadius: 14, padding: "10px 14px" }}><span style={{ fontSize: 24, fontWeight: 800, color: "#1F5C30" }}>{nPres}</span> <span style={{ fontSize: 13, fontWeight: 700, color: "#1F5C30" }}>{isMatch ? "sur la feuille" : "présents"}</span></div>
           <div style={{ background: "#EEF0F3", borderRadius: 14, padding: "10px 14px" }}><span style={{ fontSize: 24, fontWeight: 800, color: "#3A3F47" }}>{roster.length - nPres}</span> <span style={{ fontSize: 13, fontWeight: 700, color: "#3A3F47" }}>{isMatch ? "non retenus" : "absents"}</span></div>
         </div>
-        <div style={{ fontSize: 13, color: MUT }}>{isMatch ? "Coche les joueurs de la feuille de match, sans limite de nombre. Cocher vaut présence." : "Tout le monde est présent par défaut. Touche un joueur pour le marquer absent."}</div>
+        {!lock && <div style={{ fontSize: 13, color: MUT }}>{isMatch ? "Coche les joueurs de la feuille de match, sans limite de nombre. Cocher vaut présence." : "Tout le monde est présent par défaut. Touche un joueur pour le marquer absent."}</div>}
         {loading ? <div className="card" style={{ color: MUT }}>Chargement du pointage…</div> : <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           {roster.map(({ e, p }) => { const on = sel.has(p.id); return (
-            <button key={p.id} onClick={() => toggle(p.id)} aria-pressed={on} style={{ width: "100%", minHeight: 58, border: "1px solid " + (on ? "#fff" : "#D9DCE1"), background: on ? "#fff" : "#F4F5F8", borderRadius: 14, padding: "8px 12px", display: "flex", alignItems: "center", gap: 12, cursor: "pointer", fontFamily: "inherit", textAlign: "left", boxShadow: on ? "0 1px 3px rgba(20,22,30,.08)" : "none" }}>
+            <button key={p.id} disabled={!!lock} onClick={() => toggle(p.id)} aria-pressed={on} style={{ cursor: lock ? "default" : "pointer", width: "100%", minHeight: 58, border: "1px solid " + (on ? "#fff" : "#D9DCE1"), background: on ? "#fff" : "#F4F5F8", borderRadius: 14, padding: "8px 12px", display: "flex", alignItems: "center", gap: 12, fontFamily: "inherit", textAlign: "left", boxShadow: on ? "0 1px 3px rgba(20,22,30,.08)" : "none" }}>
               <span style={{ width: 38, height: 38, borderRadius: 19, flex: "0 0 auto", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 800, background: on ? "#FCE9DE" : "#E2E5E9", color: on ? "#8A2807" : MUT }}>{initials(p)}</span>
               <span style={{ flex: 1, minWidth: 0 }}><span style={{ display: "block", fontSize: 15, fontWeight: 700, color: TEXT }}>{pName(p)}</span>{f(e, "Statut") === "Renfort" && <span style={{ fontSize: 11.5, fontWeight: 700, color: "#6B4A00" }}>Renfort</span>}</span>
               {isMatch ? <span aria-hidden="true" style={{ width: 26, height: 26, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", background: on ? RED : "#fff", border: "2px solid " + (on ? RED : "#B8BDC4") }}>{on && <i className="ti ti-check" style={{ color: "#fff" }} />}</span>
@@ -551,18 +562,18 @@ function PointageView({ s, d, me, rights, onBack, onDone }) {
             </button>); })}
           {!roster.length && <div className="card" style={{ color: MUT, fontSize: 13.5 }}>Aucun joueur dans l'effectif de l'équipe à cette date. L'effectif se gère dans Admin › Équipes.</div>}
         </div>}
-        {!cancelMode ? <button className="btn btn-ghost" style={{ alignSelf: "flex-start" }} onClick={() => setCancelMode(true)}>Séance annulée ?</button>
+        {lock ? null : !cancelMode ? <button className="btn btn-ghost" style={{ alignSelf: "flex-start" }} onClick={() => setCancelMode(true)}>Séance annulée ?</button>
           : <div className="card" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
             <div style={{ flex: "1 1 200px" }}><label className="lbl" htmlFor="cx-m">Motif</label>
               <select id="cx-m" className="sel" value={motif} onChange={(e) => setMotif(e.target.value)}>{["Gymnase indisponible", "Vacances", "Mise au repos", "Intempéries", "Match reporté", "Autre"].map((m) => <option key={m}>{m}</option>)}</select></div>
             <button className="btn btn-dark" disabled={busy} onClick={doCancel}>Confirmer l'annulation</button>
             <button className="btn btn-ghost" onClick={() => setCancelMode(false)}>Non</button>
           </div>}
-        <div style={{ position: "sticky", bottom: "calc(74px + env(safe-area-inset-bottom))", zIndex: 5 }}>
+        {!lock && <div style={{ position: "sticky", bottom: "calc(74px + env(safe-area-inset-bottom))", zIndex: 5 }}>
           <button className="btn btn-red" disabled={busy || loading} onClick={save} style={{ width: "100%", justifyContent: "center", minHeight: 56, fontSize: 16, fontWeight: 800 }}>
             <i className="ti ti-check" aria-hidden="true" />{busy ? "Enregistrement…" : (isMatch ? "Valider le match · " + nPres + " joueurs" : "Valider · " + nPres + " présents")}
           </button>
-        </div>
+        </div>}
       </>}
     </div>
   );

@@ -37,6 +37,17 @@ const hm = (iso) => new Date(iso).toLocaleTimeString("fr-FR", { hour: "2-digit",
 const dm = (iso) => new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "long", timeZone: "Europe/Paris" });
 async function userName(id) { try { const u = await at("GET", encodeURIComponent("Utilisateurs") + "/" + id); return (((u.fields || {})["Prénom"] || "") + " " + ((u.fields || {})["Nom"] || "")).trim() || "un autre membre"; } catch (e) { return "un autre membre"; } }
 
+const MOIS_L = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
+async function monthLock(team, month) {
+  if (!team || !/^\d{4}-\d{2}$/.test(month)) return null;
+  const q = new URLSearchParams({ filterByFormula: "AND({Mois}='" + month + "', {Statut}='Validé')" });
+  const j = await at("GET", encodeURIComponent("Primes – Mois") + "?" + q.toString());
+  const m = (j.records || []).find((r) => ((r.fields || {})["Équipe"] || []).includes(team));
+  if (!m) return null;
+  const by = ((m.fields || {})["Validé par"] || [])[0];
+  return { at: (m.fields || {})["Validé le"] || null, by: by ? await userName(by) : null, label: MOIS_L[Number(month.slice(5)) - 1] + " " + month.slice(0, 4) };
+}
+
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
   if (req.method !== "POST") { res.status(405).json({ error: "POST uniquement" }); return; }
@@ -50,8 +61,13 @@ export default async function handler(req, res) {
     try { s = await at("GET", T_S + "/" + encodeURIComponent(seanceId)); } catch (e) { res.status(404).json({ error: "Séance introuvable." }); return; }
     const fl = s.fields || {};
     const team = (fl["Équipe"] || [])[0];
-    const okRight = action === "save" ? can(sess, "point") : canAny(sess, ["point", "plan"]);
+    const okRight = action === "save" ? can(sess, "point") : canAny(sess, ["point", "plan", "eff"]);
     if (!okRight || !seesTeam(sess, team)) { res.status(403).json({ error: "Tu ne peux pas pointer les séances de cette équipe." }); return; }
+
+    // Mois de primes validé : la séance est verrouillée (correction = régularisation dans Primes).
+    const lock = await monthLock(team, String(fl["Date"] || "").slice(0, 7));
+    if (action === "etat") { res.status(200).json({ locked: !!lock, validatedAt: lock ? lock.at : null, validatedBy: lock ? lock.by : null }); return; }
+    if (lock) { res.status(409).json({ error: "Le mois de primes de " + lock.label + " est validé" + (lock.at ? " depuis le " + dm(lock.at) : "") + " : cette séance ne peut plus être modifiée. Pour corriger un montant, passe par une régularisation (Primes).", code: "locked" }); return; }
 
     if (action === "cancel") {
       const motif = String(b.motif || "").slice(0, 120) || "Non précisé";
