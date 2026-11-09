@@ -16,6 +16,36 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { db, f, authApi, fullName, Avatar, RED, YELLOW, BLACK, TEXT, MUT, BORDER, OK, VACANCES_DEFAUT } from "./App.jsx";
 
+// ---------------------------------------------------------------------------- Invitation par WhatsApp / lien
+// Le lien est le même que celui du mail (le mail déjà reçu reste valable). WhatsApp s'ouvre avec le message prêt,
+// sur la conversation de la personne si son numéro est connu : il reste à appuyer sur Envoyer.
+export const waPhone = (t) => {
+  let d = String(t || "").replace(/[^\d+]/g, "");
+  if (d.startsWith("+")) d = d.slice(1); else if (d.startsWith("00")) d = d.slice(2); else if (/^0\d{9}$/.test(d)) d = "33" + d.slice(1);
+  return /^\d{8,15}$/.test(d) ? d : "";
+};
+const inviteText = (u, url) => "Bonjour " + (f(u, "Prénom") || "") + " 👋\nTu es invité(e) sur VHB Team, l'appli du club Vitrolles Handball Jeunes.\nCrée ton mot de passe ici (lien personnel, valable 7 jours) :\n" + url + "\nTu te connecteras ensuite avec ton adresse : " + (f(u, "Email") || "");
+export async function inviteWhatsApp(u) {
+  // La fenêtre est ouverte tout de suite (sinon le navigateur la bloque), puis dirigée vers WhatsApp.
+  let w = null; try { w = window.open("", "_blank"); } catch (e) {}
+  try {
+    const r = await authApi("invite", { userId: u.id, noMail: true });
+    const url = "https://wa.me/" + waPhone(f(u, "Téléphone")) + "?text=" + encodeURIComponent(inviteText(u, r.url));
+    if (w) w.location.href = url; else window.location.href = url;
+  } catch (e) { if (w) w.close(); throw e; }
+}
+export async function copyInvite(u) {
+  const r = await authApi("invite", { userId: u.id, noMail: true });
+  try { await navigator.clipboard.writeText(r.url); return true; } catch (e) { window.prompt("Copie ce lien :", r.url); return false; }
+}
+const InviteButtons = ({ u, setMsg, small }) => {
+  const st = small ? { minHeight: 34, padding: "0 10px", fontSize: 12.5 } : undefined;
+  return <>
+    <button className="btn btn-ghost" style={st} onClick={async () => { try { await inviteWhatsApp(u); setMsg("WhatsApp est ouvert avec le message d'invitation" + (waPhone(f(u, "Téléphone")) ? "" : " : choisis le contact de " + fullName(u)) + ". Il reste à appuyer sur Envoyer."); } catch (e) { setMsg("Impossible : " + e.message); } }}><i className="ti ti-brand-whatsapp" aria-hidden="true" style={{ color: "#1E9E4A" }} />WhatsApp</button>
+    <button className="btn btn-ghost" style={st} onClick={async () => { try { const ok = await copyInvite(u); if (ok) setMsg("Lien d'invitation de " + fullName(u) + " copié : colle-le dans un SMS ou un message."); } catch (e) { setMsg("Impossible : " + e.message); } }}><i className="ti ti-link" aria-hidden="true" />Copier le lien</button>
+  </>;
+};
+
 export const RIGHT_GROUPS = [
   ["Pilotage du CA", [["ca", "Voir et utiliser le Pilotage du CA"]]],
   ["Sportif", [["point", "Pointer les séances"], ["eff", "Gérer les équipes et les effectifs"], ["plan", "Modifier le planning des séances"]]],
@@ -303,7 +333,8 @@ function UserEditor({ row, d, me, rights, reload, onSelfChanged }) {
           if (!confirm("Déconnecter " + fullName(u) + " de tous ses appareils ? (téléphone perdu, appareil partagé…) Il devra se reconnecter avec son mot de passe.")) return;
           try { await authApi("logoutAll", { userId: u.id }); setMsg(fullName(u) + " est déconnecté(e) de tous ses appareils."); } catch (e) { setMsg("Impossible : " + e.message); }
         }}><i className="ti ti-device-mobile-off" aria-hidden="true" />Déconnecter de tous ses appareils</button>}
-        {has(rights, "users") && f(u, "Actif") !== false && <button className="btn btn-dark" disabled={busy} onClick={invite}><i className="ti ti-mail" aria-hidden="true" />{f(u, "Profil complété") ? "Renvoyer un lien de connexion" : "Renvoyer l'invitation"}</button>}
+        {has(rights, "users") && f(u, "Actif") !== false && <button className="btn btn-dark" disabled={busy} onClick={invite}><i className="ti ti-mail" aria-hidden="true" />{f(u, "Profil complété") ? "Renvoyer un lien de connexion" : "Renvoyer l'invitation"} par mail</button>}
+        {has(rights, "users") && f(u, "Actif") !== false && !f(u, "Profil complété") && <InviteButtons u={u} setMsg={setMsg} />}
         {canEdit && !isSelf && <button className="btn btn-ghost" disabled={busy} onClick={toggleActif}>{f(u, "Actif") !== false ? "Désactiver" : "Réactiver"}</button>}
       </div>
     </div>
@@ -314,6 +345,7 @@ function NewUser({ d, rights, reload, onDone, onCancel }) {
   const [email, setEmail] = useState("");
   const [prenom, setPrenom] = useState("");
   const [nom, setNom] = useState("");
+  const [tel, setTel] = useState("");
   const [roles, setRoles] = useState([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -324,13 +356,13 @@ function NewUser({ d, rights, reload, onDone, onCancel }) {
     setBusy(true); setErr("");
     try {
       const locked = d.roles.filter(isLocked).map((r) => r.id);
-      const fields = { "Email": mail, "Prénom": prenom.trim(), "Nom": nom.trim(), "Actif": true, "Profil complété": false, "Rôles": roles, "Rôle": roles.some((id) => locked.includes(id)) ? "Admin" : "Équipier" };
+      const fields = { "Email": mail, "Prénom": prenom.trim(), "Nom": nom.trim(), ...(tel.trim() ? { "Téléphone": tel.trim() } : {}), "Actif": true, "Profil complété": false, "Rôles": roles, "Rôle": roles.some((id) => locked.includes(id)) ? "Admin" : "Équipier" };
       const j = await db({ action: "create", table: "Utilisateurs", fields });
       const rec = (j.records || [])[0];
       let note = "";
       if (rec) { try { await authApi("invite", { userId: rec.id }); } catch (e) { note = " (le mail d'invitation n'est pas parti : " + e.message + ")"; } }
       await reload();
-      alert("Accès créé pour " + mail + "." + (note || " Un mail lui permet de choisir son mot de passe."));
+      alert("Accès créé pour " + mail + "." + (note || " Un mail lui permet de choisir son mot de passe.") + " Tu peux aussi lui envoyer l'invitation par WhatsApp depuis sa fiche.");
       onDone(rec && rec.id);
     } catch (e) { setErr(e.message); }
     setBusy(false);
@@ -343,6 +375,7 @@ function NewUser({ d, rights, reload, onDone, onCancel }) {
         <div style={{ flex: 1 }}><label className="lbl" htmlFor="nu-pre">Prénom</label><input id="nu-pre" className="inp" value={prenom} onChange={(e) => setPrenom(e.target.value)} /></div>
         <div style={{ flex: 1 }}><label className="lbl" htmlFor="nu-nom">Nom</label><input id="nu-nom" className="inp" value={nom} onChange={(e) => setNom(e.target.value)} /></div>
       </div>
+      <div><label className="lbl" htmlFor="nu-tel">Téléphone (pour WhatsApp, facultatif)</label><input id="nu-tel" className="inp" type="tel" inputMode="tel" value={tel} onChange={(e) => setTel(e.target.value)} placeholder="06 12 34 56 78" /></div>
       <Section title="RÔLES"><RolesPicker d={d} value={roles} onChange={setRoles} rights={rights} /></Section>
       <div style={{ fontSize: 12.5, color: MUT, lineHeight: 1.5 }}>Tu pourras ensuite la rattacher à ses équipes et ajuster ses droits. Elle reçoit un mail pour choisir son mot de passe (lien valable 7 jours).</div>
       {err && <div role="alert" style={{ color: RED, fontSize: 13 }}>{err}</div>}
@@ -600,7 +633,7 @@ function StaffBlock({ team, d, rights, reload }) {
   const inTeam = new Set(staff.flatMap((s) => f(s, "Personne") || []));
   const candidates = d.users.filter((u) => f(u, "Actif") !== false && !inTeam.has(u.id)).sort((a, b) => fullName(a).localeCompare(fullName(b), "fr"));
   const link = async (uid, name) => db({ action: "create", table: "Staff", fields: { "Libellé": name + " — " + (f(team, "Nom") || ""), "Personne": [uid], "Équipe": [team.id], "Fonction": fn } });
-  const reset = () => { setMode(null); setWho(""); setForm({ prenom: "", nom: "", email: "" }); setFn("Coach 1"); };
+  const reset = () => { setMode(null); setWho(""); setForm({ prenom: "", nom: "", email: "", tel: "" }); setFn("Coach 1"); };
   const addExisting = async () => {
     const u = d.users.find((x) => x.id === who); if (!u) return;
     setBusy(true); setMsg("");
@@ -616,7 +649,7 @@ function StaffBlock({ team, d, rights, reload }) {
     try {
       let uid = exist && exist.id, note = "";
       if (!uid) {
-        const j = await db({ action: "create", table: "Utilisateurs", fields: { "Email": mail, "Prénom": form.prenom.trim(), "Nom": form.nom.trim(), "Actif": true, "Profil complété": false, "Rôles": role ? [role] : [], "Rôle": "Équipier" } });
+        const j = await db({ action: "create", table: "Utilisateurs", fields: { "Email": mail, "Prénom": form.prenom.trim(), "Nom": form.nom.trim(), ...((form.tel || "").trim() ? { "Téléphone": form.tel.trim() } : {}), "Actif": true, "Profil complété": false, "Rôles": role ? [role] : [], "Rôle": "Équipier" } });
         uid = ((j.records || [])[0] || {}).id;
         try { await authApi("invite", { userId: uid }); note = " Une invitation lui a été envoyée par mail (lien valable 7 jours)."; } catch (e) { note = " Attention : le mail d'invitation n'est pas parti (" + e.message + ")."; }
       } else note = " Cette adresse avait déjà un accès : la personne est simplement rattachée.";
@@ -642,7 +675,8 @@ function StaffBlock({ team, d, rights, reload }) {
       <span style={{ fontSize: 11.5, fontWeight: 800, color: MUT, minWidth: 64 }}>{f(s, "Fonction") || "Staff"}</span>
       <span style={{ flex: "1 1 140px", fontSize: 14, fontWeight: 800 }}>{u ? fullName(u) : "?"}{u && <span style={{ display: "block", fontSize: 12, fontWeight: 400, color: MUT }}>{f(u, "Email")}</span>}</span>
       {u && <span style={{ fontSize: 11.5, fontWeight: 800, padding: "4px 9px", borderRadius: 10, background: ok ? "#E7F4EA" : "#FFF6D6", color: ok ? "#1F5C30" : "#6B4A00" }}>{ok ? "Compte actif" : "Invitation en attente"}</span>}
-      {u && !ok && canInvite && <button className="btn btn-ghost" style={{ minHeight: 34, padding: "0 10px", fontSize: 12.5 }} onClick={() => reinvite(u)}>Renvoyer l'invitation</button>}
+      {u && !ok && canInvite && <button className="btn btn-ghost" style={{ minHeight: 34, padding: "0 10px", fontSize: 12.5 }} onClick={() => reinvite(u)}><i className="ti ti-mail" aria-hidden="true" />Renvoyer par mail</button>}
+      {u && !ok && canInvite && <InviteButtons u={u} setMsg={setMsg} small />}
       {canLink && <button className="btn btn-ghost" style={{ padding: "6px 9px" }} onClick={() => remove(s)} aria-label={"Retirer " + (u ? fullName(u) : "") + " du staff"}><span aria-hidden="true">×</span></button>}
     </div>; })}
     {!staff.length && !mode && <span style={{ fontSize: 13, color: MUT }}>Personne n'est encore rattaché à cette équipe.</span>}
@@ -656,7 +690,10 @@ function StaffBlock({ team, d, rights, reload }) {
           <div style={{ flex: "1 1 140px" }}><label className="lbl" htmlFor="sb-pre">Prénom</label><input id="sb-pre" className="inp" value={form.prenom} onChange={(e) => setForm({ ...form, prenom: e.target.value })} /></div>
           <div style={{ flex: "1 1 140px" }}><label className="lbl" htmlFor="sb-nom">Nom</label><input id="sb-nom" className="inp" value={form.nom} onChange={(e) => setForm({ ...form, nom: e.target.value })} /></div>
         </div>
-        <div><label className="lbl" htmlFor="sb-mail">Adresse e-mail</label><input id="sb-mail" className="inp" type="email" inputMode="email" placeholder="prenom@exemple.com" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ flex: "2 1 200px" }}><label className="lbl" htmlFor="sb-mail">Adresse e-mail</label><input id="sb-mail" className="inp" type="email" inputMode="email" placeholder="prenom@exemple.com" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
+          <div style={{ flex: "1 1 140px" }}><label className="lbl" htmlFor="sb-tel">Téléphone (pour WhatsApp, facultatif)</label><input id="sb-tel" className="inp" type="tel" inputMode="tel" placeholder="06 12 34 56 78" value={form.tel || ""} onChange={(e) => setForm({ ...form, tel: e.target.value })} /></div>
+        </div>
         <div><label className="lbl" htmlFor="sb-role">Rôle</label><select id="sb-role" className="sel" value={role} onChange={(e) => setRole(e.target.value)}>
           <option value="">Aucun rôle (à régler plus tard)</option>
           {d.roles.filter((r) => !isLocked(r)).map((r) => <option key={r.id} value={r.id}>{f(r, "Nom")}</option>)}
@@ -666,7 +703,7 @@ function StaffBlock({ team, d, rights, reload }) {
         {candidates.map((u) => <option key={u.id} value={u.id}>{fullName(u)}{f(u, "Email") ? " · " + f(u, "Email") : ""}</option>)}
       </select></div>}
       <div><label className="lbl" htmlFor="sb-fn">Fonction dans l'équipe</label><select id="sb-fn" className="sel" value={fn} onChange={(e) => setFn(e.target.value)}>{FONCTIONS.map((x) => <option key={x}>{x}</option>)}</select></div>
-      {mode === "nouveau" && <div style={{ fontSize: 12.5, color: MUT, lineHeight: 1.5 }}>La personne reçoit un mail pour choisir son mot de passe. Elle verra ensuite cette équipe dans l'espace Sportif.</div>}
+      {mode === "nouveau" && <div style={{ fontSize: 12.5, color: MUT, lineHeight: 1.5 }}>La personne reçoit un mail pour choisir son mot de passe. Tu pourras aussi lui envoyer l'invitation par WhatsApp juste après (bouton « WhatsApp » sur sa ligne). Elle verra ensuite cette équipe dans l'espace Sportif.</div>}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <button className="btn btn-red" disabled={busy || (mode === "existant" && !who)} onClick={mode === "nouveau" ? addNew : addExisting}>{busy ? "Enregistrement…" : mode === "nouveau" ? "Créer l'accès et envoyer l'invitation" : "Rattacher à l'équipe"}</button>
         <button className="btn btn-ghost" disabled={busy} onClick={reset}>Annuler</button>

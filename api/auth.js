@@ -17,14 +17,19 @@ const MIN_LEN = 8;
 const esc = (s) => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const ip = (req) => String(req.headers["x-forwarded-for"] || "").split(",")[0].trim() || "?";
 
-async function sendLink(req, user, kind) {
-  const jti = randomId(12);
-  await updateUser(user.id, { "Jeton réinitialisation": jti });
+// opts.mail = false : on fabrique le lien sans envoyer de mail (WhatsApp, copie du lien).
+// opts.reuse = true : on garde le jeton déjà en cours, pour que le lien reçu par mail reste valable.
+async function sendLink(req, user, kind, opts) {
+  const o = opts || {};
+  const cur = (user.fields || {})["Jeton réinitialisation"];
+  const jti = o.reuse && cur ? cur : randomId(12);
+  if (jti !== cur) await updateUser(user.id, { "Jeton réinitialisation": jti });
   const life = kind === "invite" ? 7 * 86400000 : 30 * 60000;
   const token = sign({ t: "reset", u: user.id, j: jti, exp: Date.now() + life });
   const url = appUrl(req) + "/?reset=" + encodeURIComponent(token);
   const mail = (user.fields || {})["Email"];
   const prenom = (user.fields || {})["Prénom"];
+  if (o.mail === false) return url;
   if (kind === "invite") {
     await sendMail(mail, "Ton accès à VHB Team — Tous Hand'semble", mailWrap(
       "Bienvenue sur VHB Team 🤾",
@@ -142,6 +147,13 @@ export default async function handler(req, res) {
       if (ENFORCE ? !can(s, "users") : s && !can(s, "users")) { res.status(403).json({ error: "Réservé aux administrateurs." }); return; }
       const u = await getUser(b.userId);
       if (!u || !(u.fields || {})["Email"]) { res.status(404).json({ error: "Utilisateur introuvable." }); return; }
+      // Lien pour WhatsApp ou à copier : jamais renvoyé sans une vraie session avec le droit Utilisateurs.
+      if (b.noMail) {
+        if (!s || !can(s, "users")) { res.status(403).json({ error: "Connecte-toi avec ton mot de passe pour envoyer une invitation par WhatsApp." }); return; }
+        const url = await sendLink(req, u, "invite", { mail: false, reuse: true });
+        res.status(200).json({ ok: true, url });
+        return;
+      }
       await sendLink(req, u, "invite");
       res.status(200).json({ ok: true });
       return;
