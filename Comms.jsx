@@ -259,6 +259,7 @@ const GUIDES = {
     ["Pointer un match", "Ouvre le match : coche les joueurs de la feuille de match et saisis le score avec + et −. La victoire est déduite du score.", "ti-trophy"],
     ["Séance supplémentaire, stage, nouveau match", "Depuis l'accueil Sportif : « Nouveau match » ou « Séance supplémentaire ». Pour un stage, choisis s'il compte dans les primes.", "ti-calendar-plus"],
     ["Séance annulée", "Ouvre la séance › « Séance annulée ? » et choisis le motif : elle sort du calcul. « Finalement, la séance a eu lieu » la rétablit.", "ti-calendar-off"],
+    ["Ajouter un joueur à une séance", "Dans la séance, sous la liste : « Ajouter un joueur ». Tape son prénom et son nom : s'il est déjà au club, choisis-le ; sinon il est créé. Il entre dans l'équipe en renfort, coché, et un responsable le validera (Effectif ou renfort) dans Joueurs.", "ti-user-plus"],
     ["Corriger un pointage", "Séances : les flèches changent de mois. Une séance reste modifiable tant que le mois de primes n'est pas validé ; ensuite elle est verrouillée.", "ti-pencil"],
     ["Mes joueurs", "Onglet Joueurs : l'effectif en haut, les renforts en bas, avec l'assiduité du mois. Le badge GB repère les gardiens. Touche un joueur pour sa fiche : saison, 10 dernières séances, poste.", "ti-users-group"],
     ["Gérer mon équipe", "Séances › « Entraînements récurrents » ou Joueurs › « Ajouter ou modifier des joueurs » : rythme d'entraînement, effectif, statut Effectif ou Renfort, dates d'entrée et de sortie.", "ti-adjustments"],
@@ -273,6 +274,8 @@ const GUIDES = {
     ["Export et relevé", "« Exporter (Excel) » pour le tableau du mois, « Relevé annuel » pour le récapitulatif de la saison par joueur.", "ti-file-spreadsheet"],
   ]],
   compta: ["Trésorerie", "ti-cash", "#3B8A4E", [
+    ["La grille des séances", "Sportif › Primes › « Grille des séances » : une colonne par séance, une ligne par joueur. Touche une case pour passer présent → absent → excusé, c'est enregistré tout de suite. Touche une date pour ouvrir la séance. Lecture seule une fois le mois validé.", "ti-table"],
+    ["Valider un joueur ajouté", "Un coach peut ajouter un joueur depuis une séance : il arrive en renfort « à valider ». Dans Joueurs, un encadré orange te propose « Passer en Effectif » ou « Garder en renfort ».", "ti-flag"],
     ["Où sont les paiements", "Sportif › Primes › « Suivi des paiements », ou Admin › Paiements : les lignes des mois validés, filtrables par mois, équipe, statut et nom.", "ti-list-search"],
     ["Mettre en paiement, marquer payé", "Coche les lignes, puis « Mettre en paiement » ou « Marquer payé » avec la date, le mode et une référence.", "ti-cash-banknote"],
     ["Export pour les virements", "« Exporter (Excel) » exporte la liste affichée.", "ti-download"],
