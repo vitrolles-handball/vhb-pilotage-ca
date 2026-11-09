@@ -89,6 +89,8 @@ export function parseFeuille(pages) {
     }
   }
   out.goals.sort((x, y) => x[0] - y[0] || x[1] + x[2] - (y[1] + y[2]));
+  // On ne garde que les buts qui font avancer le score d'un but (élimine les lignes parasites).
+  { let ph = 0, pa = 0; out.goals = out.goals.filter(([, h, a]) => { if (h + a === ph + pa + 1 && h >= ph && a >= pa) { ph = h; pa = a; return true; } return false; }); }
   const lg = out.goals[out.goals.length - 1];
   if (!lg || lg[1] !== out.score[0] || lg[2] !== out.score[1]) out.goals.push([3600, out.score[0], out.score[1]]);
   out.excl.sort((x, y) => x[0] - y[0]); out.timeouts.sort((x, y) => x[0] - y[0]);
