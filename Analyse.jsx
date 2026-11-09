@@ -378,7 +378,7 @@ export function FeuilleImport({ s, d, roster, call, onDone, onCancel }) {
         ids.push(id && id !== "skip" ? id : null);
       }
       const F = buildStored(r, usIdx, ids, f(s, "Adversaire") || "");
-      const j = await call({ action: "importSheet", seanceId: s.id, feuille: F, presents: ids.filter(Boolean), licences: ids.map((id, i) => id && { joueurId: id, licence: sheetPlayers[i].licence }).filter(Boolean), applyPresence: applyP && !lock, applyScore: applyS && !lock });
+      const j = await call({ action: "importSheet", seanceId: s.id, feuille: F, presents: ids.filter(Boolean), licences: ids.map((id, i) => id && { joueurId: id, licence: sheetPlayers[i].licence, numero: sheetPlayers[i].num }).filter(Boolean), applyPresence: applyP && !lock, applyScore: applyS && !lock });
       onDone(j.locked ? "Feuille importée : stats enregistrées. Le mois de primes étant validé, présences et score n'ont pas été modifiés." : "Feuille de match importée.");
     } catch (e) { setErr(e.message || "Import impossible."); setStep("apercu"); }
   };
@@ -453,6 +453,9 @@ export function BatchImport({ team, d, call, onClose, onDone }) {
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(null);
   const [done, setDone] = useState(false);
+  const teamHas = d.efx.some((e) => (f(e, "Équipe") || []).includes(team.id) && !f(e, "Sortie"));
+  const [newStatut, setNewStatut] = useState(teamHas ? "Renfort" : "Effectif");
+  const [adding, setAdding] = useState(false);
   const appPlayers = d.players.map((p) => ({ id: p.id, nom: f(p, "Nom") || "", prenom: f(p, "Prénom") || "", licence: f(p, "Licence") || "" }));
   const nm = (id) => { const p = d.players.find((x) => x.id === id); return p ? ((f(p, "Prénom") || "") + " " + (f(p, "Nom") || "")).trim() : "?"; };
   const upd = (i, o) => setRows((rs) => rs.map((r, k) => k === i ? { ...r, ...o } : r));
@@ -477,10 +480,25 @@ export function BatchImport({ team, d, call, onClose, onDone }) {
     }
   };
   const ready = rows.filter((r) => r.status === "pret");
+  // Joueurs de la feuille inconnus de l'appli (dédoublonnés par licence sur toutes les feuilles).
+  const unknown = (() => { const m = new Map(); for (const row of ready) row.r.teams[row.ui].players.forEach((p, k) => { if (row.map[k].id) return; const key = p.licence || p.nom; const o = m.get(key) || { key, nom: p.nom, licence: p.licence, num: p.num, dates: [], ar: 0 }; o.dates.push(row.r.date || ""); o.ar = Math.max(o.ar, p.arrets || 0); if ((row.r.date || "") >= (o.last || "")) { o.last = row.r.date || ""; o.num = p.num; } m.set(key, o); }); return [...m.values()].sort((a, b) => a.nom.localeCompare(b.nom)); })();
+  const addUnknown = async () => {
+    setAdding(true);
+    try {
+      const split = (n) => { const parts = n.split(" "); const up = parts.filter((x) => x === x.toUpperCase() && /[A-Z]/.test(x)); const lo = parts.filter((x) => !up.includes(x)); return { nom: capName(up.join(" ")) || n, prenom: capName(lo.join(" ")) }; };
+      const first = unknown.flatMap((u) => u.dates).filter(Boolean).sort()[0] || null;
+      const j = await call({ action: "addPlayers", teamId: team.id, statut: newStatut, entree: first, players: unknown.map((u) => ({ ...split(u.nom), licence: u.licence, numero: u.num, gardien: u.ar >= 3 })) });
+      const byLic = new Map((j.players || []).map((x) => [x.licence, x.joueurId]));
+      setRows((rs) => rs.map((row) => row.status !== "pret" ? row : { ...row, map: row.map.map((m, k) => { if (m.id) return m; const p = row.r.teams[row.ui].players[k]; const id = byLic.get(p.licence); return id ? { id, how: "licence" } : m; }) }));
+      await onDone();
+    } catch (e) { alert("Ajout impossible : " + e.message); }
+    setAdding(false);
+  };
   const blocked = ready.filter((r) => r.map.some((m) => !m.id));
   const go = async () => {
     setBusy(true);
-    for (let i = 0; i < rows.length; i++) {
+    const order = rows.map((r, i) => i).sort((a, b) => String((rows[a].r || {}).date || "").localeCompare(String((rows[b].r || {}).date || "")));
+    for (const i of order) {
       const row = rows[i];
       if (row.status !== "pret" || row.map.some((m) => !m.id)) continue;
       upd(i, { status: "import" });
@@ -501,7 +519,7 @@ export function BatchImport({ team, d, call, onClose, onDone }) {
           ids.push(id && id !== "skip" ? id : null);
         }
         const F = buildStored(row.r, row.ui, ids, row.adv);
-        const j = await call({ action: "importSheet", seanceId: sid, feuille: F, presents: ids.filter(Boolean), licences: ids.map((id, k) => id && { joueurId: id, licence: sp[k].licence }).filter(Boolean), applyPresence: !pointed, applyScore: !pointed });
+        const j = await call({ action: "importSheet", seanceId: sid, feuille: F, presents: ids.filter(Boolean), licences: ids.map((id, k) => id && { joueurId: id, licence: sp[k].licence, numero: sp[k].num }).filter(Boolean), applyPresence: !pointed, applyScore: !pointed });
         upd(i, { status: "ok", msg: j.locked ? "Stats enregistrées (mois validé : présences et score inchangés)" : pointed ? "Stats enregistrées (pointage existant conservé)" : row.s ? "Joueurs cochés, score et stats enregistrés" : "Match créé, joueurs cochés, score et stats enregistrés" });
       } catch (e) { upd(i, { status: "erreur", err: e.message || "Import impossible." }); }
     }
@@ -520,6 +538,17 @@ export function BatchImport({ team, d, call, onClose, onDone }) {
         <span style={{ display: "block", fontSize: 13, color: C.mut, marginTop: 4, maxWidth: 520 }}>Chaque feuille est rattachée au match du même jour. S'il n'existe pas, il est créé. Les matchs déjà pointés gardent leur pointage : seules les stats sont ajoutées.</span></span>
       <input type="file" multiple accept="application/pdf,.pdf" disabled={busy} onChange={(e) => { pick(e.target.files); e.target.value = ""; }} style={{ position: "absolute", width: 1, height: 1, opacity: 0 }} />
     </label>
+    {unknown.length > 0 && !busy && <div style={{ ...card, borderLeft: "5px solid " + C.orange, background: "#FFF8EF", display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}><span aria-hidden="true" style={{ width: 38, height: 38, borderRadius: 19, background: C.orange, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}><i className="ti ti-user-plus" style={{ fontSize: 20 }} /></span>
+        <div><div style={{ fontWeight: 800, fontSize: 15 }}>{unknown.length} joueur{unknown.length > 1 ? "s" : ""} pas encore dans l'appli</div><div style={{ fontSize: 12.5, color: C.mut }}>Créés une seule fois avec les infos de la feuille (nom, prénom, licence, n° de maillot, gardien) et inscrits dans {f(team, "Nom")}.</div></div></div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{unknown.map((u) => <span key={u.key} title={u.licence ? "Licence " + u.licence : ""} style={{ background: "#fff", border: "1px solid #F0D9BE", borderRadius: 14, padding: "5px 10px", fontSize: 12.5, fontWeight: 700 }}>{sheetName(u.nom)}{u.ar >= 3 ? <span style={{ marginLeft: 5, fontSize: 10, fontWeight: 800, padding: "1px 5px", borderRadius: 5, background: C.black, color: "#fff" }}>GB</span> : null}<span style={{ color: C.mut, fontWeight: 600 }}> · n°{u.num} · {u.dates.length} match{u.dates.length > 1 ? "s" : ""}</span></span>)}</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 13, fontWeight: 700 }}>Statut :</span>
+        <div role="group" aria-label="Statut des joueurs ajoutés" style={{ display: "inline-flex", gap: 3, background: "#F0E3D2", borderRadius: 30, padding: 3 }}>{[["Effectif", "Effectif"], ["Renfort", "Renfort à valider"]].map(([v, l]) => <button key={v} aria-pressed={newStatut === v} onClick={() => setNewStatut(v)} style={{ border: "none", cursor: "pointer", fontFamily: "inherit", fontSize: 12.5, fontWeight: 800, padding: "7px 12px", borderRadius: 30, background: newStatut === v ? C.black : "transparent", color: newStatut === v ? "#fff" : "#3A3F47" }}>{l}</button>)}</div>
+        <button className="btn btn-red" disabled={adding} onClick={addUnknown} style={{ marginLeft: "auto" }}><i className="ti ti-user-plus" aria-hidden="true" />{adding ? "Ajout…" : "Ajouter les " + unknown.length + " joueur" + (unknown.length > 1 ? "s" : "")}</button>
+      </div>
+      <div style={{ fontSize: 12, color: C.mut }}>Un joueur qui a déjà ce numéro de licence dans le club est réutilisé (pas de doublon). Tu peux aussi les choisir un par un avec « Vérifier les joueurs ».</div>
+    </div>}
     {rows.map((row, i) => {
       const r = row.r, sc = row.sc;
       const res = sc ? resOf(sc) : null;
@@ -555,8 +584,8 @@ export function BatchImport({ team, d, call, onClose, onDone }) {
       </div>; })}
     {rows.length > 0 && <div style={{ position: "sticky", bottom: "calc(74px + env(safe-area-inset-bottom))", zIndex: 5, display: "flex", gap: 8 }}>
       {done && !busy ? <button className="btn btn-dark" onClick={back} style={{ flex: 1, justifyContent: "center", minHeight: 56, fontSize: 16, fontWeight: 800 }}><i className="ti ti-chart-bar" aria-hidden="true" />Voir l'analyse</button>
-        : <button className="btn btn-red" disabled={busy || !ready.length || rows.some((r) => r.status === "lecture")} onClick={go} style={{ flex: 1, justifyContent: "center", minHeight: 56, fontSize: 16, fontWeight: 800 }}>
-          <i className="ti ti-file-check" aria-hidden="true" />{busy ? "Import en cours…" : rows.some((r) => r.status === "lecture") ? "Lecture des feuilles…" : "Importer " + (ready.length - blocked.length) + " feuille" + (ready.length - blocked.length > 1 ? "s" : "") + (blocked.length ? " (" + blocked.length + " à vérifier)" : "")}
+        : <button className="btn btn-red" disabled={busy || !ready.length || ready.length === blocked.length || rows.some((r) => r.status === "lecture")} onClick={go} style={{ flex: 1, justifyContent: "center", minHeight: 56, fontSize: 16, fontWeight: 800 }}>
+          <i className="ti ti-file-check" aria-hidden="true" />{busy ? "Import en cours…" : rows.some((r) => r.status === "lecture") ? "Lecture des feuilles…" : ready.length === blocked.length ? "Ajoute ou choisis d'abord les joueurs manquants" : "Importer " + (ready.length - blocked.length) + " feuille" + (ready.length - blocked.length > 1 ? "s" : "") + (blocked.length ? " (" + blocked.length + " à vérifier)" : "")}
         </button>}
     </div>}
   </div>;

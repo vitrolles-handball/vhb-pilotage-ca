@@ -60,6 +60,46 @@ export default async function handler(req, res) {
   if (!sess) { res.status(401).json({ error: "Session expirée : reconnecte-toi.", code: "auth" }); return; }
   const b = readBody(req);
   const { action, seanceId } = b;
+  // Ajout groupé des joueurs d'une feuille de match inconnus de l'appli (import de plusieurs feuilles, onglet Analyse).
+  //   addPlayers { teamId, statut: "Effectif"|"Renfort", entree, players: [{ prenom, nom, licence, numero, gardien }] }
+  //   → réutilise un joueur qui a déjà ce numéro de licence, sinon le crée ; l'inscrit dans l'équipe s'il n'y est pas.
+  if (action === "addPlayers") {
+    try {
+      const teamId = b.teamId;
+      if (!/^rec[A-Za-z0-9]{14}$/.test(String(teamId || ""))) { res.status(400).json({ error: "Équipe manquante." }); return; }
+      if (!canAny(sess, ["point", "eff"]) || !seesTeam(sess, teamId)) { res.status(403).json({ error: "Tu ne peux pas ajouter de joueurs à cette équipe." }); return; }
+      const statut = b.statut === "Effectif" ? "Effectif" : "Renfort";
+      const entree = /^\d{4}-\d{2}-\d{2}$/.test(String(b.entree || "")) ? b.entree : null;
+      const list = (Array.isArray(b.players) ? b.players : []).slice(0, 60).map((x) => ({ prenom: String(x.prenom || "").trim().slice(0, 60), nom: String(x.nom || "").trim().slice(0, 60), licence: /^\d{6,15}$/.test(String(x.licence || "")) ? String(x.licence) : "", numero: Number.isInteger(x.numero) && x.numero >= 0 && x.numero < 1000 ? x.numero : null, gardien: !!x.gardien })).filter((x) => x.nom);
+      const T_J = encodeURIComponent("Joueurs"), T_E = encodeURIComponent("Effectifs");
+      let teamName = ""; try { teamName = ((await at("GET", encodeURIComponent("Équipes") + "/" + teamId)).fields || {})["Nom"] || ""; } catch (e) {}
+      const out = [];
+      for (const x of list) {
+        let pid = null, created = false;
+        if (x.licence) {
+          const q = new URLSearchParams({ filterByFormula: "{Licence}='" + x.licence + "'", pageSize: "1" });
+          const j = await at("GET", T_J + "?" + q.toString());
+          pid = ((j.records || [])[0] || {}).id || null;
+        }
+        if (!pid) {
+          const fields = { "Prénom": x.prenom || "?", "Nom": x.nom };
+          if (x.licence) fields["Licence"] = x.licence;
+          if (x.numero != null) fields["N° maillot"] = x.numero;
+          if (x.gardien) fields["Poste"] = "Gardien";
+          const [j] = await createMany(T_J, [{ fields }]);
+          pid = j.id; created = true;
+        }
+        const pl = await at("GET", T_J + "/" + pid);
+        const effIds = (pl.fields || {})["Effectifs"] || [];
+        const mine = effIds.length ? (await getByIds(T_E, effIds)).filter((e) => ((e.fields || {})["Équipe"] || []).includes(teamId) && !(e.fields || {})["Sortie"]) : [];
+        if (!mine.length) await createMany(T_E, [{ fields: { "Libellé": (x.prenom + " " + x.nom).trim() + " — " + teamName, "Joueur": [pid], "Équipe": [teamId], "Statut": statut, "Entrée": entree, "À valider": statut === "Renfort" } }]);
+        out.push({ licence: x.licence, joueurId: pid, created, inscrit: !mine.length });
+      }
+      await logAction(sess, "Joueurs ajoutés depuis des feuilles de match", "Effectifs", teamId, { "Équipe": teamName, "Statut": statut, "Joueurs": list.map((x) => (x.prenom + " " + x.nom).trim()) });
+      res.status(200).json({ ok: true, players: out });
+    } catch (e) { res.status(500).json({ error: String((e && e.message) || e) }); }
+    return;
+  }
   if (!seanceId) { res.status(400).json({ error: "Séance manquante." }); return; }
   try {
     let s;
@@ -104,8 +144,11 @@ export default async function handler(req, res) {
       const lic = (Array.isArray(b.licences) ? b.licences : []).filter((x) => x && isR(x.joueurId) && /^\d{6,15}$/.test(String(x.licence || ""))).slice(0, 40);
       if (lic.length) {
         const pl = await getByIds(encodeURIComponent("Joueurs"), lic.map((x) => x.joueurId));
-        const todo = lic.filter((x) => { const r = pl.find((p) => p.id === x.joueurId); return r && !(r.fields || {})["Licence"]; });
-        for (let i = 0; i < todo.length; i += 10) await at("PATCH", encodeURIComponent("Joueurs"), { records: todo.slice(i, i + 10).map((x) => ({ id: x.joueurId, fields: { "Licence": String(x.licence) } })) });
+        const todo = lic.map((x) => { const r = pl.find((p) => p.id === x.joueurId); if (!r) return null; const fl2 = r.fields || {}, up = {};
+          if (!fl2["Licence"]) up["Licence"] = String(x.licence);
+          if (Number.isInteger(x.numero) && x.numero >= 0 && x.numero < 1000 && fl2["N° maillot"] !== x.numero) up["N° maillot"] = x.numero;
+          return Object.keys(up).length ? { id: x.joueurId, fields: up } : null; }).filter(Boolean);
+        for (let i = 0; i < todo.length; i += 10) await at("PATCH", encodeURIComponent("Joueurs"), { records: todo.slice(i, i + 10) });
       }
       await logAction(sess, "Feuille de match importée", "Séances", seanceId, { "Score": F.s.join("-"), "Mi-temps": (F.mt || []).join("-"), "Présences": applyP ? nPres + " joueur(s)" : "inchangées", "Score appliqué": applyS, "Mois verrouillé": !!lock });
       res.status(200).json({ ok: true, locked: !!lock, presents: nPres });
