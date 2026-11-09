@@ -147,8 +147,8 @@ const PAY_TONE = { "À payer": ["#FDECEC", "#9E1B1B"], "Mis en paiement": ["#FFF
 
 // ---------------------------------------------------------------------------- Grille des séances (vue détaillée)
 // Joueurs en lignes, séances du mois en colonnes. Toucher une case ouvre un petit menu : Présent / Absent / Excusé (motif demandé).
-// Couleurs (partout dans l'appli) : vert = présent à l'entraînement, jaune = présent au match, rouge = absent, orange = excusé.
-export const ABS_RED = "#D93B30", EXC_OR = "#E8800C";
+// Couleurs (partout dans l'appli) : vert = présent à l'entraînement, jaune = présent au match, rouge = absent, bleu = excusé.
+export const ABS_RED = "#D93B30", EXC_OR = "#2F6FD6";
 export const cellStyle = (st, match) => st === "P" ? { background: match ? "#F2C318" : "#2E7D46", color: match ? "#111" : "#fff" } : st === "E" ? { background: EXC_OR, color: "#fff" } : { background: ABS_RED, color: "#fff" };
 const MOTIFS = ["Blessure", "Malade", "Travail / études", "Sélection", "Raison familiale"];
 function CellMenu({ m, onPick, onClose }) {
@@ -172,7 +172,7 @@ function CellMenu({ m, onPick, onClose }) {
         <span style={{ width: 24, height: 24, borderRadius: 7, display: "inline-flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 12.5, ...cellStyle(k, match) }}>{ic}</span><span style={{ flex: 1, minWidth: 0 }}>{l}</span>{m.cur === k && <span style={{ fontSize: 11, color: MUT, whiteSpace: "nowrap" }}>actuel</span>}
       </button>) : <>
         <div style={{ fontSize: 12.5, fontWeight: 800, color: EXC_OR }}>Pourquoi est-il excusé ?</div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>{MOTIFS.map((x) => <button key={x} onClick={() => setMotif(x)} style={{ padding: "5px 9px", borderRadius: 20, border: "1px solid " + (motif === x ? EXC_OR : BORDER), background: motif === x ? "#FDEBD3" : "#fff", color: motif === x ? "#8A4B00" : TEXT, fontFamily: "inherit", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{x}</button>)}</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>{MOTIFS.map((x) => <button key={x} onClick={() => setMotif(x)} style={{ padding: "5px 9px", borderRadius: 20, border: "1px solid " + (motif === x ? EXC_OR : BORDER), background: motif === x ? "#E3EEFB" : "#fff", color: motif === x ? "#1B4F9B" : TEXT, fontFamily: "inherit", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{x}</button>)}</div>
         <input className="inp" autoFocus aria-label="Motif" placeholder="Ou écris le motif…" value={motif} onChange={(e) => setMotif(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && motif.trim()) onPick("E", motif.trim()); }} />
         <div style={{ display: "flex", gap: 6 }}>
           <button className="btn btn-ghost" onClick={() => setStep("choix")} style={{ minHeight: 36, fontSize: 13 }}>Retour</button>
@@ -187,7 +187,7 @@ function SeancesGrid({ rows, seances, cellsOf, editable, onCell, onOpenSeance, g
   const [busy, setBusy] = useState(null);
   const [local, setLocal] = useState({});
   const cols = [...seances].sort((a, b) => (String(a.date) + (a.heure || "")).localeCompare(String(b.date) + (b.heure || "")));
-  const kind = (s) => s.statut === "Annulée" ? ["Annul.", "#B4B2A9", "#fff"] : s.type === "Match" ? ["Match", "#F2C318", BLACK] : s.type === "Stage" ? ["Stage", "#1B5E9B", "#fff"] : /suppl/i.test(s.type || "") ? ["Suppl.", BLACK, "#fff"] : ["Entr.", RED, "#fff"];
+  const kind = (s) => s.statut === "Annulée" ? ["Annul.", "#B4B2A9", "#fff"] : s.type === "Match" ? ["Match", "#F2C318", BLACK] : s.type === "Stage" ? ["Stage", "#7048A8", "#fff"] : /suppl/i.test(s.type || "") ? ["Suppl.", BLACK, "#fff"] : ["Entr.", RED, "#fff"];
   const [menu, setMenu] = useState(null);
   const click = (r, s, cur, ev) => {
     if (!editable || busy) return;
@@ -445,7 +445,7 @@ function PlayerDetail({ row, data, validated, canCorr, onClose, onChanged, onExt
     if (!confirm("Retirer cette ligne (" + eur(x.montant) + " · " + x.motif + ") ?")) return;
     try { await primesApi({ action: "deleteExtra", lineId: x.id }); await onChanged(); } catch (e) { alert(e.message); }
   };
-  const TONE = { "Présent": ["#E7F4EA", "#1F5C30"], "Excusé": ["#FDEBD3", "#8A4B00"], "Absent": ["#FDECEC", "#9E1B1B"] };
+  const TONE = { "Présent": ["#E7F4EA", "#1F5C30"], "Excusé": ["#E3EEFB", "#1B4F9B"], "Absent": ["#FDECEC", "#9E1B1B"] };
   return <Sheet title={row.nom} onClose={onClose} wide>
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
       <Chip>{row.statut}</Chip><Chip>{row.presences}/{row.seances} · {row.seances ? pct(row.taux) : "—"}</Chip><Chip bg="#FFF6D6" fg="#6B4A00">Total {eur(row.total)}</Chip>

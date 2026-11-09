@@ -29,7 +29,7 @@ async function api(payload) {
   return j;
 }
 const Chip = ({ children, bg, fg }) => <span style={{ fontSize: 11.5, fontWeight: 800, padding: "4px 9px", borderRadius: 10, background: bg || "#EEF0F3", color: fg || "#3A3F47", whiteSpace: "nowrap" }}>{children}</span>;
-const ETAT = { "Présent": ["#E7F4EA", "#1F5C30"], "Excusé": ["#FDEBD3", "#8A4B00"], "Absent": ["#FDECEC", "#9E1B1B"] };
+const ETAT = { "Présent": ["#E7F4EA", "#1F5C30"], "Excusé": ["#E3EEFB", "#1B4F9B"], "Absent": ["#FDECEC", "#9E1B1B"] };
 
 // ---------------------------------------------------------------------------- Fiche joueur (page entière)
 // Le bouton « retour » du téléphone ferme la page du dessus (au lieu de quitter l'appli).
@@ -60,7 +60,7 @@ export function PlayerCard({ joueurId, teamId, backLabel, onClose, onPoste }) {
   const initials = d ? ((d.joueur.prenom[0] || "") + (d.joueur.nom[0] || "")).toUpperCase() : "";
   const label = backLabel || (t ? "Effectif " + t.nom : "Retour");
   // Indicateurs de la saison
-  const tot = t ? t.months.reduce((a, m) => ({ s: a.s + m.seances, p: a.p + m.presences, tp: a.tp + (m.teamPres || 0), tt: a.tt + (m.teamTot || 0), v: a.v + (m.victoires || 0) }), { s: 0, p: 0, tp: 0, tt: 0, v: 0 }) : null;
+  const tot = t ? t.months.reduce((a, m) => ({ s: a.s + m.seances, p: a.p + m.presences, tp: a.tp + (m.teamPres || 0), tt: a.tt + (m.teamTot || 0), v: a.v + (m.victoires || 0), m: a.m + (m.matchs || 0), mt: a.mt + (m.matchsTot || 0), e: a.e + (m.entrainements || 0), et: a.et + (m.entrTot || 0), x: a.x + (m.excuses || 0) }), { s: 0, p: 0, tp: 0, tt: 0, v: 0, m: 0, mt: 0, e: 0, et: 0, x: 0 }) : null;
   const seasonRate = tot && tot.s ? tot.p / tot.s : null, teamRate = tot && tot.tt ? tot.tp / tot.tt : null;
   // Mois affichés : du premier mois avec séance (septembre par défaut) au mois en cours, puis le mois suivant à venir.
   const cur = d ? String(d.today || new Date().toISOString()).slice(0, 7) : "";
@@ -73,6 +73,9 @@ export function PlayerCard({ joueurId, teamId, backLabel, onClose, onPoste }) {
     return list.slice(-5).concat([{ month: shiftMonth(cur, 1), future: true }]);
   })();
   const cur10 = d ? d.recent.filter((s) => !t || !s.teamId || s.teamId === t.teamId).slice(0, 10).reverse() : [];
+  const recentT = d ? d.recent.filter((s) => !t || !s.teamId || s.teamId === t.teamId) : [];
+  const streak = (() => { let n = 0; for (const s of recentT) { if (s.etat === "Présent") n++; else break; } return n; })();
+  const lastAbs = (recentT.find((s) => s.etat !== "Présent") || {}).date || null;
   const eff = t ? t.effectifs[t.effectifs.length - 1] : null;
   const renfort = eff && eff.statut === "Renfort";
   const mois = d && d.mois ? d.mois.filter((m) => !t || teams.length < 2 || m.equipe === t.nom) : null;
@@ -109,11 +112,24 @@ export function PlayerCard({ joueurId, teamId, backLabel, onClose, onPoste }) {
           {teams.map((x) => <button key={x.teamId} aria-pressed={x.teamId === t.teamId} onClick={() => setTid(x.teamId)} style={{ minHeight: 36, padding: "0 14px", border: "none", borderRadius: 30, cursor: "pointer", fontFamily: "inherit", fontSize: 13, fontWeight: 800, background: x.teamId === t.teamId ? BLACK : "transparent", color: x.teamId === t.teamId ? "#fff" : "#3A3F47" }}>{x.nom}</button>)}
         </div>}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
-          {[["Saison", pct(seasonRate), TEXT], ["Moy. équipe", pct(teamRate), "#6B7079"], ["Victoires", tot ? String(tot.v) : "—", TEXT]].map(([l, v, c]) => <div key={l} style={{ ...card, padding: "14px 14px" }}>
+          {[["Assiduité saison", pct(seasonRate), "#1F5C30"], ["Moy. équipe", pct(teamRate), "#6B7079"], ["Présent de suite", streak ? String(streak) + (streak >= 20 ? "+" : "") : "0", TEXT]].map(([l, v, c]) => <div key={l} style={{ ...card, padding: "14px 14px" }}>
             <div style={{ fontSize: 13, color: "#3A3F47", fontWeight: 600 }}>{l}</div>
             <div style={{ fontSize: 26, fontWeight: 800, color: c, marginTop: 4, whiteSpace: "nowrap" }}>{v}</div>
           </div>)}
         </div>
+
+        {tot && <div style={card}>
+          <H>Bilan de la saison</H>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
+            {[["ti-ball-football", "#F2C318", "#111", "Matchs joués", tot.m + (tot.mt ? " / " + tot.mt : ""), tot.mt ? "sur la feuille de " + Math.round(tot.m / tot.mt * 100) + " % des matchs" : "aucun match pointé"],
+              ["ti-trophy", "#F2C318", "#111", "Victoires", String(tot.v), tot.m ? "sur " + tot.m + " match" + (tot.m > 1 ? "s" : "") + " joué" + (tot.m > 1 ? "s" : "") : "—"],
+              ["ti-run", "#2E7D46", "#fff", "Entraînements", tot.e + (tot.et ? " / " + tot.et : ""), tot.et ? Math.round(tot.e / tot.et * 100) + " % de présence" : "aucun pointé"],
+              ["ti-x", "#D93B30", "#fff", "Absences", String(Math.max(0, tot.s - tot.p)), (tot.x ? "dont " + tot.x + " excusée" + (tot.x > 1 ? "s" : "") + " · " : "") + (lastAbs ? "dernière le " + shortFr(lastAbs) : "aucune récente")]].map(([ic, bg, fg, l, v, sub]) => <div key={l} style={{ display: "flex", gap: 10, alignItems: "center", background: "#F7F8FA", borderRadius: 14, padding: "10px 12px" }}>
+              <span aria-hidden="true" style={{ width: 34, height: 34, borderRadius: 10, background: bg, color: fg, display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}><i className={"ti " + ic} style={{ fontSize: 18 }} /></span>
+              <span style={{ minWidth: 0 }}><span style={{ display: "block", fontSize: 12.5, color: "#3A3F47", fontWeight: 600 }}>{l}</span><span style={{ display: "block", fontSize: 19, fontWeight: 800, color: TEXT }}>{v}</span><span style={{ display: "block", fontSize: 11.5, color: MUT }}>{sub}</span></span>
+            </div>)}
+          </div>
+        </div>}
 
         <div style={card}>
           <H right={<span style={{ fontSize: 12.5, color: MUT, display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 18, borderTop: "2px dashed #6B7079" }} />moyenne équipe</span>}>Assiduité par mois</H>
@@ -121,7 +137,7 @@ export function PlayerCard({ joueurId, teamId, backLabel, onClose, onPoste }) {
             {teamRate != null && <div aria-hidden="true" style={{ position: "absolute", left: 0, right: 0, bottom: "calc(26px + " + (teamRate * 118) + "px)", borderTop: "2px dashed #6B7079", zIndex: 2 }} />}
             {bars.map((m) => { const has = !m.future && m.seances > 0; const isCur = m.month === cur; return <div key={m.month} style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", height: "100%", gap: 6 }} title={has ? m.presences + " présence(s) sur " + m.seances + " séance(s)" + (m.moyenne != null ? " · équipe " + pct(m.moyenne) : "") : ""}>
               <span style={{ fontSize: 13, fontWeight: 800, color: has ? TEXT : "#B8BDC4" }}>{has ? pct(m.taux) : "–"}</span>
-              <div style={{ width: "100%", maxWidth: 58, height: has ? Math.max(6, m.taux * 118) : 6, borderRadius: "10px 10px 4px 4px", background: has ? (isCur ? "#F3A5A0" : "#D92B26") : "#ECEEF1" }} />
+              <div style={{ width: "100%", maxWidth: 58, height: has ? Math.max(6, m.taux * 118) : 6, borderRadius: "10px 10px 4px 4px", background: has ? (isCur ? "#9CCFAA" : "#2E7D46") : "#ECEEF1" }} />
               <span style={{ fontSize: 13, fontWeight: 700, color: "#3A3F47", height: 18 }}>{capit(mShort(m.month))}</span>
             </div>; })}
           </div>
@@ -133,11 +149,11 @@ export function PlayerCard({ joueurId, teamId, backLabel, onClose, onPoste }) {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(10, minmax(0, 46px))", gap: 7 }}>
             {Array.from({ length: 10 }).map((_, i) => { const s = cur10[i]; if (!s) return <span key={i} style={{ aspectRatio: "1", borderRadius: 9, border: "2px dashed #E2E5E9" }} />;
               const match = s.type === "Match", pres = s.etat === "Présent";
-              const bg = pres ? (match ? "#F2C318" : "#2E7D46") : s.etat === "Excusé" ? "#E8800C" : "#D93B30";
-              return <span key={s.id} title={fmtDate(s.date) + " · " + (match ? "Match" + (s.adversaire ? " vs " + s.adversaire : "") + (s.score ? " · " + s.score : "") : s.type) + " · " + s.etat} aria-label={fmtDate(s.date) + " " + s.type + " " + s.etat} style={{ aspectRatio: "1", borderRadius: 9, background: bg, border: "none" }} />; })}
+              const bg = pres ? (match ? "#F2C318" : "#2E7D46") : s.etat === "Excusé" ? "#2F6FD6" : "#D93B30";
+              return <span key={s.id} title={fmtDate(s.date) + " · " + (match ? "Match" + (s.adversaire ? " vs " + s.adversaire : "") + (s.score ? " · " + s.score : "") : s.type) + " · " + s.etat} aria-label={fmtDate(s.date) + " " + s.type + " " + s.etat} style={{ aspectRatio: "1", borderRadius: 9, background: bg, border: "none", display: "flex", alignItems: "center", justifyContent: "center", color: match && pres ? "#111" : "#fff", fontWeight: 800, fontSize: 15 }}>{pres ? (match && s.resultat === "Victoire" ? "V" : "✓") : s.etat === "Excusé" ? "E" : "✕"}</span>; })}
           </div>
           <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 12, fontSize: 12.5, color: "#3A3F47" }}>
-            {[["#2E7D46", "Entraînement"], ["#F2C318", "Match joué"], ["#D93B30", "Absent"], ["#E8800C", "Excusé"]].map(([c, l]) => <span key={l} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 12, height: 12, borderRadius: 4, background: c, border: c === "#E2E5E9" ? "1px solid #C9CDD3" : "none" }} />{l}</span>)}
+            {[["#2E7D46", "Entraînement"], ["#F2C318", "Match joué"], ["#D93B30", "Absent"], ["#2F6FD6", "Excusé"]].map(([c, l]) => <span key={l} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 12, height: 12, borderRadius: 4, background: c, border: c === "#E2E5E9" ? "1px solid #C9CDD3" : "none" }} />{l}</span>)}
           </div>
           {!cur10.length && <div style={{ fontSize: 13, color: MUT, marginTop: 8 }}>Aucune séance pointée pour l'instant.</div>}
         </div>

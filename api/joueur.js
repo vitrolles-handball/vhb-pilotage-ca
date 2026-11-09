@@ -92,7 +92,7 @@ export default async function handler(req, res) {
       const done = S.filter((s) => (fv(s, "Équipe") || []).includes(tid) && fv(s, "Statut") === "Pointée" && counts(s));
       const byMonth = months.map((m) => {
         const ms = done.filter((s) => monthOf(fv(s, "Date")) === m);
-        let seances = 0, pres = 0, exc = 0, entr = 0, matchs = 0, teamPres = 0, teamTot = 0, vict = 0;
+        let seances = 0, pres = 0, exc = 0, entr = 0, matchs = 0, teamPres = 0, teamTot = 0, vict = 0, mTot = 0, eTot = 0;
         for (const s of ms) {
           const d = fv(s, "Date");
           // Moyenne de l'équipe : pointages de la séance ÷ joueurs dans l'effectif ce jour-là.
@@ -100,11 +100,11 @@ export default async function handler(req, res) {
           if (eligible) { teamTot += eligible; teamPres += Math.min((fv(s, "Pointages") || []).length, eligible); }
           if (!efxT.some((e) => inRange(e, d))) continue;
           const st = stateOf.get(s.id);
-          seances++;
+          seances++; if (fv(s, "Type") === "Match") mTot++; else eTot++;
           if (st === "Présent") { pres++; fv(s, "Type") === "Match" ? matchs++ : entr++; if (fv(s, "Type") === "Match" && fv(s, "Résultat") === "Victoire") vict++; }
           else if (st === "Excusé") exc++;
         }
-        return { month: m, seances, presences: pres, excuses: exc, entrainements: entr, matchs, taux: seances ? pres / seances : null, moyenne: teamTot ? teamPres / teamTot : null, teamPres, teamTot, victoires: vict };
+        return { month: m, seances, presences: pres, excuses: exc, entrainements: entr, matchs, taux: seances ? pres / seances : null, moyenne: teamTot ? teamPres / teamTot : null, teamPres, teamTot, victoires: vict, matchsTot: mTot, entrTot: eTot };
       });
       return {
         teamId: tid, nom: teamName(tid), primes: !!fv(teams.find((t) => t.id === tid), "Primes actives"),
