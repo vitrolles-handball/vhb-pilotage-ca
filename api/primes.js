@@ -143,7 +143,8 @@ export default async function handler(req, res) {
       if (b.excused) {
         if (!motif) { res.status(400).json({ error: "Indique le motif de l'absence." }); return; }
         if (mine && (mine.fields || {})["État"] === "Présent") { res.status(409).json({ error: "Ce joueur est noté présent à cette séance." }); return; }
-        if (!mine) await createMany(T("Pointages"), [{ fields: { "Libellé": (sf["Libellé"] || "Séance") + " · excusé", "Séance": [s.id], "Joueur": [b.joueurId], "État": "Excusé", "Saisi par": [sess.uid], "Saisi le": new Date().toISOString() } }]);
+        if (!mine) await createMany(T("Pointages"), [{ fields: { "Libellé": (sf["Libellé"] || "Séance") + " · excusé", "Séance": [s.id], "Joueur": [b.joueurId], "État": "Excusé", "Motif": motif, "Saisi par": [sess.uid], "Saisi le": new Date().toISOString() } }]);
+        else await at("PATCH", T("Pointages"), { records: [{ id: mine.id, fields: { "Motif": motif } }], typecast: true });
         await logAction(sess, "Absence excusée", "Séances", s.id, "Joueur " + b.joueurId + " · " + motif);
       } else {
         if (mine && (mine.fields || {})["État"] === "Excusé") await at("DELETE", T("Pointages") + "/" + mine.id);

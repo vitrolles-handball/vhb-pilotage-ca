@@ -83,6 +83,7 @@ export default async function handler(req, res) {
     const S = seasonS.filter((s) => (fv(s, "Équipe") || []).some((t) => visibleTeams.includes(t)));
     const myP = (fv(p, "Pointages") || []).length ? await byIds(T("Pointages"), fv(p, "Pointages")) : [];
     const stateOf = new Map(myP.map((x) => [(fv(x, "Séance") || [])[0], fv(x, "État") || "Présent"]));
+    const motifOf = new Map(myP.map((x) => [(fv(x, "Séance") || [])[0], fv(x, "Motif") || ""]));
     const teamName = (id) => fv(teams.find((t) => t.id === id), "Nom") || "Équipe";
     const months = [];
     for (let m = from.slice(0, 7); m <= today.slice(0, 7); m = nextMonth(m)) months.push(m);
@@ -92,7 +93,7 @@ export default async function handler(req, res) {
       const done = S.filter((s) => (fv(s, "Équipe") || []).includes(tid) && fv(s, "Statut") === "Pointée" && counts(s));
       const byMonth = months.map((m) => {
         const ms = done.filter((s) => monthOf(fv(s, "Date")) === m);
-        let seances = 0, pres = 0, exc = 0, entr = 0, matchs = 0, teamPres = 0, teamTot = 0, vict = 0, mTot = 0, eTot = 0;
+        let seances = 0, pres = 0, exc = 0, entr = 0, matchs = 0, teamPres = 0, teamTot = 0, vict = 0, mTot = 0, eTot = 0; const motifs = [];
         for (const s of ms) {
           const d = fv(s, "Date");
           // Moyenne de l'équipe : pointages de la séance ÷ joueurs dans l'effectif ce jour-là.
@@ -102,9 +103,9 @@ export default async function handler(req, res) {
           const st = stateOf.get(s.id);
           seances++; if (fv(s, "Type") === "Match") mTot++; else eTot++;
           if (st === "Présent") { pres++; fv(s, "Type") === "Match" ? matchs++ : entr++; if (fv(s, "Type") === "Match" && fv(s, "Résultat") === "Victoire") vict++; }
-          else if (st === "Excusé") exc++;
+          else if (st === "Excusé") { exc++; motifs.push(motifOf.get(s.id) || "Non précisé"); }
         }
-        return { month: m, seances, presences: pres, excuses: exc, entrainements: entr, matchs, taux: seances ? pres / seances : null, moyenne: teamTot ? teamPres / teamTot : null, teamPres, teamTot, victoires: vict, matchsTot: mTot, entrTot: eTot };
+        return { month: m, seances, presences: pres, excuses: exc, entrainements: entr, matchs, taux: seances ? pres / seances : null, moyenne: teamTot ? teamPres / teamTot : null, teamPres, teamTot, victoires: vict, matchsTot: mTot, entrTot: eTot, motifs };
       });
       return {
         teamId: tid, nom: teamName(tid), primes: !!fv(teams.find((t) => t.id === tid), "Primes actives"),

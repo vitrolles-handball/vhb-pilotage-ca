@@ -76,6 +76,8 @@ export function PlayerCard({ joueurId, teamId, backLabel, onClose, onPoste }) {
   const recentT = d ? d.recent.filter((s) => !t || !s.teamId || s.teamId === t.teamId) : [];
   const streak = (() => { let n = 0; for (const s of recentT) { if (s.etat === "Présent") n++; else break; } return n; })();
   const lastAbs = (recentT.find((s) => s.etat !== "Présent") || {}).date || null;
+  const motifs = t ? Object.entries(t.months.flatMap((m) => m.motifs || []).reduce((o, x) => { const k = x || "Non précisé"; o[k] = (o[k] || 0) + 1; return o; }, {})).sort((a, b) => b[1] - a[1]) : [];
+  const trend = (() => { if (!t) return null; const ms = t.months.filter((m) => m.seances > 0); if (ms.length < 2) return null; const a = ms[ms.length - 2], b = ms[ms.length - 1]; return { pts: Math.round((b.taux - a.taux) * 100), from: a.month }; })();
   const eff = t ? t.effectifs[t.effectifs.length - 1] : null;
   const renfort = eff && eff.statut === "Renfort";
   const mois = d && d.mois ? d.mois.filter((m) => !t || teams.length < 2 || m.equipe === t.nom) : null;
@@ -115,6 +117,7 @@ export function PlayerCard({ joueurId, teamId, backLabel, onClose, onPoste }) {
           {[["Assiduité saison", pct(seasonRate), "#1F5C30"], ["Moy. équipe", pct(teamRate), "#6B7079"], ["Présent de suite", streak ? String(streak) + (streak >= 20 ? "+" : "") : "0", TEXT]].map(([l, v, c]) => <div key={l} style={{ ...card, padding: "14px 14px" }}>
             <div style={{ fontSize: 13, color: "#3A3F47", fontWeight: 600 }}>{l}</div>
             <div style={{ fontSize: 26, fontWeight: 800, color: c, marginTop: 4, whiteSpace: "nowrap" }}>{v}</div>
+            {l === "Assiduité saison" && trend && <div title={"Mois en cours comparé à " + mLong(trend.from)} style={{ fontSize: 12, fontWeight: 800, marginTop: 2, color: trend.pts > 0 ? "#1F5C30" : trend.pts < 0 ? "#9E1B1B" : MUT }}>{trend.pts > 0 ? "↗ +" + trend.pts : trend.pts < 0 ? "↘ " + trend.pts : "→ stable"}{trend.pts ? " pts" : ""} <span style={{ fontWeight: 600, color: MUT }}>vs {mShort(trend.from)}</span></div>}
           </div>)}
         </div>
 
@@ -129,6 +132,10 @@ export function PlayerCard({ joueurId, teamId, backLabel, onClose, onPoste }) {
               <span style={{ minWidth: 0 }}><span style={{ display: "block", fontSize: 12.5, color: "#3A3F47", fontWeight: 600 }}>{l}</span><span style={{ display: "block", fontSize: 19, fontWeight: 800, color: TEXT }}>{v}</span><span style={{ display: "block", fontSize: 11.5, color: MUT }}>{sub}</span></span>
             </div>)}
           </div>
+          {motifs.length > 0 && <div style={{ marginTop: 12 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 800, color: "#1B4F9B", marginBottom: 6 }}>Motifs des absences excusées</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{motifs.map(([k, n]) => <span key={k} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#E3EEFB", color: "#1B4F9B", borderRadius: 20, padding: "5px 11px", fontSize: 12.5, fontWeight: 700 }}>{k}<b style={{ background: "#2F6FD6", color: "#fff", borderRadius: 10, padding: "0 7px", fontSize: 11.5 }}>{n}</b></span>)}</div>
+          </div>}
         </div>}
 
         <div style={card}>

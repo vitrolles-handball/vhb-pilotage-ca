@@ -462,6 +462,20 @@ function SeancesList({ d, mineS, tName, filter, setFilter, onOpen, banner, onMan
 }
 
 // ---------------------------------------------------------------- Pointage
+const EXC_MOTIFS = ["Blessure", "Malade", "Travail / études", "Sélection", "Raison familiale"];
+function ExcusePicker({ name, initial, onPick, onClose }) {
+  const [m, setM] = useState(initial);
+  return <div className="card" role="group" aria-label={"Motif d'absence de " + name} style={{ borderLeft: "4px solid #2F6FD6", display: "flex", flexDirection: "column", gap: 8, padding: "12px 12px" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 8 }}><b style={{ flex: 1, fontSize: 13.5, color: "#1B4F9B" }}>Pourquoi {name} est-il excusé ?</b>
+      <button aria-label="Fermer" onClick={onClose} style={{ border: "none", background: "#F1F2F5", borderRadius: 8, width: 30, height: 30, cursor: "pointer", fontSize: 16, fontWeight: 800 }}>×</button></div>
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{EXC_MOTIFS.map((x) => <button key={x} onClick={() => onPick(x)} style={{ padding: "8px 12px", borderRadius: 20, border: "1px solid " + (m === x ? "#2F6FD6" : BORDER), background: m === x ? "#E3EEFB" : "#fff", color: m === x ? "#1B4F9B" : TEXT, fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{x}</button>)}</div>
+    <div style={{ display: "flex", gap: 6 }}>
+      <input className="inp" aria-label="Autre motif" placeholder="Autre motif…" value={EXC_MOTIFS.includes(m) ? "" : m} onChange={(e) => setM(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && m.trim()) onPick(m.trim()); }} style={{ flex: 1, minWidth: 0 }} />
+      <button className="btn" disabled={!m.trim() || EXC_MOTIFS.includes(m)} onClick={() => onPick(m.trim())} style={{ background: "#2F6FD6", color: "#fff", border: "none" }}>OK</button>
+    </div>
+  </div>;
+}
+
 // Ajouter un joueur depuis une séance : il entre dans l'équipe en Renfort « À valider ».
 function AddPlayer({ d, s, roster, onAdded }) {
   const [open, setOpen] = useState(false);
@@ -544,12 +558,16 @@ function PointageView({ s, d, me, rights, onBack, onDone, onRoster }) {
     const ids = f(s, "Pointages") || [];
     if (!ids.length) { setSel(new Set()); setLoading(false); return; }
     db({ action: "list", table: "Pointages", filterByFormula: "OR(" + ids.slice(0, 80).map((id) => "RECORD_ID()='" + id + "'").join(",") + ")" })
-      .then((j) => { setSel(new Set((j.records || []).flatMap((r) => f(r, "Joueur") || []))); setLoading(false); }, () => setLoading(false));
+      .then((j) => { const rs = j.records || []; setSel(new Set(rs.filter((r) => f(r, "État") !== "Excusé").flatMap((r) => f(r, "Joueur") || []))); const x = {}; rs.filter((r) => f(r, "État") === "Excusé").forEach((r) => { const id = (f(r, "Joueur") || [])[0]; if (id) x[id] = f(r, "Motif") || ""; }); setExc(x); setLoading(false); }, () => setLoading(false));
   }, [s.id]);
-  const toggle = (id) => { const n = new Set(sel); n.has(id) ? n.delete(id) : n.add(id); setSel(n); };
+  const [exc, setExc] = useState({}); // joueurId → motif (absence excusée)
+  const [excFor, setExcFor] = useState(null); // joueur dont on choisit le motif
+  const toggle = (id) => { const n = new Set(sel); n.has(id) ? n.delete(id) : n.add(id); setSel(n); if (exc[id] !== undefined) { const x = { ...exc }; delete x[id]; setExc(x); } };
+  const setExcuse = (id, motif) => { const n = new Set(sel); n.delete(id); setSel(n); setExc({ ...exc, [id]: motif }); setExcFor(null); };
+  const nExc = roster.filter((r) => exc[r.p.id] !== undefined && !sel.has(r.p.id)).length;
   const nPres = roster.filter((r) => sel.has(r.p.id)).length;
   const save = async () => {
-    const payload = { action: "save", seanceId: s.id, presents: roster.filter((r) => sel.has(r.p.id)).map((r) => r.p.id), capturedAt: new Date().toISOString() };
+    const payload = { action: "save", seanceId: s.id, presents: roster.filter((r) => sel.has(r.p.id)).map((r) => r.p.id), excuses: roster.filter((r) => !sel.has(r.p.id) && exc[r.p.id] !== undefined).map((r) => ({ joueurId: r.p.id, motif: exc[r.p.id] || "Non précisé" })), capturedAt: new Date().toISOString() };
     if (isMatch) payload.score = score;
     setBusy(true);
     try {
@@ -602,17 +620,23 @@ function PointageView({ s, d, me, rights, onBack, onDone, onRoster }) {
         </div>}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
           <div style={{ background: "#E7F4EA", borderRadius: 14, padding: "10px 14px" }}><span style={{ fontSize: 24, fontWeight: 800, color: "#1F5C30" }}>{nPres}</span> <span style={{ fontSize: 13, fontWeight: 700, color: "#1F5C30" }}>{isMatch ? "sur la feuille" : "présents"}</span></div>
-          <div style={{ background: "#EEF0F3", borderRadius: 14, padding: "10px 14px" }}><span style={{ fontSize: 24, fontWeight: 800, color: "#3A3F47" }}>{roster.length - nPres}</span> <span style={{ fontSize: 13, fontWeight: 700, color: "#3A3F47" }}>{isMatch ? "non retenus" : "absents"}</span></div>
+          <div style={{ background: "#EEF0F3", borderRadius: 14, padding: "10px 14px" }}><span style={{ fontSize: 24, fontWeight: 800, color: "#3A3F47" }}>{roster.length - nPres}</span> <span style={{ fontSize: 13, fontWeight: 700, color: "#3A3F47" }}>{isMatch ? "non retenus" : "absents"}{nExc ? " · dont " + nExc + " excusé" + (nExc > 1 ? "s" : "") : ""}</span></div>
         </div>
-        {!lock && <div style={{ fontSize: 13, color: MUT }}>{isMatch ? "Coche les joueurs de la feuille de match, sans limite de nombre. Cocher vaut présence." : "Tout le monde est présent par défaut. Touche un joueur pour le marquer absent."}</div>}
+        {!lock && <div style={{ fontSize: 13, color: MUT }}>{isMatch ? "Coche les joueurs de la feuille de match, sans limite de nombre. Cocher vaut présence. « Excuser » pour un joueur absent excusé (blessé…)." : "Tout le monde est présent par défaut. Touche un joueur pour le marquer absent ; « Excuser » pour une absence excusée (avec le motif)."}</div>}
         {loading ? <div className="card" style={{ color: MUT }}>Chargement du pointage…</div> : <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          {roster.map(({ e, p }) => { const on = sel.has(p.id); return (
-            <button key={p.id} disabled={!!lock} onClick={() => toggle(p.id)} aria-pressed={on} style={{ cursor: lock ? "default" : "pointer", width: "100%", minHeight: 58, border: "1px solid " + (on ? "#fff" : "#D9DCE1"), background: on ? "#fff" : "#F4F5F8", borderRadius: 14, padding: "8px 12px", display: "flex", alignItems: "center", gap: 12, fontFamily: "inherit", textAlign: "left", boxShadow: on ? "0 1px 3px rgba(20,22,30,.08)" : "none" }}>
+          {roster.map(({ e, p }) => { const on = sel.has(p.id), ex = !on && exc[p.id] !== undefined; return (
+            <div key={p.id} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={{ display: "flex", gap: 6, alignItems: "stretch" }}>
+            <button disabled={!!lock} onClick={() => toggle(p.id)} aria-pressed={on} style={{ cursor: lock ? "default" : "pointer", flex: 1, minWidth: 0, minHeight: 58, border: "1px solid " + (on ? "#fff" : "#D9DCE1"), background: on ? "#fff" : "#F4F5F8", borderRadius: 14, padding: "8px 12px", display: "flex", alignItems: "center", gap: 12, fontFamily: "inherit", textAlign: "left", boxShadow: on ? "0 1px 3px rgba(20,22,30,.08)" : "none" }}>
               <span style={{ width: 38, height: 38, borderRadius: 19, flex: "0 0 auto", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 800, background: on ? "#FCE9DE" : "#E2E5E9", color: on ? "#8A2807" : MUT }}>{initials(p)}</span>
-              <span style={{ flex: 1, minWidth: 0 }}><span style={{ display: "block", fontSize: 15, fontWeight: 700, color: TEXT }}>{pName(p)}</span>{f(e, "Statut") === "Renfort" && <span style={{ fontSize: 11.5, fontWeight: 700, color: "#6B4A00" }}>Renfort{f(e, "À valider") ? " · à valider" : ""}</span>}</span>
-              {isMatch ? <span aria-hidden="true" style={{ width: 26, height: 26, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", background: on ? RED : "#fff", border: "2px solid " + (on ? RED : "#B8BDC4") }}>{on && <i className="ti ti-check" style={{ color: "#fff" }} />}</span>
-                : <span style={{ fontSize: 13, fontWeight: 800, padding: "7px 12px", borderRadius: 20, background: on ? "#E7F4EA" : "#FDECEC", color: on ? "#1F5C30" : "#9E1B1B", border: "1px solid " + (on ? "#E7F4EA" : "#F5C2C0") }}>{on ? "Présent" : "Absent"}</span>}
-            </button>); })}
+              <span style={{ flex: 1, minWidth: 0 }}><span style={{ display: "block", fontSize: 15, fontWeight: 700, color: TEXT }}>{pName(p)}</span>{ex && <span style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#1B4F9B" }}>Excusé{exc[p.id] ? " · " + exc[p.id] : ""}</span>}{f(e, "Statut") === "Renfort" && <span style={{ fontSize: 11.5, fontWeight: 700, color: "#6B4A00" }}>Renfort{f(e, "À valider") ? " · à valider" : ""}</span>}</span>
+              {isMatch ? <span aria-hidden="true" style={{ width: 26, height: 26, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", background: on ? RED : ex ? "#2F6FD6" : "#fff", border: "2px solid " + (on ? RED : ex ? "#2F6FD6" : "#B8BDC4") }}>{on ? <i className="ti ti-check" style={{ color: "#fff" }} /> : ex ? <span style={{ color: "#fff", fontWeight: 800, fontSize: 13 }}>E</span> : null}</span>
+                : <span style={{ fontSize: 13, fontWeight: 800, padding: "7px 12px", borderRadius: 20, background: on ? "#E7F4EA" : ex ? "#E3EEFB" : "#FDECEC", color: on ? "#1F5C30" : ex ? "#1B4F9B" : "#9E1B1B", border: "1px solid " + (on ? "#E7F4EA" : ex ? "#C9DBF7" : "#F5C2C0") }}>{on ? "Présent" : ex ? "Excusé" : "Absent"}</span>}
+            </button>
+            {!lock && !on && <button onClick={() => setExcFor(excFor === p.id ? null : p.id)} aria-expanded={excFor === p.id} aria-label={(ex ? "Changer le motif de " : "Excuser ") + pName(p)} style={{ flex: "0 0 auto", width: 64, borderRadius: 14, border: "1px solid " + (ex || excFor === p.id ? "#2F6FD6" : "#C9DBF7"), background: excFor === p.id ? "#2F6FD6" : "#fff", color: excFor === p.id ? "#fff" : "#1B4F9B", fontFamily: "inherit", fontSize: 11.5, fontWeight: 800, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2 }}><span style={{ fontSize: 15 }}>E</span>{ex ? "Motif" : "Excuser"}</button>}
+            </div>
+            {excFor === p.id && <ExcusePicker name={pName(p)} initial={exc[p.id] || ""} onPick={(m) => setExcuse(p.id, m)} onClose={() => setExcFor(null)} />}
+            </div>); })}
           {!roster.length && <div className="card" style={{ color: MUT, fontSize: 13.5 }}>Aucun joueur dans l'effectif de l'équipe à cette date. L'effectif se gère dans Admin › Équipes.</div>}
         </div>}
         {!lock && !loading && onRoster && <AddPlayer d={d} s={s} roster={roster} onAdded={async (pid) => { await onRoster(); setSel((x) => new Set([...x, pid])); }} />}

@@ -1,6 +1,6 @@
 // Pointage d'une séance (entraînement, match, séance supplémentaire, stage).
 // POST { action, ... } — session obligatoire, droit « Pointer les séances » sur l'équipe :
-//   save   { seanceId, presents: [joueurIds], score?: { vhb, adv }, capturedAt? }
+//   save   { seanceId, presents: [joueurIds], excuses?: [{ joueurId, motif }], score?: { vhb, adv }, capturedAt? }
 //          → remplace les pointages de la séance, la passe « Pointée », calcule le résultat d'un match.
 //          capturedAt (envoi différé hors ligne) : si quelqu'un a pointé APRÈS, on ne l'écrase pas.
 //   cancel { seanceId, motif }   → séance annulée (sort du calcul des primes)
@@ -130,6 +130,11 @@ export default async function handler(req, res) {
     const oldPts = fl["Statut"] === "Pointée" && (fl["Pointages"] || []).length ? await getByIds(T_P, fl["Pointages"]) : [];
     if (fl["Pointages"] && fl["Pointages"].length) await deleteMany(T_P, fl["Pointages"]);
     if (presents.length) await createMany(T_P, presents.map((pid) => ({ fields: { "Libellé": (fl["Libellé"] || "Séance") + " · présent", "Séance": [seanceId], "Joueur": [pid], "État": "Présent", "Saisi par": [sess.uid], "Saisi le": now } })));
+    // Absences excusées (avec motif) : une ligne « Excusé » par joueur, jamais pour un joueur noté présent.
+    const excuses = (Array.isArray(b.excuses) ? b.excuses : []).filter((x) => x && typeof x.joueurId === "string" && x.joueurId.startsWith("rec") && !presents.includes(x.joueurId)).slice(0, 80);
+    const seenX = new Set();
+    const exList = excuses.filter((x) => !seenX.has(x.joueurId) && seenX.add(x.joueurId)).map((x) => ({ fields: { "Libellé": (fl["Libellé"] || "Séance") + " · excusé", "Séance": [seanceId], "Joueur": [x.joueurId], "État": "Excusé", "Motif": String(x.motif || "").trim().slice(0, 120) || "Non précisé", "Saisi par": [sess.uid], "Saisi le": now } }));
+    if (exList.length) await createMany(T_P, exList);
     const upd = { "Statut": "Pointée", "Motif annulation": "", "Pointée par": [sess.uid], "Pointée le": now };
     if (fl["Type"] === "Match" && b.score && b.score.vhb !== undefined && b.score.adv !== undefined && b.score.vhb !== "" && b.score.adv !== "") {
       const v = Number(b.score.vhb), a = Number(b.score.adv);
@@ -140,7 +145,8 @@ export default async function handler(req, res) {
     const wasPointed = fl["Statut"] === "Pointée";
     if (wasPointed) {
       const before = oldPts.filter((p) => (p.fields || {})["État"] !== "Excusé").map((p) => ((p.fields || {})["Joueur"] || [])[0]).filter(Boolean);
-      const detail = { "Présents": { avant: before, après: presents }, "Pointée par": { avant: by ? [by] : [], après: [sess.uid] }, "Pointée le": { avant: fl["Pointée le"] || null, après: now } };
+      const exBefore = oldPts.filter((p) => (p.fields || {})["État"] === "Excusé").map((p) => ((p.fields || {})["Joueur"] || [])[0] + " (" + ((p.fields || {})["Motif"] || "") + ")");
+      const detail = { "Présents": { avant: before, après: presents }, "Excusés": { avant: exBefore, après: exList.map((x) => x.fields["Joueur"][0] + " (" + x.fields["Motif"] + ")") }, "Pointée par": { avant: by ? [by] : [], après: [sess.uid] }, "Pointée le": { avant: fl["Pointée le"] || null, après: now } };
       if (fl["Type"] === "Match" && upd["Score VHB"] !== undefined) detail["Score"] = { avant: fl["Score VHB"] != null ? fl["Score VHB"] + "-" + fl["Score adverse"] : null, après: upd["Score VHB"] + "-" + upd["Score adverse"] };
       await logAction(sess, by && by !== sess.uid ? "Pointage remplacé (autre membre)" : "Pointage modifié", "Séances", seanceId, detail);
     }
