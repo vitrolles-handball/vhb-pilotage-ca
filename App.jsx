@@ -397,22 +397,43 @@ function Login({ onLogin, resetToken, onResetDone }) {
 
 // ---------------------------------------------------------------------------
 // INSTALLATION DE L'APPLI — bandeau discret, une fois connecté.
-//  • Android / ordinateur (Chrome, Edge) : vrai bouton « Installer ».
-//  • iPhone / iPad : Apple ne permet pas l'installation en un clic → on montre les 2 gestes.
+//  • Android / ordinateur (Chrome, Edge, Samsung) : vrai bouton « Installer ».
+//  • iPhone / iPad, Safari sur Mac, Firefox : pas d'installation en un clic
+//    possible → bouton « Comment faire » qui montre les gestes.
 //  • Masqué si l'appli est déjà installée, ou pendant 30 jours après « Plus tard ».
 // ---------------------------------------------------------------------------
 let __vhbInstallEvt = null;
 if (typeof window !== "undefined") {
   window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); __vhbInstallEvt = e; window.dispatchEvent(new Event("vhb-installable")); });
 }
+// Type d'appareil / navigateur pour l'aide à l'installation manuelle.
+function installPlatform() {
+  if (typeof navigator === "undefined") return "other";
+  const ua = navigator.userAgent || "";
+  if (isIOSDevice()) return /CriOS|FxiOS|EdgiOS|OPiOS/i.test(ua) ? "ios-other" : "ios-safari";
+  if (/Android/i.test(ua)) return /Firefox/i.test(ua) ? "firefox-android" : "other";
+  if (/Firefox/i.test(ua)) return "firefox-desktop";
+  if (/Macintosh/i.test(ua) && /Safari/i.test(ua) && !/Chrome|Chromium|Edg|OPR/i.test(ua)) return "mac-safari";
+  return "other";
+}
+function InstallHelp({ platform }) {
+  const share = <i className="ti ti-share-2" aria-hidden="true" />;
+  if (platform === "ios-safari") return <>Dans Safari, touche <b>Partager</b> {share} en bas de l'écran (ou en haut sur iPad), puis <b>« Sur l'écran d'accueil »</b> et <b>Ajouter</b>.</>;
+  if (platform === "ios-other") return <>Touche <b>Partager</b> {share} dans la barre d'adresse, puis <b>« Sur l'écran d'accueil »</b> et <b>Ajouter</b>. Si tu ne le trouves pas, ouvre cette adresse dans <b>Safari</b>.</>;
+  if (platform === "mac-safari") return <>Dans la barre de menus en haut de l'écran, clique sur <b>Fichier</b>, puis <b>« Ajouter au Dock »</b>. VHB Team apparaît alors dans le Dock comme une appli.</>;
+  if (platform === "firefox-android") return <>Touche le menu <b>⋮</b>, puis <b>« Ajouter à l'écran d'accueil »</b> (ou <b>« Installer »</b>).</>;
+  if (platform === "firefox-desktop") return <>Firefox ne sait pas installer les applis. Ouvre <b>{typeof window !== "undefined" ? window.location.host : "cette adresse"}</b> dans <b>Chrome</b> ou <b>Edge</b> : un bouton « Installer » apparaîtra.</>;
+  return null;
+}
 function InstallBanner() {
   const [can, setCan] = useState(!!__vhbInstallEvt);
-  const [ios] = useState(() => isIOSDevice());
+  const [platform] = useState(() => installPlatform());
+  const manual = platform !== "other";
   const [hidden, setHidden] = useState(() => {
     if (isStandalone()) return true;
     try { const t = Number(localStorage.getItem("vhb_install_later") || 0); return Date.now() - t < 30 * 86400000; } catch (e) { return false; }
   });
-  const [iosHelp, setIosHelp] = useState(false);
+  const [help, setHelp] = useState(false);
   useEffect(() => {
     const h = () => setCan(true);
     const done = () => setHidden(true);
@@ -421,25 +442,25 @@ function InstallBanner() {
     try { if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {}); } catch (e) {}
     return () => { window.removeEventListener("vhb-installable", h); window.removeEventListener("appinstalled", done); };
   }, []);
-  if (hidden || (!can && !ios)) return null;
+  if (hidden || (!can && !manual)) return null;
   const later = () => { try { localStorage.setItem("vhb_install_later", String(Date.now())); } catch (e) {} setHidden(true); };
   const install = async () => {
-    if (ios) { setIosHelp(true); return; }
+    if (!can) { setHelp(true); return; }
     const evt = __vhbInstallEvt; if (!evt) return;
     evt.prompt();
     try { const r = await evt.userChoice; if (r && r.outcome === "accepted") setHidden(true); } catch (e) {}
     __vhbInstallEvt = null; setCan(false);
   };
   return (
-    <div className="fade" style={{ background: "#16171B", color: "#fff", borderRadius: 18, padding: "12px 14px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", margin: "0 0 16px" }}>
+    <div className="fade" data-testid="install-banner" data-platform={platform} style={{ background: "#16171B", color: "#fff", borderRadius: 18, padding: "12px 14px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", margin: "0 0 16px" }}>
       <div style={{ width: 40, height: 40, borderRadius: 12, background: YELLOW, color: BLACK, display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}><i className="ti ti-device-mobile-down" style={{ fontSize: 22 }} aria-hidden="true" /></div>
       <div style={{ flex: "1 1 200px", minWidth: 0 }}>
         <div style={{ fontWeight: 800, fontSize: 14 }}>Installe VHB Team sur cet appareil</div>
-        {!iosHelp && <div style={{ fontSize: 12.5, color: "#C9CCD2" }}>Une icône sur ton écran d'accueil, l'appli en plein écran et les notifications.</div>}
-        {iosHelp && <div style={{ fontSize: 12.5, color: "#E3E5E8", lineHeight: 1.55 }}>Dans Safari, touche <b>Partager</b> <i className="ti ti-share-2" aria-hidden="true" /> en bas de l'écran, puis <b>« Sur l'écran d'accueil »</b> et <b>Ajouter</b>.</div>}
+        {!help && <div style={{ fontSize: 12.5, color: "#C9CCD2" }}>Une icône sur ton écran d'accueil, l'appli en plein écran et les notifications.</div>}
+        {help && <div style={{ fontSize: 12.5, color: "#E3E5E8", lineHeight: 1.55 }}><InstallHelp platform={platform} /></div>}
       </div>
-      {!iosHelp && <button className="btn" onClick={install} style={{ background: YELLOW, color: BLACK, border: "none", fontWeight: 800 }}>{ios ? "Comment faire" : "Installer"}</button>}
-      <button className="btn" onClick={later} style={{ background: "transparent", color: "#fff", border: "1px solid rgba(255,255,255,.3)" }}>{iosHelp ? "J'ai compris" : "Plus tard"}</button>
+      {!help && <button className="btn" onClick={install} style={{ background: YELLOW, color: BLACK, border: "none", fontWeight: 800 }}>{can ? "Installer" : "Comment faire"}</button>}
+      <button className="btn" onClick={later} style={{ background: "transparent", color: "#fff", border: "1px solid rgba(255,255,255,.3)" }}>{help ? "J'ai compris" : "Plus tard"}</button>
     </div>
   );
 }
@@ -2209,7 +2230,8 @@ function urlB64ToUint8(base64String) {
   return arr;
 }
 function pushSupported() { return typeof navigator !== "undefined" && "serviceWorker" in navigator && typeof window !== "undefined" && "PushManager" in window && "Notification" in window; }
-function isIOSDevice() { return typeof navigator !== "undefined" && /iphone|ipad|ipod/i.test(navigator.userAgent); }
+// iPad récent : il se présente comme un Mac, on le reconnaît à son écran tactile.
+function isIOSDevice() { return typeof navigator !== "undefined" && (/iphone|ipad|ipod/i.test(navigator.userAgent) || (/Macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1)); }
 function isStandalone() { return (typeof window !== "undefined" && window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || (typeof navigator !== "undefined" && navigator.standalone === true); }
 
 function PushToggle({ me, reload }) {
