@@ -5,6 +5,8 @@
 //          capturedAt (envoi différé hors ligne) : si quelqu'un a pointé APRÈS, on ne l'écrase pas.
 //   cancel { seanceId, motif }   → séance annulée (sort du calcul des primes)
 //   reopen { seanceId }          → annule l'annulation (repasse « Prévue »)
+//   addPlayer { seanceId, joueurId? | prenom+nom } → ajoute un joueur à l'équipe de la séance,
+//          en Renfort « À valider » (un responsable le passera en Effectif ou le gardera en renfort).
 import { at, ENFORCE, getSession, can, canAny, seesTeam, readBody, logAction } from "./_lib.js";
 
 const T_S = encodeURIComponent("Séances");
@@ -83,6 +85,32 @@ export default async function handler(req, res) {
       await at("PATCH", T_S, { records: [{ id: seanceId, fields: { "Statut": "Prévue", "Motif annulation": "" } }], typecast: true });
       await logAction(sess, "Séance rétablie", "Séances", seanceId, "");
       res.status(200).json({ ok: true });
+      return;
+    }
+    if (action === "addPlayer") {
+      if (!canAny(sess, ["point", "eff"])) { res.status(403).json({ error: "Tu ne peux pas ajouter de joueur à cette équipe." }); return; }
+      const date = String(fl["Date"] || "").slice(0, 10);
+      const T_J = encodeURIComponent("Joueurs"), T_E = encodeURIComponent("Effectifs");
+      let pid = typeof b.joueurId === "string" && /^rec[A-Za-z0-9]{14}$/.test(b.joueurId) ? b.joueurId : null;
+      let label;
+      if (pid) {
+        let pl; try { pl = await at("GET", T_J + "/" + pid); } catch (e) { res.status(404).json({ error: "Joueur introuvable." }); return; }
+        label = (((pl.fields || {})["Prénom"] || "") + " " + ((pl.fields || {})["Nom"] || "")).trim();
+        // Déjà dans l'équipe à cette date ? On ne crée pas de doublon.
+        const effIds = (pl.fields || {})["Effectifs"] || [];
+        const mine = effIds.length ? (await getByIds(T_E, effIds)).filter((e) => ((e.fields || {})["Équipe"] || []).includes(team)) : [];
+        const open = mine.find((e) => { const x = e.fields || {}; return (!x["Entrée"] || x["Entrée"] <= date) && (!x["Sortie"] || x["Sortie"] >= date); });
+        if (open) { res.status(200).json({ ok: true, joueurId: pid, effectifId: open.id, already: true, statut: (open.fields || {})["Statut"] || "Effectif" }); return; }
+      } else {
+        const prenom = String(b.prenom || "").trim().slice(0, 60), nom = String(b.nom || "").trim().slice(0, 60);
+        if (!prenom || !nom) { res.status(400).json({ error: "Indique le prénom et le nom du joueur." }); return; }
+        const [j] = await createMany(T_J, [{ fields: { "Prénom": prenom, "Nom": nom } }]);
+        pid = j.id; label = prenom + " " + nom;
+      }
+      let teamName = ""; try { teamName = ((await at("GET", encodeURIComponent("Équipes") + "/" + team)).fields || {})["Nom"] || ""; } catch (e) {}
+      const [ef] = await createMany(T_E, [{ fields: { "Libellé": label + " — " + teamName, "Joueur": [pid], "Équipe": [team], "Statut": "Renfort", "Entrée": date || null, "À valider": true } }]);
+      await logAction(sess, "Joueur ajouté depuis une séance (renfort à valider)", "Effectifs", ef.id, label + " · " + teamName + " · séance du " + date);
+      res.status(200).json({ ok: true, joueurId: pid, effectifId: ef.id, statut: "Renfort" });
       return;
     }
     if (action !== "save") { res.status(400).json({ error: "Action inconnue : " + action }); return; }

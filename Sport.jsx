@@ -114,7 +114,7 @@ export default function SportSpace({ me, rights, scope, teams, view, setView }) 
   const mId = manage && (manage.id || manage), mFocus = manage && manage.focus;
   const manageUI = manage && <TeamManager key={mId + (mFocus || "")} teamId={mId} focus={mFocus} limited={scope !== "all"} rights={rights} onClose={() => { setManage(null); ["Équipes", "Staff", "Effectifs", "Rythmes", "Séances", "Joueurs"].forEach((x) => dbForget(x)); reload(); }} />;
   const onManage = canManage(rights) && d.teams.length ? (id, fo) => setManage({ id, focus: fo }) : null;
-  if (view === "joueurs") return <><RosterView key={"r" + (pick || "")} teams={d.teams} efx={d.efx} players={d.players} initialTeam={pick} onManage={onManage} />{manageUI}</>;
+  if (view === "joueurs") return <><RosterView key={"r" + (pick || "")} teams={d.teams} efx={d.efx} players={d.players} initialTeam={pick} onManage={onManage} canValidate={has(rights, "eff")} onValidated={() => { dbForget("Effectifs"); reload(); }} />{manageUI}</>;
   const banner = (d.offline || queued > 0) && <div role="status" style={{ background: "#FFF6D6", color: "#5C4600", borderRadius: 14, padding: "10px 14px", fontSize: 13, fontWeight: 700, display: "flex", gap: 8, alignItems: "center" }}>
     <i className="ti ti-wifi-off" aria-hidden="true" />
     {queued > 0 ? queued + " pointage(s) enregistré(s) sur le téléphone : envoi automatique dès le retour du réseau." : "Pas de réseau : tu vois les données de ta dernière connexion."}
@@ -128,7 +128,7 @@ export default function SportSpace({ me, rights, scope, teams, view, setView }) 
     if (!s) return <>{primesUI}<div className="card">Séance introuvable. <button className="btn btn-ghost" onClick={() => setOpen(null)}>Retour</button></div></>;
     const isM = f(s, "Type") === "Match";
     if (isM && !open.pointer) return <>{primesUI}<MatchPage s={s} d={d} rights={rights} onBack={() => setOpen(null)} onPointer={() => setOpen({ seanceId: s.id, pointer: true })} onChanged={reload} /></>;
-    return <>{primesUI}<PointageView s={s} d={d} me={me} rights={rights} onBack={() => setOpen(isM ? { seanceId: s.id } : null)} onDone={isM ? async (msg) => { setOpen({ seanceId: s.id }); await reload(); if (msg) setTimeout(() => alert(msg), 50); } : done} /></>;
+    return <>{primesUI}<PointageView s={s} d={d} me={me} rights={rights} onRoster={() => { dbForget("Effectifs"); dbForget("Joueurs"); return reload(); }} onBack={() => setOpen(isM ? { seanceId: s.id } : null)} onDone={isM ? async (msg) => { setOpen({ seanceId: s.id }); await reload(); if (msg) setTimeout(() => alert(msg), 50); } : done} /></>;
   }
   const visTeams = filter === "all" ? d.teams.map((t) => t.id) : [filter];
   const mineS = d.seances.filter((s) => visTeams.includes(teamOf(s)));
@@ -462,7 +462,54 @@ function SeancesList({ d, mineS, tName, filter, setFilter, onOpen, banner, onMan
 }
 
 // ---------------------------------------------------------------- Pointage
-function PointageView({ s, d, me, rights, onBack, onDone }) {
+// Ajouter un joueur depuis une séance : il entre dans l'équipe en Renfort « À valider ».
+function AddPlayer({ d, s, roster, onAdded }) {
+  const [open, setOpen] = useState(false);
+  const [prenom, setPrenom] = useState(""); const [nom, setNom] = useState("");
+  const [busy, setBusy] = useState(false); const [msg, setMsg] = useState("");
+  const inTeam = new Set(roster.map((r) => r.p.id));
+  const q = norm((prenom + " " + nom).trim());
+  const sugg = q.length < 2 ? [] : d.players.filter((p) => !inTeam.has(p.id) && q.split(/\s+/).every((w) => norm(pName(p)).includes(w))).slice(0, 5);
+  const add = async (payload, label) => {
+    setBusy(true); setMsg("");
+    try {
+      const j = await callPointage({ action: "addPlayer", seanceId: s.id, ...payload });
+      await onAdded(j.joueurId);
+      setMsg(label + (j.already ? " était déjà dans l'équipe : il est coché." : " est ajouté en renfort (à valider par un responsable) et coché."));
+      setPrenom(""); setNom(""); setOpen(false);
+    } catch (e) { setMsg("Impossible : " + e.message); }
+    setBusy(false);
+  };
+  if (!open) return <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+    <button className="btn btn-ghost" style={{ alignSelf: "flex-start", borderStyle: "dashed" }} onClick={() => { setOpen(true); setMsg(""); }}><i className="ti ti-user-plus" aria-hidden="true" />Ajouter un joueur</button>
+    {msg && <div role="status" style={{ fontSize: 13, color: "#1F5C30", fontWeight: 700 }}>{msg}</div>}
+  </div>;
+  return <div className="card" style={{ display: "flex", flexDirection: "column", gap: 10, borderLeft: "4px solid #E8800C" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <div style={{ flex: 1, fontWeight: 800 }}>Ajouter un joueur à la séance</div>
+      <button className="btn btn-ghost" aria-label="Fermer" onClick={() => setOpen(false)} style={{ padding: "6px 9px" }}><i className="ti ti-x" aria-hidden="true" /></button>
+    </div>
+    <div style={{ fontSize: 12.5, color: MUT, lineHeight: 1.45 }}>Il entre dans l'équipe en <b>renfort</b>, à partir de cette séance. Un responsable le validera ensuite : passer en Effectif ou rester en renfort.</div>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
+      <div><label className="lbl" htmlFor="ap-p">Prénom</label><input id="ap-p" className="inp" value={prenom} onChange={(e) => setPrenom(e.target.value)} autoComplete="off" autoFocus /></div>
+      <div><label className="lbl" htmlFor="ap-n">Nom</label><input id="ap-n" className="inp" value={nom} onChange={(e) => setNom(e.target.value)} autoComplete="off" /></div>
+    </div>
+    {sugg.length > 0 && <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <div style={{ fontSize: 12, fontWeight: 800, color: MUT, letterSpacing: ".03em" }}>DÉJÀ AU CLUB</div>
+      {sugg.map((p) => <button key={p.id} disabled={busy} onClick={() => add({ joueurId: p.id }, pName(p))} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 12, border: "1px solid " + BORDER, background: "#fff", cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
+        <span style={{ width: 32, height: 32, borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800, background: "#FCE9DE", color: "#8A2807" }}>{initials(p)}</span>
+        <span style={{ flex: 1, fontWeight: 700, color: TEXT }}>{pName(p)}</span>
+        <span style={{ fontSize: 12.5, fontWeight: 800, color: "#E8800C" }}>Ajouter</span>
+      </button>)}
+    </div>}
+    <button className="btn btn-red" disabled={busy || !prenom.trim() || !nom.trim()} onClick={() => add({ prenom: prenom.trim(), nom: nom.trim() }, (prenom.trim() + " " + nom.trim()))} style={{ justifyContent: "center" }}>
+      <i className="ti ti-user-plus" aria-hidden="true" />{busy ? "Ajout…" : sugg.length ? "Non, c'est un nouveau joueur : créer « " + (prenom.trim() + " " + nom.trim()).trim() + " »" : "Créer et ajouter " + (prenom.trim() + " " + nom.trim()).trim()}
+    </button>
+    {msg && <div role="alert" style={{ fontSize: 13, color: RED, fontWeight: 700 }}>{msg}</div>}
+  </div>;
+}
+
+function PointageView({ s, d, me, rights, onBack, onDone, onRoster }) {
   const isMatch = f(s, "Type") === "Match";
   const date = f(s, "Date");
   const roster = rosterAt(d, teamOf(s), date);
@@ -524,10 +571,10 @@ function PointageView({ s, d, me, rights, onBack, onDone }) {
   const result = isMatch ? (score.vhb > score.adv ? "Victoire" : score.vhb === score.adv ? "Match nul" : "Défaite") : null;
   const stepper = (k, label) => <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
     <div style={{ fontSize: 12, fontWeight: 800, color: MUT }}>{label}</div>
-    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-      <button type="button" disabled={!!lock} className="btn btn-ghost" style={{ width: 44, height: 44, justifyContent: "center", padding: 0, fontSize: 22 }} aria-label={"Retirer un but " + label} onClick={() => setScore({ ...score, [k]: Math.max(0, Number(score[k]) - 1) })}>−</button>
-      <input aria-label={"Score " + label} disabled={!!lock} inputMode="numeric" value={score[k]} onChange={(e) => setScore({ ...score, [k]: Number(e.target.value.replace(/\D/g, "") || 0) })} style={{ width: 60, textAlign: "center", fontSize: 30, fontWeight: 800, border: "none", fontFamily: "inherit", background: "transparent" }} />
-      <button type="button" disabled={!!lock} className="btn btn-ghost" style={{ width: 44, height: 44, justifyContent: "center", padding: 0, fontSize: 22 }} aria-label={"Ajouter un but " + label} onClick={() => setScore({ ...score, [k]: Number(score[k]) + 1 })}>+</button>
+    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+      <button type="button" disabled={!!lock} className="btn btn-ghost" style={{ width: 42, height: 42, flex: "0 0 auto", justifyContent: "center", padding: 0, fontSize: 22 }} aria-label={"Retirer un but " + label} onClick={() => setScore({ ...score, [k]: Math.max(0, Number(score[k]) - 1) })}>−</button>
+      <input aria-label={"Score " + label} disabled={!!lock} inputMode="numeric" value={score[k]} onChange={(e) => setScore({ ...score, [k]: Number(e.target.value.replace(/\D/g, "") || 0) })} style={{ width: 70, minWidth: 0, padding: 0, textAlign: "center", fontSize: 30, fontWeight: 800, border: "none", fontFamily: "inherit", background: "transparent", fontVariantNumeric: "tabular-nums", letterSpacing: "-.02em", color: TEXT }} />
+      <button type="button" disabled={!!lock} className="btn btn-ghost" style={{ width: 42, height: 42, flex: "0 0 auto", justifyContent: "center", padding: 0, fontSize: 22 }} aria-label={"Ajouter un but " + label} onClick={() => setScore({ ...score, [k]: Number(score[k]) + 1 })}>+</button>
     </div>
   </div>;
   return (
@@ -562,12 +609,13 @@ function PointageView({ s, d, me, rights, onBack, onDone }) {
           {roster.map(({ e, p }) => { const on = sel.has(p.id); return (
             <button key={p.id} disabled={!!lock} onClick={() => toggle(p.id)} aria-pressed={on} style={{ cursor: lock ? "default" : "pointer", width: "100%", minHeight: 58, border: "1px solid " + (on ? "#fff" : "#D9DCE1"), background: on ? "#fff" : "#F4F5F8", borderRadius: 14, padding: "8px 12px", display: "flex", alignItems: "center", gap: 12, fontFamily: "inherit", textAlign: "left", boxShadow: on ? "0 1px 3px rgba(20,22,30,.08)" : "none" }}>
               <span style={{ width: 38, height: 38, borderRadius: 19, flex: "0 0 auto", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 800, background: on ? "#FCE9DE" : "#E2E5E9", color: on ? "#8A2807" : MUT }}>{initials(p)}</span>
-              <span style={{ flex: 1, minWidth: 0 }}><span style={{ display: "block", fontSize: 15, fontWeight: 700, color: TEXT }}>{pName(p)}</span>{f(e, "Statut") === "Renfort" && <span style={{ fontSize: 11.5, fontWeight: 700, color: "#6B4A00" }}>Renfort</span>}</span>
+              <span style={{ flex: 1, minWidth: 0 }}><span style={{ display: "block", fontSize: 15, fontWeight: 700, color: TEXT }}>{pName(p)}</span>{f(e, "Statut") === "Renfort" && <span style={{ fontSize: 11.5, fontWeight: 700, color: "#6B4A00" }}>Renfort{f(e, "À valider") ? " · à valider" : ""}</span>}</span>
               {isMatch ? <span aria-hidden="true" style={{ width: 26, height: 26, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", background: on ? RED : "#fff", border: "2px solid " + (on ? RED : "#B8BDC4") }}>{on && <i className="ti ti-check" style={{ color: "#fff" }} />}</span>
                 : <span style={{ fontSize: 13, fontWeight: 800, padding: "7px 12px", borderRadius: 20, background: on ? "#E7F4EA" : "#fff", color: on ? "#1F5C30" : MUT, border: "1px solid " + (on ? "#E7F4EA" : "#D9DCE1") }}>{on ? "Présent" : "Absent"}</span>}
             </button>); })}
           {!roster.length && <div className="card" style={{ color: MUT, fontSize: 13.5 }}>Aucun joueur dans l'effectif de l'équipe à cette date. L'effectif se gère dans Admin › Équipes.</div>}
         </div>}
+        {!lock && !loading && onRoster && <AddPlayer d={d} s={s} roster={roster} onAdded={async (pid) => { await onRoster(); setSel((x) => new Set([...x, pid])); }} />}
         {lock ? null : !cancelMode ? <button className="btn btn-ghost" style={{ alignSelf: "flex-start" }} onClick={() => setCancelMode(true)}>Séance annulée ?</button>
           : <div className="card" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
             <div style={{ flex: "1 1 200px" }}><label className="lbl" htmlFor="cx-m">Motif</label>

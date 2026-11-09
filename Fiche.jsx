@@ -190,7 +190,27 @@ export function PlayerCard({ joueurId, teamId, backLabel, onClose, onPoste }) {
 }
 
 // ---------------------------------------------------------------------------- Onglet Joueurs (toutes les équipes)
-export function RosterView({ teams, efx, players, initialTeam, onManage }) {
+// Joueurs ajoutés depuis une séance par un coach : à passer en Effectif ou à garder en renfort.
+function PendingPlayers({ rows, onDone }) {
+  const [busy, setBusy] = useState(null);
+  if (!rows.length) return null;
+  const decide = async (r, statut) => {
+    setBusy(r.ef);
+    try { await db({ action: "update", table: "Effectifs", recordId: r.ef, fields: { "Statut": statut, "À valider": false } }); onDone(r.ef, statut); }
+    catch (e) { alert("Impossible : " + e.message); }
+    setBusy(null);
+  };
+  return <div className="card" style={{ borderLeft: "4px solid #E8800C", background: "#FFF8EF", display: "flex", flexDirection: "column", gap: 10 }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 8 }}><i className="ti ti-flag" aria-hidden="true" style={{ color: "#E8800C", fontSize: 18 }} /><b style={{ fontSize: 14.5 }}>{rows.length === 1 ? "1 joueur ajouté depuis une séance, à valider" : rows.length + " joueurs ajoutés depuis une séance, à valider"}</b></div>
+    {rows.map((r) => <div key={r.ef} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", background: "#fff", borderRadius: 12, padding: "8px 10px" }}>
+      <span style={{ flex: "1 1 150px", minWidth: 0 }}><b>{r.nom}</b><span style={{ display: "block", fontSize: 12, color: MUT }}>En renfort{r.entree ? " depuis le " + new Date(r.entree + "T12:00:00").toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) : ""}</span></span>
+      <button className="btn btn-dark" disabled={busy === r.ef} onClick={() => decide(r, "Effectif")} style={{ minHeight: 36, fontSize: 13 }}><i className="ti ti-check" aria-hidden="true" />Passer en Effectif</button>
+      <button className="btn btn-ghost" disabled={busy === r.ef} onClick={() => decide(r, "Renfort")} style={{ minHeight: 36, fontSize: 13 }}>Garder en renfort</button>
+    </div>)}
+  </div>;
+}
+
+export function RosterView({ teams, efx, players, initialTeam, onManage, canValidate, onValidated }) {
   const [teamId, setTeamId] = useState(() => initialTeam || (teams[0] || {}).id);
   const [month, setMonth] = useState(thisMonth);
   const [data, setData] = useState(null);
@@ -199,6 +219,7 @@ export function RosterView({ teams, efx, players, initialTeam, onManage }) {
   const [sort, setSort] = useState("nom");
   const [open, setOpen] = useState(null);
   const [posteOv, setPosteOv] = useState({});
+  const [validated, setValidated] = useState({});
   const load = useCallback(async () => {
     if (!teamId) return; setErr(""); setData(null);
     try { setData(await api({ action: "assiduite", teamId, month })); } catch (e) { setErr(e.message); }
@@ -208,7 +229,7 @@ export function RosterView({ teams, efx, players, initialTeam, onManage }) {
   // Effectif actuel de l'équipe (même les joueurs sans séance ce mois-ci).
   const today = new Date().toISOString().slice(0, 10);
   const roster = efx.filter((e) => (f(e, "Équipe") || []).includes(teamId) && (!f(e, "Sortie") || f(e, "Sortie") >= month + "-01"))
-    .map((e) => { const p = players.find((x) => x.id === (f(e, "Joueur") || [])[0]); return p && { id: p.id, nom: ((f(p, "Prénom") || "") + " " + (f(p, "Nom") || "")).trim(), tri: norm(f(p, "Nom")) + " " + norm(f(p, "Prénom")), statut: f(e, "Statut") || "Effectif", poste: posteOv[p.id] !== undefined ? posteOv[p.id] : (f(p, "Poste") || ""), futur: f(e, "Entrée") && f(e, "Entrée") > today }; })
+    .map((e) => { const p = players.find((x) => x.id === (f(e, "Joueur") || [])[0]); return p && { id: p.id, nom: ((f(p, "Prénom") || "") + " " + (f(p, "Nom") || "")).trim(), tri: norm(f(p, "Nom")) + " " + norm(f(p, "Prénom")), statut: f(e, "Statut") || "Effectif", poste: posteOv[p.id] !== undefined ? posteOv[p.id] : (f(p, "Poste") || ""), futur: f(e, "Entrée") && f(e, "Entrée") > today, ef: e.id, aValider: !!f(e, "À valider"), entree: f(e, "Entrée") || "" }; })
     .filter(Boolean);
   const seen = new Set(); const rows = roster.filter((r) => !seen.has(r.id) && seen.add(r.id))
     .map((r) => ({ ...r, a: data && (data.lines || []).find((l) => l.joueur === r.id) }))
@@ -236,6 +257,7 @@ export function RosterView({ teams, efx, players, initialTeam, onManage }) {
       <input className="inp" aria-label="Rechercher un joueur" placeholder="Rechercher un joueur…" value={q} onChange={(e) => setQ(e.target.value)} style={{ flex: "1 1 180px", width: "auto", minWidth: 0 }} />
       <select className="sel" aria-label="Trier" value={sort} onChange={(e) => setSort(e.target.value)} style={{ width: "auto", flex: "0 0 auto" }}><option value="nom">Par nom</option><option value="taux">Moins présents</option></select>
     </div>
+    {canValidate && <PendingPlayers rows={roster.filter((r) => r.aValider && !(validated[r.ef]))} onDone={(ef, label) => { setValidated((o) => ({ ...o, [ef]: label })); onValidated && onValidated(); }} />}
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       {[["Effectif", OK, rows.filter((r) => r.statut !== "Renfort")], ["Renforts", "#E8800C", rows.filter((r) => r.statut === "Renfort")]].filter((g) => g[2].length).map(([label, col, list], gi) => <React.Fragment key={label}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: gi ? "10px 2px 0" : "2px 2px 0" }}><span style={{ width: 4, height: 14, borderRadius: 2, background: col }} /><b style={{ fontSize: 14 }}>{label}</b><span style={{ fontSize: 12.5, color: MUT }}>{list.length} joueur{list.length > 1 ? "s" : ""}</span></div>
