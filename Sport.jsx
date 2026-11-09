@@ -114,20 +114,21 @@ export default function SportSpace({ me, rights, scope, teams, view, setView }) 
   const mId = manage && (manage.id || manage), mFocus = manage && manage.focus;
   const manageUI = manage && <TeamManager key={mId + (mFocus || "")} teamId={mId} focus={mFocus} limited={scope !== "all"} rights={rights} onClose={() => { setManage(null); ["Équipes", "Staff", "Effectifs", "Rythmes", "Séances", "Joueurs"].forEach((x) => dbForget(x)); reload(); }} />;
   const onManage = canManage(rights) && d.teams.length ? (id, fo) => setManage({ id, focus: fo }) : null;
-  if (view === "primes") return <PrimesView key={"p" + (pick || "")} rights={rights} teams={d.teams} initialTeam={pick} />;
   if (view === "joueurs") return <><RosterView key={"r" + (pick || "")} teams={d.teams} efx={d.efx} players={d.players} initialTeam={pick} onManage={onManage} />{manageUI}</>;
   const banner = (d.offline || queued > 0) && <div role="status" style={{ background: "#FFF6D6", color: "#5C4600", borderRadius: 14, padding: "10px 14px", fontSize: 13, fontWeight: 700, display: "flex", gap: 8, alignItems: "center" }}>
     <i className="ti ti-wifi-off" aria-hidden="true" />
     {queued > 0 ? queued + " pointage(s) enregistré(s) sur le téléphone : envoi automatique dès le retour du réseau." : "Pas de réseau : tu vois les données de ta dernière connexion."}
   </div>;
+  const primesUI = view === "primes" && <div style={{ display: open ? "none" : "block" }}><PrimesView key={"p" + (pick || "")} rights={rights} teams={d.teams} initialTeam={pick} visible={!open} onOpenSeance={(id) => setOpen({ seanceId: id })} /></div>;
+  if (view === "primes" && !open) return primesUI;
   if (open) {
     const done = async (msg) => { setOpen(null); await reload(); if (msg) setTimeout(() => alert(msg), 50); };
-    if (open.create) return <CreateSeance kind={open.create} d={d} me={me} onCancel={() => setOpen(null)} onCreated={(id) => { reload().then(() => setOpen({ seanceId: id })); }} />;
+    if (open.create) return <>{primesUI}<CreateSeance kind={open.create} d={d} me={me} onCancel={() => setOpen(null)} onCreated={(id) => { reload().then(() => setOpen({ seanceId: id })); }} /></>;
     const s = d.seances.find((x) => x.id === open.seanceId);
-    if (!s) return <div className="card">Séance introuvable. <button className="btn btn-ghost" onClick={() => setOpen(null)}>Retour</button></div>;
+    if (!s) return <>{primesUI}<div className="card">Séance introuvable. <button className="btn btn-ghost" onClick={() => setOpen(null)}>Retour</button></div></>;
     const isM = f(s, "Type") === "Match";
-    if (isM && !open.pointer) return <MatchPage s={s} d={d} rights={rights} onBack={() => setOpen(null)} onPointer={() => setOpen({ seanceId: s.id, pointer: true })} onChanged={reload} />;
-    return <PointageView s={s} d={d} me={me} rights={rights} onBack={() => setOpen(isM ? { seanceId: s.id } : null)} onDone={isM ? async (msg) => { setOpen({ seanceId: s.id }); await reload(); if (msg) setTimeout(() => alert(msg), 50); } : done} />;
+    if (isM && !open.pointer) return <>{primesUI}<MatchPage s={s} d={d} rights={rights} onBack={() => setOpen(null)} onPointer={() => setOpen({ seanceId: s.id, pointer: true })} onChanged={reload} /></>;
+    return <>{primesUI}<PointageView s={s} d={d} me={me} rights={rights} onBack={() => setOpen(isM ? { seanceId: s.id } : null)} onDone={isM ? async (msg) => { setOpen({ seanceId: s.id }); await reload(); if (msg) setTimeout(() => alert(msg), 50); } : done} /></>;
   }
   const visTeams = filter === "all" ? d.teams.map((t) => t.id) : [filter];
   const mineS = d.seances.filter((s) => visTeams.includes(teamOf(s)));

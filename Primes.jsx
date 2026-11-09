@@ -144,7 +144,71 @@ const PAY_TONE = { "À payer": ["#FDECEC", "#9E1B1B"], "Mis en paiement": ["#FFF
 // =====================================================================================
 // Tableau du mois
 // =====================================================================================
-export function PrimesView({ rights, teams, users, initialTeam }) {
+
+// ---------------------------------------------------------------------------- Grille des séances (vue détaillée)
+// Joueurs en lignes, séances du mois en colonnes. Toucher une case : Présent → Absent → Excusé → Présent.
+const ST_FULL = { P: "Présent", A: "Absent", E: "Excusé" };
+function SeancesGrid({ rows, seances, cellsOf, editable, onCell, onOpenSeance, groups }) {
+  const [busy, setBusy] = useState(null);
+  const [local, setLocal] = useState({});
+  const cols = [...seances].sort((a, b) => (String(a.date) + (a.heure || "")).localeCompare(String(b.date) + (b.heure || "")));
+  const kind = (s) => s.statut === "Annulée" ? ["Annul.", "#B4B2A9", "#fff"] : s.type === "Match" ? ["Match", "#F2C318", BLACK] : s.type === "Stage" ? ["Stage", "#1B5E9B", "#fff"] : /suppl/i.test(s.type || "") ? ["Suppl.", BLACK, "#fff"] : ["Entr.", RED, "#fff"];
+  const click = async (r, s, cur) => {
+    if (!editable || busy) return;
+    const next = cur === "P" ? "A" : cur === "A" ? "E" : "P";
+    let motif = "";
+    if (next === "E") { motif = prompt("Absence excusée de " + r.nom + " le " + fmtDate(s.date) + " : motif (blessure, examen, sélection…). Annule pour la laisser en absence.") || ""; if (!motif.trim()) { if (cur === "P") return doSet(r, s, "A"); return; } }
+    return doSet(r, s, next, motif);
+  };
+  const doSet = async (r, s, next, motif) => {
+    const key = r.joueur + "|" + s.id; setBusy(key); setLocal((o) => ({ ...o, [key]: next }));
+    try { await onCell(r, s, next, motif); } catch (e) { alert(e.message); setLocal((o) => { const x = { ...o }; delete x[key]; return x; }); }
+    setBusy(null);
+  };
+  const W = 34;
+  const cell = (r, s) => {
+    if (s.statut === "Annulée") return <td key={s.id} style={{ background: "#EEF0F3" }} />;
+    const raw = cellsOf(r, s);
+    if (s.statut !== "Pointée") return <td key={s.id} title="Séance pas encore pointée" style={{ textAlign: "center", color: "#B8BDC4" }}>·</td>;
+    if (!raw) return <td key={s.id} title="Pas dans l'effectif à cette date" style={{ textAlign: "center", color: "#C9CCD2" }}>–</td>;
+    const key = r.joueur + "|" + s.id, st = local[key] || raw, match = s.type === "Match";
+    const sty = st === "P" ? { background: match ? "#F2C318" : "#2E7D46", color: match ? BLACK : "#fff", border: "none" } : st === "E" ? { background: "#FFF3C4", color: "#6B4A00", border: "1px solid #F0D98A" } : { background: "#fff", color: "#B8BDC4", border: "1px solid #D9DCE1" };
+    return <td key={s.id} style={{ padding: "4px 2px", textAlign: "center" }}>
+      <button disabled={!editable || busy === key} onClick={() => click(r, s, st)} aria-label={r.nom + " · " + fmtDate(s.date) + " · " + ST_FULL[st]} title={ST_FULL[st] + (editable ? " · toucher pour changer" : "")}
+        style={{ width: 26, height: 26, borderRadius: 7, fontFamily: "inherit", fontSize: 12.5, fontWeight: 800, cursor: editable ? "pointer" : "default", display: "inline-flex", alignItems: "center", justifyContent: "center", opacity: busy === key ? .5 : 1, ...sty }}>{st === "P" ? "✓" : st === "E" ? "E" : ""}</button>
+    </td>;
+  };
+  const stick = { position: "sticky", left: 0, zIndex: 1, background: "#fff" };
+  return <div className="card" style={{ padding: 0, overflowX: "auto" }}>
+    <table style={{ borderCollapse: "separate", borderSpacing: 0, fontSize: 13, minWidth: "100%" }}>
+      <thead><tr>
+        <th style={{ ...stick, zIndex: 2, textAlign: "left", padding: "10px", fontSize: 11.5, color: MUT, letterSpacing: ".04em", borderBottom: "1px solid " + BORDER, minWidth: 150 }}>JOUEUR</th>
+        {cols.map((s) => { const [l, bg, fg] = kind(s); const d = new Date(String(s.date) + "T12:00:00"); return <th key={s.id} style={{ padding: "6px 2px", minWidth: W, borderBottom: "1px solid " + BORDER, opacity: s.statut === "Annulée" ? .6 : 1 }}>
+          <button onClick={() => onOpenSeance && onOpenSeance(s.id)} disabled={!onOpenSeance} title={fmtDate(s.date) + " · " + (s.type || "") + (s.adversaire ? " vs " + s.adversaire : "") + (s.resultat ? " · " + s.resultat : "") + (s.statut === "Annulée" ? " · annulée" : s.statut !== "Pointée" ? " · à pointer" : "")} style={{ background: "none", border: "none", padding: 0, cursor: onOpenSeance ? "pointer" : "default", fontFamily: "inherit", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, width: "100%" }}>
+            <span style={{ fontSize: 10, fontWeight: 700, color: MUT, textTransform: "uppercase" }}>{d.toLocaleDateString("fr-FR", { weekday: "short" }).replace(".", "").slice(0, 3)}</span>
+            <span style={{ fontSize: 14, fontWeight: 800, color: TEXT }}>{d.getDate()}</span>
+            <span style={{ fontSize: 9.5, fontWeight: 800, padding: "1px 4px", borderRadius: 4, background: bg, color: fg, whiteSpace: "nowrap" }}>{l}</span>
+            {s.statut !== "Pointée" && s.statut !== "Annulée" && <span style={{ width: 6, height: 6, borderRadius: 3, background: RED }} />}
+          </button></th>; })}
+        <th style={{ padding: "10px", fontSize: 11.5, color: MUT, borderBottom: "1px solid " + BORDER, textAlign: "right" }}>TAUX</th>
+        <th style={{ padding: "10px", fontSize: 11.5, color: MUT, borderBottom: "1px solid " + BORDER, textAlign: "right" }}>TOTAL €</th>
+      </tr></thead>
+      <tbody>{groups.map((g) => <React.Fragment key={g.key}>
+        <tr><td colSpan={cols.length + 3} style={{ padding: 0, background: "#F4F5F8", borderBottom: "1px solid " + BORDER }}><div style={{ position: "sticky", left: 0, display: "inline-block", padding: "8px 10px", borderLeft: "4px solid " + g.color, fontWeight: 800, fontSize: 13.5 }}>{g.label} <span style={{ fontWeight: 600, color: MUT, fontSize: 12 }}>· {g.rows.length} joueur{g.rows.length > 1 ? "s" : ""}{g.sub ? " · " + g.sub : ""}</span></div></td></tr>
+        {g.rows.map((r) => <tr key={r.joueur}>
+          <td style={{ ...stick, padding: "6px 10px", fontWeight: 800, whiteSpace: "nowrap", borderBottom: "1px solid " + BORDER, borderLeft: "4px solid " + g.color, boxShadow: "2px 0 0 #F2F3F6" }}>{r.nom}</td>
+          {cols.map((s) => cell(r, s))}
+          <td style={{ padding: "6px 10px", textAlign: "right", borderBottom: "1px solid " + BORDER, whiteSpace: "nowrap" }}>{r.seances ? pct(r.taux) : "—"}</td>
+          <td style={{ padding: "6px 10px", textAlign: "right", fontWeight: 800, borderBottom: "1px solid " + BORDER, whiteSpace: "nowrap" }}>{eur(r.total)}</td>
+        </tr>)}
+      </React.Fragment>)}</tbody>
+    </table>
+  </div>;
+}
+
+export function PrimesView({ rights, teams, users, initialTeam, onOpenSeance, visible }) {
+  const [gridView, setGridView] = useState(() => { try { return localStorage.getItem("vhb_primes_grid") === "1"; } catch (e) { return false; } });
+  const setGrid = (v) => { setGridView(v); try { localStorage.setItem("vhb_primes_grid", v ? "1" : "0"); } catch (e) {} };
   const primeTeams = useMemo(() => (teams || []).filter((t) => f(t, "Primes actives")).concat((teams || []).filter((t) => !f(t, "Primes actives"))), [teams]);
   const [teamId, setTeamId] = useState(() => initialTeam || (primeTeams[0] || {}).id);
   const [month, setMonth] = useState(defaultMonth);
@@ -168,6 +232,8 @@ export function PrimesView({ rights, teams, users, initialTeam }) {
     try { setData(await primesApi({ action: "month", teamId, month })); } catch (e) { setErr(e.message); }
   }, [teamId, month]);
   useEffect(() => { load(); }, [load]);
+  const wasHidden = React.useRef(false);
+  useEffect(() => { if (visible === false) wasHidden.current = true; else if (wasHidden.current) { wasHidden.current = false; if (teamId && month) primesApi({ action: "month", teamId, month }).then(setData).catch(() => {}); } }, [visible]);
   const pNameOf = (id) => { const p = ref.players.find((x) => x.id === id); return p ? ((f(p, "Prénom") || "") + " " + (f(p, "Nom") || "")).trim() : null; };
   const userName = (id) => { const u = (ref.users || []).find((x) => x.id === id); return u ? ((f(u, "Prénom") || "") + " " + (f(u, "Nom") || "")).trim() || f(u, "Email") : ""; };
 
@@ -228,6 +294,7 @@ export function PrimesView({ rights, teams, users, initialTeam }) {
           <button aria-label="Mois suivant" className="btn btn-ghost" style={{ minHeight: 36, padding: "0 10px", borderRadius: 30 }} onClick={() => setMonth(shiftMonth(month, 1))}><span aria-hidden="true" style={{ fontSize: 20 }}>›</span></button>
         </div>
         {data && (validated ? <Chip bg="#E7F4EA" fg="#1F5C30">Validé{data.mois && data.mois.valideLe ? " le " + fmtDT(data.mois.valideLe) : ""}{data.mois && data.mois.validePar && userName(data.mois.validePar) ? " par " + userName(data.mois.validePar) : ""}</Chip> : <Chip bg="#FFF6D6" fg="#6B4A00">Ouvert · montants provisoires</Chip>)}
+        {data && <div role="group" aria-label="Vue" style={{ display: "inline-flex", gap: 2, background: "#E9EBEF", borderRadius: 30, padding: 3 }}>{[[false, "Synthèse", "ti-list-details"], [true, "Grille des séances", "ti-table"]].map(([v, l, ic]) => <button key={l} aria-pressed={gridView === v} onClick={() => setGrid(v)} style={{ minHeight: 32, padding: "0 12px", border: "none", borderRadius: 30, cursor: "pointer", fontFamily: "inherit", fontSize: 12.5, fontWeight: 800, display: "inline-flex", alignItems: "center", gap: 6, background: gridView === v ? BLACK : "transparent", color: gridView === v ? "#fff" : "#3A3F47" }}><i className={"ti " + ic} aria-hidden="true" />{l}</button>)}</div>}
         <span style={{ flex: 1 }} />
         {data && rows.length > 0 && <button className="btn btn-ghost" onClick={exportCsv}><i className="ti ti-file-spreadsheet" aria-hidden="true" />Exporter (Excel)</button>}
         {team && f(team, "Primes actives") && <button className="btn btn-ghost" onClick={() => setAnnual(true)}><i className="ti ti-report-money" aria-hidden="true" />Relevé annuel</button>}
@@ -251,7 +318,7 @@ export function PrimesView({ rights, teams, users, initialTeam }) {
         <div style={{ fontSize: 12.5, color: MUT }}>Elles n'entrent pas dans le calcul tant qu'elles ne sont pas pointées (ou annulées).</div>
       </div>}
 
-      {data && narrow && <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {data && narrow && !gridView && <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {groups.map((g) => <React.Fragment key={g.key}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 8, padding: "8px 2px 0" }}><span style={{ width: 4, height: 14, borderRadius: 2, background: g.color, alignSelf: "center" }} /><b style={{ fontSize: 14 }}>{g.label}</b><span style={{ fontSize: 12, color: MUT, flex: 1 }}>{g.rows.length} joueur{g.rows.length > 1 ? "s" : ""}{g.sub ? " · " + g.sub : ""}</span><b style={{ fontSize: 14 }}>{eur(subTotal(g))}</b></div>
         {g.rows.map((r) => <button key={r.joueur} className="card" onClick={() => setDetail(r)} style={{ display: "flex", alignItems: "center", gap: 10, textAlign: "left", border: "none", borderLeft: "4px solid " + g.color, borderRadius: 14, cursor: "pointer", fontFamily: "inherit", padding: "12px 14px" }}>
@@ -265,7 +332,18 @@ export function PrimesView({ rights, teams, users, initialTeam }) {
         </React.Fragment>)}
         {!rows.length && <div className="card" style={{ color: MUT }}>Aucun joueur évalué ce mois-ci.</div>}
       </div>}
-      {data && !narrow && <div className="card" style={{ padding: 0, overflowX: "auto" }}>
+      {data && gridView && <>
+        <SeancesGrid groups={groups} rows={rows} editable={canCorr && !validated} onOpenSeance={onOpenSeance}
+          seances={(validated ? (data.detail && data.detail.seances) : data.seances) || []}
+          cellsOf={(r, sc) => validated ? (((data.detail && data.detail.cells) || {})[r.joueur] || {})[sc.id] : (((r.detail || []).find((x) => x.s === sc.id) || {}).st || "")[0]}
+          onCell={async (r, sc, next, motif) => {
+            if (next === "E") await primesApi({ action: "excuse", seanceId: sc.id, joueurId: r.joueur, excused: true, motif });
+            else await primesApi({ action: "presence", seanceId: sc.id, joueurId: r.joueur, present: next === "P" });
+            try { setData(await primesApi({ action: "month", teamId, month })); } catch (e) {}
+          }} />
+        <div style={{ fontSize: 12.5, color: MUT }}>{validated ? "Mois validé : la grille est en lecture seule. Une correction passe par une régularisation." : canCorr ? "Touche une case : présent → absent → excusé. Chaque changement est enregistré tout de suite (et tracé dans le journal). Touche une date pour ouvrir la séance." : "Lecture seule : il faut le droit « Corriger les primes » pour modifier."}{validated && !(data.detail && data.detail.cells) ? " (Détail par séance non disponible pour ce mois, validé avant l'arrivée de la grille.)" : ""}</div>
+      </>}
+      {data && !narrow && !gridView && <div className="card" style={{ padding: 0, overflowX: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5, minWidth: 760 }}>
           <thead><tr style={{ textAlign: "right", color: MUT, fontSize: 11.5, letterSpacing: ".04em" }}>
             {["JOUEUR", "ENTRAÎN.", "MATCHS", "TOTAL", "TAUX", "PRÉSENCE", "VICTOIRES", "AUTRES", "TOTAL €"].concat(validated ? ["PAIEMENT"] : []).map((h, i) => <th key={h} style={{ padding: "12px 10px", textAlign: i === 0 ? "left" : "right", borderBottom: "1px solid " + BORDER, fontWeight: 800 }}>{h}</th>)}
@@ -301,7 +379,7 @@ export function PrimesView({ rights, teams, users, initialTeam }) {
           {!data.canValidate && <span style={{ fontSize: 12.5, color: MUT }}>{(data.blockers || []).join(" ")}</span>}
         </div>}
       </div>}
-      {data && !validated && <div style={{ fontSize: 12.5, color: MUT, lineHeight: 1.5 }}>Touche un joueur pour voir le détail de ses séances{canCorr ? " et excuser une absence" : ""}. Barème : {eur(data.bareme && data.bareme.presence)} par mois au prorata · {eur(data.bareme && data.bareme.victoire)} par victoire · absence excusée comptée comme {data.bareme && data.bareme.excuse === "Séance non comptée" ? "séance non comptée" : "une absence"}.</div>}
+      {data && !validated && <div style={{ fontSize: 12.5, color: MUT, lineHeight: 1.5 }}>{gridView ? "" : <>Touche un joueur pour voir le détail de ses séances{canCorr ? " et excuser une absence" : ""}. </>}Barème : {eur(data.bareme && data.bareme.presence)} par mois au prorata · {eur(data.bareme && data.bareme.victoire)} par victoire · absence excusée comptée comme {data.bareme && data.bareme.excuse === "Séance non comptée" ? "séance non comptée" : "une absence"}.</div>}
 
       {detail && <PlayerDetail row={detail} data={data} validated={validated} canCorr={canCorr} onClose={() => setDetail(null)} onChanged={async () => { const j = detail.joueur; setDetail(null); try { const nd = await primesApi({ action: "month", teamId, month }); setData(nd); const r = (nd.lines || []).find((x) => x.joueur === j); if (r && nd.status !== "Validé") setDetail(r); } catch (e) { await load(); } }} onExtra={() => { setExtra({ joueurId: detail.joueur }); setDetail(null); }} />}
       {extra && <ExtraForm teamId={teamId} month={validated ? shiftMonth(month, 1) : month} rows={rows} preset={extra.joueurId} validated={validated} onClose={() => setExtra(null)} onDone={async (m) => { setExtra(null); if (m !== month) setMonth(m); else await load(); }} />}

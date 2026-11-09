@@ -271,7 +271,9 @@ export default async function handler(req, res) {
       const r = await loadAndCompute(team, month);
       if (!r.canValidate) { res.status(409).json({ error: r.blockers.join(" ") || "Le mois ne peut pas encore être validé.", blockers: r.blockers }); return; }
       const now = new Date().toISOString();
-      const detail = { bareme: r.bareme, counters: r.counters, seances: r.seances, totals: r.totals };
+      // cells : l'état de chaque joueur à chaque séance (pour la grille en lecture seule une fois le mois validé).
+      const cells = {}; for (const l of r.lines) { if (l.detail && l.detail.length) cells[l.joueur] = Object.fromEntries(l.detail.map((x) => [x.s, x.st[0]])); }
+      const detail = { bareme: r.bareme, counters: r.counters, seances: r.seances, totals: r.totals, cells };
       const [m] = await createMany(T_M, [{ fields: { "Libellé": teamName + " · " + month, "Équipe": [teamId], "Mois": month, "Statut": "Validé", "Validé par": [sess.uid], "Validé le": now, "Séances comptées": r.counters.comptees, "Total": r.totals.total, "Détail": JSON.stringify(detail).slice(0, 90000) } }]);
       const normal = r.lines.filter((l) => l.seances || l.primePresence || l.primeVictoire).map((l) => ({ fields: {
         "Libellé": teamName + " · " + month + " · " + l.nom, "Équipe": [teamId], "Période": month, "Mois": [m.id], "Joueur": [l.joueur], "Type": "Normale",
