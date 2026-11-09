@@ -544,12 +544,12 @@ function TeamDetail({ team, d, rights, reload }) {
       {card && <PlayerCard joueurId={card} onClose={() => setCard(null)} />}
       <StaffBlock team={team} d={d} rights={rights} reload={reload} />
 
-      {(has(rights, "plan") || canEff) && <RhythmBlock team={team} d={d} reload={reload} />}
+      {(has(rights, "plan") || canEff) && <div data-focus="rythme" style={{ scrollMarginTop: 16 }}><RhythmBlock team={team} d={d} reload={reload} /></div>}
 
       {importing && <ImportPlayers team={team} d={d} reload={reload} onClose={() => setImporting(false)} />}
       {adding && <AddPlayer team={team} d={d} reload={reload} onClose={() => setAdding(false)} />}
 
-      <div className="card" style={{ padding: 0 }}>
+      <div className="card" data-focus="joueurs" style={{ padding: 0, scrollMarginTop: 16 }}>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", padding: "12px 14px", alignItems: "center" }}>
           <label htmlFor="pl-q" style={{ position: "absolute", left: -9999 }}>Rechercher un joueur</label>
           <input id="pl-q" className="inp" type="search" placeholder="Rechercher un joueur…" value={q} onChange={(e) => setQ(e.target.value)} style={{ flex: "1 1 180px", width: "auto" }} />
@@ -676,8 +676,15 @@ function StaffBlock({ team, d, rights, reload }) {
 }
 
 // Fenêtre « Gérer l'équipe » ouverte depuis la vue Club (Sportif) : même écran que Admin › Équipes.
-export function TeamManager({ teamId, rights, onClose }) {
+export function TeamManager({ teamId, rights, onClose, focus }) {
   const [d, reload] = useAdminData(rights);
+  // Ouvre directement la bonne partie (« rythme » = entraînements récurrents, « joueurs » = effectif).
+  const focused = React.useRef(false);
+  useEffect(() => {
+    if (!focus || focused.current || !d.loaded) return;
+    const t = setTimeout(() => { const el = document.querySelector('[role=dialog] [data-focus="' + focus + '"]'); if (el) { el.scrollIntoView({ behavior: "smooth", block: "start" }); el.style.boxShadow = "0 0 0 3px " + YELLOW; setTimeout(() => { el.style.boxShadow = ""; }, 2500); focused.current = true; } }, 300);
+    return () => clearTimeout(t);
+  }, [focus, d.loaded]);
   useEffect(() => { const h = (e) => { if (e.key === "Escape") onClose(); }; window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h); }, [onClose]);
   const team = d.teams.find((t) => t.id === teamId);
   return createPortal(<div role="dialog" aria-modal="true" aria-label="Gérer l'équipe" style={{ position: "fixed", inset: 0, background: "rgba(16,17,20,.55)", zIndex: 205, display: "flex", justifyContent: "center", alignItems: "flex-start", overflowY: "auto", padding: "calc(12px + env(safe-area-inset-top)) 10px 40px" }}>

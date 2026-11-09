@@ -114,7 +114,7 @@ export function PlayerCard({ joueurId, onClose }) {
 }
 
 // ---------------------------------------------------------------------------- Onglet Joueurs (toutes les équipes)
-export function RosterView({ teams, efx, players, initialTeam }) {
+export function RosterView({ teams, efx, players, initialTeam, onManage }) {
   const [teamId, setTeamId] = useState(() => initialTeam || (teams[0] || {}).id);
   const [month, setMonth] = useState(thisMonth);
   const [data, setData] = useState(null);
@@ -134,7 +134,7 @@ export function RosterView({ teams, efx, players, initialTeam }) {
     .map((e) => { const p = players.find((x) => x.id === (f(e, "Joueur") || [])[0]); return p && { id: p.id, nom: ((f(p, "Prénom") || "") + " " + (f(p, "Nom") || "")).trim(), tri: norm(f(p, "Nom")) + " " + norm(f(p, "Prénom")), statut: f(e, "Statut") || "Effectif", futur: f(e, "Entrée") && f(e, "Entrée") > today }; })
     .filter(Boolean);
   const seen = new Set(); const rows = roster.filter((r) => !seen.has(r.id) && seen.add(r.id))
-    .map((r) => ({ ...r, a: data && data.lines.find((l) => l.joueur === r.id) }))
+    .map((r) => ({ ...r, a: data && (data.lines || []).find((l) => l.joueur === r.id) }))
     .filter((r) => !q || norm(r.nom).includes(norm(q)))
     .sort((x, y) => sort === "taux" ? ((x.a ? x.a.taux : -1) - (y.a ? y.a.taux : -1)) : x.tri.localeCompare(y.tri, "fr"));
   const c = data && data.counters;
@@ -146,6 +146,7 @@ export function RosterView({ teams, efx, players, initialTeam }) {
         <span style={{ fontWeight: 800, fontSize: 14.5, minWidth: 120, textAlign: "center", textTransform: "capitalize" }}>{mLong(month)}</span>
         <button aria-label="Mois suivant" className="btn btn-ghost" style={{ minHeight: 36, padding: "0 10px", borderRadius: 30 }} onClick={() => setMonth(shiftMonth(month, 1))}><span aria-hidden="true" style={{ fontSize: 20 }}>›</span></button>
       </div>
+      {onManage && <button className="btn btn-dark" style={{ marginLeft: "auto" }} onClick={() => onManage(teamId, "joueurs")}><i className="ti ti-user-plus" aria-hidden="true" />Ajouter ou modifier des joueurs</button>}
     </div>
     {c && <div className="card" style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center", padding: "12px 14px", fontSize: 13.5 }}>
       <span><b>{c.entrainements}</b> entraînement(s)</span><span><b>{c.matchs}</b> match(s)</span><span><b>{c.annulees}</b> annulée(s)</span>

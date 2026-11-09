@@ -108,8 +108,11 @@ export default function SportSpace({ me, rights, scope, teams, view, setView }) 
   if (!d.loaded) return <div className="card fade" style={{ color: MUT }}>Chargement de tes équipes…</div>;
   if (!d.teams || !d.teams.length) return <div className="card fade" style={{ borderLeft: "4px solid " + YELLOW, maxWidth: 560 }}><div style={{ fontSize: 17, fontWeight: 800, marginBottom: 6 }}>Aucune équipe pour l'instant</div><div style={{ fontSize: 13.5, color: MUT, lineHeight: 1.55 }}>Tu n'es rattaché à aucune équipe. Demande à un responsable de te rattacher à la tienne (Admin › Utilisateurs › ta fiche).</div></div>;
   const pick = filter !== "all" ? filter : null;
+  const mId = manage && (manage.id || manage), mFocus = manage && manage.focus;
+  const manageUI = manage && <TeamManager key={mId + (mFocus || "")} teamId={mId} focus={mFocus} rights={rights} onClose={() => { setManage(null); ["Équipes", "Staff", "Effectifs", "Rythmes", "Séances", "Joueurs"].forEach((x) => dbForget(x)); reload(); }} />;
+  const onManage = canManage(rights) && d.teams.length ? (id, fo) => setManage({ id, focus: fo }) : null;
   if (view === "primes") return <PrimesView key={"p" + (pick || "")} rights={rights} teams={d.teams} initialTeam={pick} />;
-  if (view === "joueurs") return <RosterView key={"r" + (pick || "")} teams={d.teams} efx={d.efx} players={d.players} initialTeam={pick} />;
+  if (view === "joueurs") return <><RosterView key={"r" + (pick || "")} teams={d.teams} efx={d.efx} players={d.players} initialTeam={pick} onManage={onManage} />{manageUI}</>;
   const banner = (d.offline || queued > 0) && <div role="status" style={{ background: "#FFF6D6", color: "#5C4600", borderRadius: 14, padding: "10px 14px", fontSize: 13, fontWeight: 700, display: "flex", gap: 8, alignItems: "center" }}>
     <i className="ti ti-wifi-off" aria-hidden="true" />
     {queued > 0 ? queued + " pointage(s) enregistré(s) sur le téléphone : envoi automatique dès le retour du réseau." : "Pas de réseau : tu vois les données de ta dernière connexion."}
@@ -138,8 +141,7 @@ export default function SportSpace({ me, rights, scope, teams, view, setView }) 
   })();
   const nextMatch = mineS.filter((s) => f(s, "Type") === "Match" && f(s, "Date") >= today && f(s, "Statut") !== "Annulée").sort((a, b) => String(f(a, "Date")).localeCompare(String(f(b, "Date"))))[0];
 
-  if (view === "seances") return <SeancesList d={d} mineS={mineS} tName={tName} filter={filter} setFilter={setFilter} onOpen={(id) => setOpen({ seanceId: id })} banner={banner} />;
-  const manageUI = manage && <TeamManager teamId={manage} rights={rights} onClose={() => { setManage(null); ["Équipes", "Staff", "Effectifs", "Rythmes", "Séances", "Joueurs"].forEach((x) => dbForget(x)); reload(); }} />;
+  if (view === "seances") return <><SeancesList onManage={onManage} d={d} mineS={mineS} tName={tName} filter={filter} setFilter={setFilter} onOpen={(id) => setOpen({ seanceId: id })} banner={banner} />{manageUI}</>;
   if (club && filter === "all") return <><ClubView d={d} banner={banner} rights={rights} onManage={setManage} onCreated={async (id) => { dbForget("Équipes"); await reload(); setManage(id); }} onTeam={(id) => { setFilter(id); window.scrollTo(0, 0); }} onOpen={(id) => setOpen({ seanceId: id })} />{manageUI}</>;
   const curTeam = club && d.teams.find((t) => t.id === filter);
   return (
@@ -186,7 +188,7 @@ export default function SportSpace({ me, rights, scope, teams, view, setView }) 
           <span style={{ flex: 1, fontSize: 14, fontWeight: 600, color: TEXT }}>{dayLabel(f(s, "Date"))} · {f(s, "Type")}{f(s, "Adversaire") ? " vs " + f(s, "Adversaire") : ""}{f(s, "Statut") === "Annulée" ? " (annulée)" : ""}</span>
           <span style={{ fontSize: 13, color: MUT }}>{f(s, "Heure") || ""}</span>
         </button>)}
-        {!week.length && <div style={{ fontSize: 13.5, color: MUT, padding: 14 }}>Rien de prévu cette semaine. Le planning se prépare dans Admin › Équipes › Rythme d'entraînement.</div>}
+        {!week.length && <div style={{ fontSize: 13.5, color: MUT, padding: 14 }}>Rien de prévu cette semaine.{onManage ? <> <button onClick={() => onManage(filter !== "all" ? filter : (d.teams[0] || {}).id, "rythme")} style={{ background: "none", border: "none", padding: 0, color: "#1B5E9B", textDecoration: "underline", cursor: "pointer", font: "inherit" }}>Planifier les entraînements récurrents</button></> : " Les entraînements sont planifiés par le responsable de l'équipe."}</div>}
       </div>
       <ProposeSujet />
     </div>
@@ -345,9 +347,11 @@ function SeanceBanner({ s, team, n, onClick }) {
   );
 }
 
-function SeancesList({ d, mineS, tName, filter, setFilter, onOpen, banner }) {
+function SeancesList({ d, mineS, tName, filter, setFilter, onOpen, banner, onManage }) {
   const [month, setMonth] = useState(TODAY().slice(0, 7));
-  const months = [...new Set(d.seances.map((s) => String(f(s, "Date")).slice(0, 7)))].sort();
+  const cur = TODAY().slice(0, 7);
+  const plus = (m, k) => { const [y, mo] = m.split("-").map(Number); const x = new Date(Date.UTC(y, mo - 1 + k, 1)); return x.toISOString().slice(0, 7); };
+  const months = [...new Set(d.seances.map((s) => String(f(s, "Date")).slice(0, 7)).concat([plus(cur, -1), cur, plus(cur, 1), plus(cur, 2)]))].sort();
   const list = mineS.filter((s) => String(f(s, "Date")).startsWith(month)).sort((a, b) => (String(f(a, "Date")) + f(a, "Heure")).localeCompare(String(f(b, "Date")) + f(b, "Heure")));
   const cnt = (t) => list.filter((s) => f(s, "Type") === t && f(s, "Statut") === "Pointée").length;
   const ST = { "Pointée": ["#E7F4EA", "#1F5C30"], "Annulée": ["#EEF0F3", MUT], "Prévue": ["#FDECEC", "#9E1B1B"] };
@@ -360,6 +364,7 @@ function SeancesList({ d, mineS, tName, filter, setFilter, onOpen, banner }) {
         <select id="sl-m" className="sel" value={month} onChange={(e) => setMonth(e.target.value)} style={{ width: "auto" }}>{months.map((m) => <option key={m} value={m}>{MOIS[Number(m.slice(5)) - 1]} {m.slice(0, 4)}</option>)}</select>
         <label htmlFor="sl-t" style={{ fontSize: 13, fontWeight: 700 }}>Équipe</label>
         <select id="sl-t" className="sel" value={filter} onChange={(e) => setFilter(e.target.value)} style={{ width: "auto" }}><option value="all">Toutes</option>{d.teams.map((t) => <option key={t.id} value={t.id}>{f(t, "Nom")}</option>)}</select>
+        {onManage && <button className="btn btn-dark" style={{ marginLeft: "auto" }} onClick={() => onManage(filter !== "all" ? filter : (d.teams[0] || {}).id, "rythme")}><i className="ti ti-repeat" aria-hidden="true" />Entraînements récurrents</button>}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
         <div className="card" style={{ borderLeft: "4px solid " + RED, padding: 12 }}><div style={{ fontSize: 11, fontWeight: 800, color: MUT }}>ENTRAÎNEMENTS</div><div style={{ fontSize: 24, fontWeight: 800 }}>{cnt("Entraînement") + cnt("Entraînement supplémentaire")}</div></div>
@@ -373,7 +378,7 @@ function SeancesList({ d, mineS, tName, filter, setFilter, onOpen, banner }) {
             <span style={{ flex: "1 1 160px", fontSize: 14 }}>{tName(teamOf(s))} · {f(s, "Type")}{f(s, "Adversaire") ? " vs " + f(s, "Adversaire") : ""}{f(s, "Résultat") ? " · " + f(s, "Résultat") + " " + (f(s, "Score VHB") ?? "") + "-" + (f(s, "Score adverse") ?? "") : ""}</span>
             <span style={{ fontSize: 12, fontWeight: 800, padding: "4px 9px", borderRadius: 10, background: late ? "#FDECEC" : c[0], color: late ? "#9E1B1B" : c[1] }}>{late ? "À pointer" : st === "Pointée" ? (f(s, "Pointages") || []).length + " présents" : st === "Annulée" ? "Annulée" + (f(s, "Motif annulation") ? " · " + f(s, "Motif annulation") : "") : "Prévue"}</span>
           </button>); })}
-        {!list.length && <div style={{ padding: 14, fontSize: 13.5, color: MUT }}>Aucune séance ce mois-ci.</div>}
+        {!list.length && <div style={{ padding: 14, fontSize: 13.5, color: MUT }}>Aucune séance ce mois-ci.{onManage ? " Pour créer les entraînements de toute la saison d'un coup, utilise « Entraînements récurrents »." : ""}</div>}
       </div>
     </div>
   );
