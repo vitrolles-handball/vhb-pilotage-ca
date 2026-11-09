@@ -237,7 +237,9 @@ export function RosterView({ teams, efx, players, initialTeam, onManage }) {
       <select className="sel" aria-label="Trier" value={sort} onChange={(e) => setSort(e.target.value)} style={{ width: "auto", flex: "0 0 auto" }}><option value="nom">Par nom</option><option value="taux">Moins présents</option></select>
     </div>
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      {rows.map((r) => <button key={r.id} className="card" onClick={() => setOpen(r.id)} style={{ display: "flex", alignItems: "center", gap: 12, textAlign: "left", border: "none", borderLeft: "4px solid " + (r.statut === "Renfort" ? "#E8800C" : OK), cursor: "pointer", fontFamily: "inherit", padding: "12px 14px" }}>
+      {[["Effectif", OK, rows.filter((r) => r.statut !== "Renfort")], ["Renforts", "#E8800C", rows.filter((r) => r.statut === "Renfort")]].filter((g) => g[2].length).map(([label, col, list], gi) => <React.Fragment key={label}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: gi ? "10px 2px 0" : "2px 2px 0" }}><span style={{ width: 4, height: 14, borderRadius: 2, background: col }} /><b style={{ fontSize: 14 }}>{label}</b><span style={{ fontSize: 12.5, color: MUT }}>{list.length} joueur{list.length > 1 ? "s" : ""}</span></div>
+      {list.map((r) => <button key={r.id} className="card" onClick={() => setOpen(r.id)} style={{ display: "flex", alignItems: "center", gap: 12, textAlign: "left", border: "none", borderLeft: "4px solid " + (r.statut === "Renfort" ? "#E8800C" : OK), cursor: "pointer", fontFamily: "inherit", padding: "12px 14px" }}>
         <span style={{ flex: 1, minWidth: 0 }}>
           <span style={{ display: "block", fontWeight: 800, fontSize: 15 }}>{r.nom}{r.poste === "Gardien" && <GbChip />}</span>
           <span style={{ display: "block", fontSize: 12.5, color: MUT }}><b style={{ color: r.statut === "Renfort" ? "#B5660A" : "#1F5C30", fontWeight: 700 }}>{r.statut}</b>{r.futur ? " · arrive bientôt" : ""}{r.a ? " · " + r.a.presences + "/" + r.a.seances + " séances" + (r.a.excuses ? " · " + r.a.excuses + " excusée(s)" : "") : data ? " · pas de séance ce mois-ci" : ""}</span>
@@ -247,6 +249,7 @@ export function RosterView({ teams, efx, players, initialTeam, onManage }) {
           <b style={{ minWidth: 44, textAlign: "right" }}>{r.a && r.a.seances ? pct(r.a.taux) : "—"}</b>
         </span>
       </button>)}
+      </React.Fragment>)}
       {!rows.length && <div className="card" style={{ color: MUT }}>{q ? "Aucun joueur ne correspond." : "Aucun joueur dans cette équipe." + (onManage ? " Ajoute-les avec « Ajouter ou modifier des joueurs »." : "")}</div>}
     </div>
     <div style={{ fontSize: 12.5, color: MUT }}>Touche un joueur pour ouvrir sa fiche : assiduité de la saison, dernières séances{" "}et primes pour les personnes qui y ont accès.</div>
