@@ -76,30 +76,57 @@ function GoalBars({ ms, onOpen }) {
     </div>
   </div>;
 }
-// Évolution du score minute par minute (écart VHB − adversaire).
-export function ScoreCurve({ F, h = 190 }) {
+// Évolution du score minute par minute : écart VHB − adversaire (aire orange quand on mène, rouge quand on est mené).
+export function ScoreCurve({ F, h = 170 }) {
   const pts = [[0, 0, 0], ...F.goals];
-  const W = 600, H = h, max = Math.max(4, ...pts.map((p) => Math.abs(p[1] - p[2])));
-  const x = (t) => 8 + (Math.min(t, 3600) / 3600) * (W - 16), y = (dv) => H / 2 - (dv / max) * (H / 2 - 12);
-  let d = "M" + x(0) + "," + y(0);
-  for (const [t, v, a] of pts.slice(1)) d += " H" + x(t).toFixed(1) + " V" + y(v - a).toFixed(1);
-  d += " H" + x(3600);
-  const best = pts.reduce((m, p) => Math.max(m, p[1] - p[2]), 0), worst = pts.reduce((m, p) => Math.min(m, p[1] - p[2]), 0);
+  const diff = (p) => p[1] - p[2];
+  const maxUp = Math.max(1, ...pts.map(diff)), maxDown = Math.max(1, ...pts.map((p) => -diff(p)));
+  const span = maxUp + maxDown, W = 1000;
+  const X = (t) => (Math.min(t, 3600) / 3600) * W, Y = (d) => ((maxUp - d) / span) * h, y0 = Y(0);
+  let line = "M0," + y0, cur = 0;
+  for (const p of pts.slice(1)) { line += " H" + X(p[0]).toFixed(1) + " V" + Y(diff(p)).toFixed(1); cur = diff(p); }
+  line += " H" + W;
+  const area = line + " V" + y0 + " H0 Z";
+  const bestP = pts.reduce((m, p) => diff(p) > diff(m) ? p : m, pts[0]), worstP = pts.reduce((m, p) => diff(p) < diff(m) ? p : m, pts[0]);
+  const fin = F.s[0] - F.s[1];
+  const uid = "sc" + (F.code || "") + F.s.join("");
+  const pct = (t) => (Math.min(t, 3600) / 3600 * 100) + "%";
+  const chip = (lbl, v, tone, sub) => <div style={{ flex: "1 1 120px", background: "#F7F8FA", borderRadius: 14, padding: "9px 12px" }}>
+    <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".05em", color: C.mut }}>{lbl}</div>
+    <div style={{ fontSize: 20, fontWeight: 800, color: tone }}>{v}</div>
+    {sub && <div style={{ fontSize: 11.5, color: C.mut }}>{sub}</div>}
+  </div>;
   return <div>
-    <svg viewBox={"0 0 " + W + " " + H} role="img" aria-label={"Évolution de l'écart au score. Plus grosse avance : " + best + " buts" + (worst < 0 ? ", plus gros retard : " + -worst : "")} style={{ width: "100%", height: "auto", display: "block" }}>
-      <rect x="0" y="0" width={W} height={H / 2} fill="#FFF6EC" /><rect x="0" y={H / 2} width={W} height={H / 2} fill="#F4F5F8" />
-      <line x1={x(1800)} x2={x(1800)} y1="0" y2={H} stroke="#C9CDD3" strokeDasharray="4 4" />
-      <line x1="0" x2={W} y1={H / 2} y2={H / 2} stroke="#9AA0A8" />
-      <path d={d} fill="none" stroke={C.orange} strokeWidth="4" strokeLinejoin="round" />
-      {F.excl.filter((e) => e[1] === "V").map((e, i) => <circle key={i} cx={x(e[0])} cy={H - 6} r="6" fill={C.abs} />)}
-      <text x={x(1800) + 8} y="22" fontSize="19" fill="#6B7079">mi-temps{F.mt ? " " + F.mt[0] + "–" + F.mt[1] : ""}</text>
-      <text x="8" y="22" fontSize="19" fill="#8A4B00">VHB devant</text>
-      <text x="8" y={H - 18} fontSize="19" fill="#6B7079">adversaire devant</text>
-    </svg>
-    <div style={{ display: "flex", gap: 14, flexWrap: "wrap", fontSize: 12, color: C.mut, marginTop: 6 }}>
-      <span>Plus grosse avance : <b style={{ color: C.text }}>+{best}</b></span>
-      {worst < 0 && <span>Plus gros retard : <b style={{ color: C.text }}>{worst}</b></span>}
-      {F.excl.some((e) => e[1] === "V") && <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 4, background: C.abs, marginRight: 5 }} />nos exclusions</span>}
+    <div style={{ display: "flex", gap: 10 }}>
+      <div aria-hidden="true" style={{ position: "relative", height: h, fontSize: 11, fontWeight: 800, color: C.mut, minWidth: 26 }}>
+        {[[0, "+" + maxUp, "#B5660A"], [y0, "0", C.mut], [h, "−" + maxDown, "#9E1B1B"]].map(([y, l, c]) => <span key={l} style={{ position: "absolute", right: 0, top: y, transform: "translateY(-50%)", color: c }}>{l}</span>)}
+      </div>
+      <div style={{ position: "relative", flex: 1, minWidth: 0 }}>
+        <svg viewBox={"0 0 " + W + " " + h} preserveAspectRatio="none" role="img" aria-label={"Écart au score pendant le match. Plus grosse avance : +" + diff(bestP) + (diff(worstP) < 0 ? ", plus gros retard : " + diff(worstP) : "") + ", écart final : " + (fin > 0 ? "+" : "") + fin} style={{ width: "100%", height: h, display: "block", overflow: "visible" }}>
+          <defs>
+            <clipPath id={uid + "u"}><rect x="0" y="0" width={W} height={y0} /></clipPath>
+            <clipPath id={uid + "d"}><rect x="0" y={y0} width={W} height={h - y0} /></clipPath>
+            <linearGradient id={uid + "gu"} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#E8800C" stopOpacity=".45" /><stop offset="1" stopColor="#E8800C" stopOpacity=".06" /></linearGradient>
+            <linearGradient id={uid + "gd"} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#D93B30" stopOpacity=".06" /><stop offset="1" stopColor="#D93B30" stopOpacity=".4" /></linearGradient>
+          </defs>
+          {[0.25, 0.75].map((k) => <line key={k} x1={W * k} x2={W * k} y1="0" y2={h} stroke="#EEF0F3" strokeWidth="1" vectorEffect="non-scaling-stroke" />)}
+          <line x1={W / 2} x2={W / 2} y1="0" y2={h} stroke="#C9CDD3" strokeWidth="1.5" strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
+          <path d={area} fill={"url(#" + uid + "gu)"} clipPath={"url(#" + uid + "u)"} />
+          <path d={area} fill={"url(#" + uid + "gd)"} clipPath={"url(#" + uid + "d)"} />
+          <line x1="0" x2={W} y1={y0} y2={y0} stroke="#9AA0A8" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+          <path d={line} fill="none" stroke="#E8800C" strokeWidth="2.5" strokeLinejoin="round" vectorEffect="non-scaling-stroke" clipPath={"url(#" + uid + "u)"} />
+          <path d={line} fill="none" stroke="#D93B30" strokeWidth="2.5" strokeLinejoin="round" vectorEffect="non-scaling-stroke" clipPath={"url(#" + uid + "d)"} />
+        </svg>
+        <span style={{ position: "absolute", left: "50%", top: 6, transform: "translateX(-50%)", background: C.black, color: "#fff", fontSize: 11, fontWeight: 800, padding: "3px 9px", borderRadius: 10, whiteSpace: "nowrap" }}>Mi-temps{F.mt ? " · " + F.mt[0] + "–" + F.mt[1] : ""}</span>
+        <span title={"Plus grosse avance : +" + diff(bestP) + " à la " + Math.floor(bestP[0] / 60) + "e minute"} style={{ position: "absolute", left: pct(bestP[0]), top: Y(diff(bestP)), width: 11, height: 11, borderRadius: 6, background: "#fff", border: "3px solid #E8800C", transform: "translate(-50%,-50%)" }} />
+        {F.excl.filter((e) => e[1] === "V").map((e, k) => <span key={k} title={"Exclusion 2' " + e[2] + " · " + Math.floor(e[0] / 60) + "e"} style={{ position: "absolute", left: pct(e[0]), bottom: -9, width: 4, height: 12, borderRadius: 2, background: C.abs, transform: "translateX(-50%)" }} />)}
+      </div>
+    </div>
+    <div aria-hidden="true" style={{ display: "flex", justifyContent: "space-between", marginLeft: 36, marginTop: 12, fontSize: 11, fontWeight: 700, color: C.mut }}>{["0'", "15'", "30'", "45'", "60'"].map((m) => <span key={m}>{m}</span>)}</div>
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+      {chip("PLUS GROSSE AVANCE", "+" + diff(bestP), "#B5660A", diff(bestP) > 0 ? "à la " + Math.max(1, Math.ceil(bestP[0] / 60)) + "e minute" : "")}
+      {chip("PLUS GROS RETARD", diff(worstP) < 0 ? String(diff(worstP)) : "jamais mené", diff(worstP) < 0 ? "#9E1B1B" : "#1F5C30", diff(worstP) < 0 ? "à la " + Math.max(1, Math.ceil(worstP[0] / 60)) + "e minute" : "")}
+      {chip("ÉCART FINAL", (fin > 0 ? "+" : "") + fin, fin > 0 ? "#1F5C30" : fin < 0 ? "#9E1B1B" : "#6B4A00", F.excl.some((e) => e[1] === "V") ? F.excl.filter((e) => e[1] === "V").length + " exclusion(s) VHB (traits rouges)" : "")}
     </div>
   </div>;
 }
@@ -119,7 +146,7 @@ export function MatchSheetDetail({ s, F, d, onOpenPlayer }) {
       <Stat k="ARRÊTS GB" v={String(sumUs("ar"))} sub={"adversaire : " + F.them.ar} />
       <Stat k="EXCLUSIONS 2'" v={String(sumUs("m2"))} sub={"adversaire : " + F.them.m2} tone={C.abs} />
     </div>
-    {F.goals && F.goals.length > 2 && <div style={card}><div style={{ fontWeight: 800, fontSize: 15, marginBottom: 10 }}>Le match minute par minute</div><ScoreCurve F={F} /></div>}
+    {F.goals && F.goals.length > 2 && <div style={card}><div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 12, flexWrap: "wrap" }}><div style={{ fontWeight: 800, fontSize: 15, flex: 1 }}>Le match minute par minute</div><span style={{ fontSize: 12, color: C.mut }}><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 3, background: "#E8800C", marginRight: 5 }} />VHB devant<span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 3, background: "#D93B30", margin: "0 5px 0 12px" }} />VHB mené</span></div><ScoreCurve F={F} /></div>}
     <div style={{ ...card, padding: "12px 0 6px" }}>
       <div style={{ fontWeight: 800, fontSize: 15, padding: "0 16px 8px" }}>Nos joueurs</div>
       <div style={{ overflowX: "auto" }}>
