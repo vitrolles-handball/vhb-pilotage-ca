@@ -303,7 +303,7 @@ export function PrimesView({ rights, teams, users, initialTeam }) {
       </div>}
       {data && !validated && <div style={{ fontSize: 12.5, color: MUT, lineHeight: 1.5 }}>Touche un joueur pour voir le détail de ses séances{canCorr ? " et excuser une absence" : ""}. Barème : {eur(data.bareme && data.bareme.presence)} par mois au prorata · {eur(data.bareme && data.bareme.victoire)} par victoire · absence excusée comptée comme {data.bareme && data.bareme.excuse === "Séance non comptée" ? "séance non comptée" : "une absence"}.</div>}
 
-      {detail && <PlayerDetail row={detail} data={data} validated={validated} canCorr={canCorr} onClose={() => setDetail(null)} onChanged={async () => { setDetail(null); await load(); }} onExtra={() => { setExtra({ joueurId: detail.joueur }); setDetail(null); }} />}
+      {detail && <PlayerDetail row={detail} data={data} validated={validated} canCorr={canCorr} onClose={() => setDetail(null)} onChanged={async () => { const j = detail.joueur; setDetail(null); try { const nd = await primesApi({ action: "month", teamId, month }); setData(nd); const r = (nd.lines || []).find((x) => x.joueur === j); if (r && nd.status !== "Validé") setDetail(r); } catch (e) { await load(); } }} onExtra={() => { setExtra({ joueurId: detail.joueur }); setDetail(null); }} />}
       {extra && <ExtraForm teamId={teamId} month={validated ? shiftMonth(month, 1) : month} rows={rows} preset={extra.joueurId} validated={validated} onClose={() => setExtra(null)} onDone={async (m) => { setExtra(null); if (m !== month) setMonth(m); else await load(); }} />}
       {annual && <AnnualSheet teamId={teamId} teamName={f(team, "Nom")} onClose={() => setAnnual(false)} onPlayer={(id) => setCardOf(id)} />}
       {cardOf && <PlayerCard joueurId={cardOf} teamId={teamId} backLabel="Primes" onClose={() => setCardOf(null)} />}
@@ -323,6 +323,12 @@ function PlayerDetail({ row, data, validated, canCorr, onClose, onChanged, onExt
     try { await primesApi({ action: "excuse", seanceId: sid, joueurId: row.joueur, excused: on, motif }); await onChanged(); } catch (e) { alert(e.message); }
     setBusyId(null);
   };
+  const setPresence = async (s, present) => {
+    if (!present && !confirm("Noter " + row.nom + " absent le " + fmtDate(s.date) + " ?")) return;
+    setBusyId(s.id);
+    try { await primesApi({ action: "presence", seanceId: s.id, joueurId: row.joueur, present }); await onChanged(); } catch (e) { alert(e.message); }
+    setBusyId(null);
+  };
   const delExtra = async (x) => {
     if (!confirm("Retirer cette ligne (" + eur(x.montant) + " · " + x.motif + ") ?")) return;
     try { await primesApi({ action: "deleteExtra", lineId: x.id }); await onChanged(); } catch (e) { alert(e.message); }
@@ -336,11 +342,13 @@ function PlayerDetail({ row, data, validated, canCorr, onClose, onChanged, onExt
       {seances.filter((s) => s.compte && s.statut === "Pointée" && stOf(s.id)).map((s) => { const st = stOf(s.id); return <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: "#F7F8FA", borderRadius: 12 }}>
         <span style={{ flex: 1, fontSize: 13.5 }}><b>{fmtDate(s.date)}</b> · {s.type}{s.adversaire ? " vs " + s.adversaire : ""}{s.resultat ? " · " + s.resultat : ""}</span>
         <Chip bg={TONE[st][0]} fg={TONE[st][1]}>{st}</Chip>
+        {canCorr && st !== "Présent" && <button className="btn btn-ghost" disabled={busyId === s.id} onClick={() => setPresence(s, true)} style={{ minHeight: 34, fontSize: 12.5 }}>{s.type === "Match" ? "Était sur la feuille" : "Était présent"}</button>}
+        {canCorr && st === "Présent" && <button className="btn btn-ghost" disabled={busyId === s.id} onClick={() => setPresence(s, false)} style={{ minHeight: 34, fontSize: 12.5 }}>Noter absent</button>}
         {canCorr && st === "Absent" && <button className="btn btn-ghost" disabled={busyId === s.id} onClick={() => excuse(s.id, true)} style={{ minHeight: 34, fontSize: 12.5 }}>Excuser</button>}
         {canCorr && st === "Excusé" && <button className="btn btn-ghost" disabled={busyId === s.id} onClick={() => excuse(s.id, false)} style={{ minHeight: 34, fontSize: 12.5 }}>Retirer l'excuse</button>}
       </div>; })}
       {seances.filter((s) => s.compte && s.statut === "Pointée" && !stOf(s.id)).length > 0 && <div style={{ fontSize: 12.5, color: MUT }}>Les séances antérieures à son entrée (ou postérieures à sa sortie) ne comptent pas pour lui.</div>}
-      <div style={{ fontSize: 12.5, color: MUT }}>Pour corriger une présence oubliée, rouvre la séance dans l'onglet Séances et modifie le pointage.</div>
+      {canCorr && <div style={{ fontSize: 12.5, color: MUT }}>Une erreur de pointage ? Corrige-la ici, séance par séance : le montant se recalcule aussitôt. Une fois le mois validé, on passe par une régularisation.</div>}
     </div>}
     {(row.extras || []).length > 0 && <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".06em", color: MUT }}>PRIMES EXCEPTIONNELLES ET RÉGULARISATIONS</div>

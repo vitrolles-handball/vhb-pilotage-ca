@@ -67,7 +67,9 @@ function useSportData(me, rights, scope, teams) {
   const [d, setD] = useState(() => { try { const c = JSON.parse(localStorage.getItem(SNAP_KEY) || "null"); if (c && c.uid === me.id) return { ...c, loaded: true, offline: true }; } catch (e) {} return { loaded: false }; });
   const load = useCallback(async () => {
     try {
-      const from = addDays(TODAY(), -45), to = addDays(TODAY(), 60);
+      // Toute la saison en cours (depuis le 1er août), pour pouvoir revenir sur septembre, octobre…
+      const t0 = TODAY(), y = Number(t0.slice(0, 4)), seasonStart = (Number(t0.slice(5, 7)) >= 8 ? y : y - 1) + "-08-01";
+      const from = seasonStart < addDays(t0, -45) ? seasonStart : addDays(t0, -45), to = addDays(t0, 60);
       const [t, e, p, s] = await Promise.all([
         db({ action: "list", table: "Équipes" }),
         db({ action: "list", table: "Effectifs" }),
@@ -441,10 +443,10 @@ function SeancesList({ d, mineS, tName, filter, setFilter, onOpen, banner, onMan
                 <span style={{ display: "block", fontSize: 22, fontWeight: 800, color: TEXT }}>{dd.getDate()}</span>
               </span>
               <span style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ display: "block", fontSize: 15, fontWeight: 800, color: TEXT, textDecoration: f(s, "Statut") === "Annulée" ? "line-through" : "none" }}>{tl === "Annulée" ? f(s, "Type") : tl}{f(s, "Adversaire") ? " · " + (f(s, "Domicile") ? "vs " : "à ") + f(s, "Adversaire") : ""}</span>
+                <span style={{ display: "block", fontSize: 15, fontWeight: 800, color: TEXT, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textDecoration: f(s, "Statut") === "Annulée" ? "line-through" : "none" }}>{tl === "Annulée" ? f(s, "Type") : tl}{f(s, "Adversaire") ? " · " + (f(s, "Domicile") ? "vs " : "à ") + f(s, "Adversaire") : ""}</span>
                 <span style={{ display: "block", fontSize: 12.5, color: MUT }}>{[f(s, "Heure") ? f(s, "Heure").replace(":", "h") : null, tName(teamOf(s)), f(s, "Lieu")].filter(Boolean).join(" · ")}</span>
               </span>
-              <span style={{ fontSize: 12, fontWeight: 800, padding: "5px 10px", borderRadius: 10, background: bg, color: fg, whiteSpace: "nowrap" }}>{txt}</span>
+              <span title={txt} style={{ fontSize: 12, fontWeight: 800, padding: "5px 10px", borderRadius: 10, background: bg, color: fg, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "36%", flex: "0 1 auto", minWidth: 0 }}>{txt}</span>
               <span aria-hidden="true" style={{ color: MUT, fontSize: 18 }}>›</span>
             </button>;
           })}

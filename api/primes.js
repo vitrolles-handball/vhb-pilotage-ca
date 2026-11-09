@@ -3,6 +3,7 @@
 //   month       { teamId, month }                      → calcul en direct (mois ouvert) ou lignes figées (mois validé)
 //                                                         droits : Corriger, Valider, Comptabilité ou Paramétrer
 //   excuse      { seanceId, joueurId, excused, motif }  → absence excusée / annulée — droit Corriger
+//   presence    { seanceId, joueurId, present }        → corriger une présence (mois non validé) — droit Corriger
 //   extra       { teamId, joueurId, month, type, montant, motif } → prime exceptionnelle ou régularisation — Corriger
 //   deleteExtra { lineId }                              → retire une ligne ajoutée (mois encore ouvert) — Corriger
 //   validate    { teamId, month }                       → fige le mois (lignes recopiées, jamais recalculées) — Valider
@@ -148,6 +149,28 @@ export default async function handler(req, res) {
         if (mine && (mine.fields || {})["État"] === "Excusé") await at("DELETE", T("Pointages") + "/" + mine.id);
         await logAction(sess, "Excuse retirée", "Séances", s.id, "Joueur " + b.joueurId + (motif ? " · " + motif : ""));
       }
+      res.status(200).json({ ok: true });
+      return;
+    }
+
+    // Corriger une présence depuis Primes (joueur noté absent par erreur, ou l'inverse), tant que le mois n'est pas validé.
+    if (b.action === "presence") {
+      if (!can(sess, "corr")) return deny("Réservé aux personnes qui corrigent les primes.");
+      if (!isRec(b.seanceId) || !isRec(b.joueurId)) { res.status(400).json({ error: "Séance ou joueur manquant." }); return; }
+      let s; try { s = await at("GET", T("Séances") + "/" + b.seanceId); } catch (e) { res.status(404).json({ error: "Séance introuvable." }); return; }
+      const sf = s.fields || {}; const team = (sf["Équipe"] || [])[0];
+      if (!seesTeam(sess, team)) return deny("Cette équipe ne fait pas partie des tiennes.");
+      if (sf["Statut"] !== "Pointée") { res.status(409).json({ error: "La séance doit d'abord être pointée." }); return; }
+      if (await validatedMonth(team, String(sf["Date"]).slice(0, 7))) { res.status(409).json({ error: "Ce mois est validé : passe par une régularisation." }); return; }
+      const pts = (sf["Pointages"] || []).length ? await byIds(T("Pointages"), sf["Pointages"]) : [];
+      const mine = pts.find((p) => ((p.fields || {})["Joueur"] || [])[0] === b.joueurId);
+      const now = new Date().toISOString();
+      if (b.present) {
+        if (mine && (mine.fields || {})["État"] === "Présent") { res.status(200).json({ ok: true }); return; }
+        if (mine) await at("PATCH", T("Pointages"), { records: [{ id: mine.id, fields: { "État": "Présent", "Libellé": (sf["Libellé"] || "Séance") + " · présent", "Saisi par": [sess.uid], "Saisi le": now } }], typecast: true });
+        else await createMany(T("Pointages"), [{ fields: { "Libellé": (sf["Libellé"] || "Séance") + " · présent", "Séance": [s.id], "Joueur": [b.joueurId], "État": "Présent", "Saisi par": [sess.uid], "Saisi le": now } }]);
+      } else if (mine) await at("DELETE", T("Pointages") + "/" + mine.id);
+      await logAction(sess, b.present ? "Présence ajoutée (Primes)" : "Présence retirée (Primes)", "Séances", s.id, { "Joueur": b.joueurId, "Avant": mine ? (mine.fields || {})["État"] : "Absent", "Après": b.present ? "Présent" : "Absent" });
       res.status(200).json({ ok: true });
       return;
     }
