@@ -113,6 +113,27 @@ export default async function handler(req, res) {
         months: byMonth,
       };
     });
+    // Stats de match tirées des feuilles de match importées (par équipe), avec le rang du joueur parmi les buteurs.
+    const matchStats = visibleTeams.map((tid) => {
+      const sheets = S.filter((s) => (fv(s, "Équipe") || []).includes(tid) && fv(s, "Type") === "Match" && fv(s, "Feuille de match"))
+        .map((s) => { try { return { s, F: JSON.parse(fv(s, "Feuille de match")) }; } catch (e) { return null; } }).filter((x) => x && x.F && Array.isArray(x.F.us))
+        .sort((a, c) => String(fv(a.s, "Date")).localeCompare(String(fv(c.s, "Date"))));
+      if (!sheets.length) return null;
+      const per = [], totals = new Map();
+      for (const { s, F } of sheets) {
+        for (const x of F.us) if (x.id) totals.set(x.id, (totals.get(x.id) || 0) + (x.b || 0));
+        const me = F.us.find((x) => x.id === p.id);
+        per.push({ date: fv(s, "Date"), adv: F.adv, dom: !!F.dom, s: F.s, played: !!me, b: me ? me.b : 0, b7: me ? me.b7 : 0, t: me && me.t >= me.b ? me.t : null, ar: me ? me.ar : 0, m2: me ? me.m2 : 0, av: me ? me.av : 0, d: me ? me.d : 0 });
+      }
+      const pl = per.filter((x) => x.played);
+      if (!pl.length) return { teamId: tid, matchs: 0, imported: sheets.length, per };
+      const sum = (k) => pl.reduce((a, x) => a + (x[k] || 0), 0);
+      const tv = pl.filter((x) => x.t != null && x.t > 0);
+      const myB = sum("b"), rank = 1 + [...totals.entries()].filter(([id, b]) => id !== p.id && b > myB).length;
+      const best = pl.reduce((m, x) => x.b > m.b ? x : m, pl[0]);
+      return { teamId: tid, imported: sheets.length, matchs: pl.length, b: myB, b7: sum("b7"), ar: sum("ar"), m2: sum("m2"), av: sum("av"), d: sum("d"),
+        eff: tv.length ? tv.reduce((a, x) => a + x.b, 0) / tv.reduce((a, x) => a + x.t, 0) : null, rank, buteurs: totals.size, best: best.b ? { b: best.b, adv: best.adv } : null, per };
+    }).filter(Boolean);
     // Dernières séances (toutes équipes visibles), du plus récent au plus ancien.
     const recent = S.filter((s) => fv(s, "Statut") === "Pointée" && counts(s))
       .filter((s) => myEfx.some((e) => (fv(e, "Équipe") || []).some((t) => (fv(s, "Équipe") || []).includes(t)) && inRange(e, fv(s, "Date"))))
@@ -160,7 +181,7 @@ export default async function handler(req, res) {
     res.status(200).json({
       joueur: { id: p.id, nom: fv(p, "Nom") || "", prenom: fv(p, "Prénom") || "", annee: fv(p, "Année de naissance") || null, licence: fv(p, "Licence") || "", poste: fv(p, "Poste") || "" },
       canEditPoste: canAny(sess, ["eff"]) && (sess.scope === "all" || perTeam.some((x) => seesTeam(sess, x.teamId))),
-      saison: from.slice(0, 4) + "-" + (Number(from.slice(0, 4)) + 1), teams: perTeam, recent, primes, mois, today,
+      saison: from.slice(0, 4) + "-" + (Number(from.slice(0, 4)) + 1), teams: perTeam, recent, primes, mois, today, matchStats,
     });
   } catch (e) {
     res.status(500).json({ error: String((e && e.message) || e) });

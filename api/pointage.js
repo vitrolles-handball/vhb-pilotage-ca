@@ -5,6 +5,9 @@
 //          capturedAt (envoi différé hors ligne) : si quelqu'un a pointé APRÈS, on ne l'écrase pas.
 //   cancel { seanceId, motif }   → séance annulée (sort du calcul des primes)
 //   reopen { seanceId }          → annule l'annulation (repasse « Prévue »)
+//   importSheet { seanceId, feuille, presents?: [joueurIds], licences?: [{ joueurId, licence }], applyPresence, applyScore }
+//          → enregistre les stats de la feuille de match FFHB ; si demandé, coche les joueurs de la feuille et met le score.
+//          Mois de primes validé : seules les stats sont enregistrées (présences et score inchangés).
 //   addPlayer { seanceId, joueurId? | prenom+nom } → ajoute un joueur à l'équipe de la séance,
 //          en Renfort « À valider » (un responsable le passera en Effectif ou le gardera en renfort).
 import { at, ENFORCE, getSession, can, canAny, seesTeam, readBody, logAction } from "./_lib.js";
@@ -63,12 +66,51 @@ export default async function handler(req, res) {
     try { s = await at("GET", T_S + "/" + encodeURIComponent(seanceId)); } catch (e) { res.status(404).json({ error: "Séance introuvable." }); return; }
     const fl = s.fields || {};
     const team = (fl["Équipe"] || [])[0];
-    const okRight = action === "save" ? can(sess, "point") : canAny(sess, ["point", "plan", "eff"]);
+    const okRight = action === "save" || action === "importSheet" ? can(sess, "point") : canAny(sess, ["point", "plan", "eff"]);
     if (!okRight || !seesTeam(sess, team)) { res.status(403).json({ error: "Tu ne peux pas pointer les séances de cette équipe." }); return; }
 
     // Mois de primes validé : la séance est verrouillée (correction = régularisation dans Primes).
     const lock = await monthLock(team, String(fl["Date"] || "").slice(0, 7));
     if (action === "etat") { res.status(200).json({ locked: !!lock, validatedAt: lock ? lock.at : null, validatedBy: lock ? lock.by : null }); return; }
+    if (action === "importSheet") {
+      const F = b.feuille;
+      const isR = (x) => typeof x === "string" && /^rec[A-Za-z0-9]{14}$/.test(x);
+      if (!F || typeof F !== "object" || !Array.isArray(F.us) || !Array.isArray(F.s) || F.s.length !== 2) { res.status(400).json({ error: "Feuille de match illisible." }); return; }
+      if (fl["Type"] !== "Match") { res.status(400).json({ error: "Cette séance n'est pas un match." }); return; }
+      F.us = F.us.slice(0, 40).map((p) => ({ ...p, id: isR(p.id) ? p.id : null }));
+      F.at = new Date().toISOString(); F.by = sess.uid;
+      const json = JSON.stringify(F);
+      if (json.length > 90000) { res.status(400).json({ error: "Feuille trop volumineuse." }); return; }
+      const now = new Date().toISOString();
+      const upd = { "Feuille de match": json };
+      const applyP = !!b.applyPresence && !lock, applyS = !!b.applyScore && !lock;
+      if (applyS) {
+        const v = Number(F.s[0]), a = Number(F.s[1]);
+        upd["Score VHB"] = v; upd["Score adverse"] = a; upd["Résultat"] = v > a ? "Victoire" : v === a ? "Nul" : "Défaite";
+      }
+      let nPres = null;
+      if (applyP) {
+        const presents = [...new Set((b.presents || []).filter(isR))].slice(0, 40);
+        const oldPts = (fl["Pointages"] || []).length ? await getByIds(T_P, fl["Pointages"]) : [];
+        const keepExc = oldPts.filter((p) => (p.fields || {})["État"] === "Excusé" && !presents.includes(((p.fields || {})["Joueur"] || [])[0]));
+        const del = oldPts.filter((p) => !keepExc.includes(p)).map((p) => p.id);
+        if (del.length) await deleteMany(T_P, del);
+        if (presents.length) await createMany(T_P, presents.map((pid) => ({ fields: { "Libellé": (fl["Libellé"] || "Séance") + " · présent", "Séance": [seanceId], "Joueur": [pid], "État": "Présent", "Saisi par": [sess.uid], "Saisi le": now } })));
+        Object.assign(upd, { "Statut": "Pointée", "Motif annulation": "", "Pointée par": [sess.uid], "Pointée le": now });
+        nPres = presents.length;
+      }
+      await at("PATCH", T_S, { records: [{ id: seanceId, fields: upd }], typecast: true });
+      // Numéros de licence : enregistrés sur les fiches qui n'en ont pas encore (sert à reconnaître les joueurs la fois suivante).
+      const lic = (Array.isArray(b.licences) ? b.licences : []).filter((x) => x && isR(x.joueurId) && /^\d{6,15}$/.test(String(x.licence || ""))).slice(0, 40);
+      if (lic.length) {
+        const pl = await getByIds(encodeURIComponent("Joueurs"), lic.map((x) => x.joueurId));
+        const todo = lic.filter((x) => { const r = pl.find((p) => p.id === x.joueurId); return r && !(r.fields || {})["Licence"]; });
+        for (let i = 0; i < todo.length; i += 10) await at("PATCH", encodeURIComponent("Joueurs"), { records: todo.slice(i, i + 10).map((x) => ({ id: x.joueurId, fields: { "Licence": String(x.licence) } })) });
+      }
+      await logAction(sess, "Feuille de match importée", "Séances", seanceId, { "Score": F.s.join("-"), "Mi-temps": (F.mt || []).join("-"), "Présences": applyP ? nPres + " joueur(s)" : "inchangées", "Score appliqué": applyS, "Mois verrouillé": !!lock });
+      res.status(200).json({ ok: true, locked: !!lock, presents: nPres });
+      return;
+    }
     if (lock) { res.status(409).json({ error: "Le mois de primes de " + lock.label + " est validé" + (lock.at ? " depuis le " + dm(lock.at) : "") + " : cette séance ne peut plus être modifiée. Pour corriger un montant, passe par une régularisation (Primes).", code: "locked" }); return; }
 
     if (action === "cancel") {

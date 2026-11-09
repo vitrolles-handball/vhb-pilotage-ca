@@ -242,7 +242,7 @@ function ComposeAnnonce({ onClose, onSent }) {
 // =====================================================================================
 // Aide & support
 // =====================================================================================
-// Guide par profil : [nom, icône, couleur, [[titre, texte, icône], …]]
+// Guide par profil : [nom, icône, couleur, [[titre, texte, icône, capture?], …]] — captures dans public/guide/ (données fictives).
 const ORANGE = "#E8800C";
 const GUIDES = {
   all: ["Pour tous", "ti-users", ORANGE, [
@@ -255,11 +255,15 @@ const GUIDES = {
     ["Un problème, une idée ?", "Onglet « Signaler un problème » de cette page : décris-le, ajoute une capture si tu peux. Tu suis la réponse dans « Mes demandes ».", "ti-message-report"],
   ]],
   coach: ["Entraîneur", "ti-whistle", "#D62828", [
-    ["Pointer un entraînement", "Sportif › Aujourd'hui : touche la séance du jour. Tout le monde est présent par défaut : touche les absents, puis « Valider ». 10 secondes. Ça marche aussi sans réseau, l'envoi se fait au retour du réseau.", "ti-checklist"],
-    ["Pointer un match", "Ouvre le match : coche les joueurs de la feuille de match et saisis le score avec + et −. La victoire est déduite du score.", "ti-trophy"],
+    ["Pointer un entraînement", "Sportif › Aujourd'hui : touche la séance du jour. Tout le monde est présent par défaut : touche les absents (ils passent en rouge), puis « Valider ». 10 secondes. Ça marche aussi sans réseau, l'envoi se fait au retour du réseau.", "ti-checklist", "/guide/pointer.jpg"],
+    ["Excuser un absent", "Sur la ligne d'un joueur absent, touche le bouton bleu « E Excuser » et choisis le motif (blessure, malade, travail / études…) ou écris-le. Le joueur passe en bleu « Excusé ». Touche sa ligne pour le remettre présent.", "ti-first-aid-kit", "/guide/excuser.jpg"],
+    ["Pointer un match", "Ouvre le match : coche les joueurs de la feuille de match et saisis le score avec + et −. La victoire est déduite du score. Encore plus simple : importe la feuille de match (fiche suivante).", "ti-trophy", "/guide/match.jpg"],
+    ["Importer la feuille de match", "Après le match, ouvre-le › « Importer la feuille de match (PDF) » et choisis le PDF exporté de la table de marque (FFHB). L'appli te montre le score, la mi-temps et chaque joueur reconnu ; tu vérifies puis « Importer la feuille » : joueurs cochés, score et stats enregistrés (buts, 7 m, tirs, arrêts, 2 minutes).", "ti-file-upload", "/guide/import.jpg"],
+    ["L'onglet Analyse", "Sportif › Analyse, sur téléphone comme sur ordinateur. « Équipe » : bilan, buts pour et contre, buts par match (vert gagné, jaune nul, rouge perdu), mi-temps, discipline, buteurs et gardiens. « Matchs » : chaque match avec l'évolution du score. « Joueurs » : le tableau de tous les joueurs, trié en touchant une colonne.", "ti-chart-bar", "/guide/analyse.jpg"],
+    ["Les stats d'un joueur", "Touche un joueur (Joueurs ou Analyse) : bilan de la saison, assiduité par mois, motifs d'excuse, et le bloc « Stats de match » : buts, efficacité, 7 m, rang parmi les buteurs, meilleur match, exclusions.", "ti-id-badge-2", "/guide/fiche.jpg"],
     ["Séance supplémentaire, stage, nouveau match", "Depuis l'accueil Sportif : « Nouveau match » ou « Séance supplémentaire ». Pour un stage, choisis s'il compte dans les primes.", "ti-calendar-plus"],
     ["Séance annulée", "Ouvre la séance › « Séance annulée ? » et choisis le motif : elle sort du calcul. « Finalement, la séance a eu lieu » la rétablit.", "ti-calendar-off"],
-    ["Ajouter un joueur à une séance", "Dans la séance, sous la liste : « Ajouter un joueur ». Tape son prénom et son nom : s'il est déjà au club, choisis-le ; sinon il est créé. Il entre dans l'équipe en renfort, coché, et un responsable le validera (Effectif ou renfort) dans Joueurs.", "ti-user-plus"],
+    ["Ajouter un joueur à une séance", "Dans la séance, sous la liste : « Ajouter un joueur ». Tape son prénom et son nom : s'il est déjà au club, choisis-le ; sinon il est créé. Il entre dans l'équipe en renfort, coché, et un responsable le validera (Effectif ou renfort) dans Joueurs.", "ti-user-plus", "/guide/ajouter.jpg"],
     ["Corriger un pointage", "Séances : les flèches changent de mois. Une séance reste modifiable tant que le mois de primes n'est pas validé ; ensuite elle est verrouillée.", "ti-pencil"],
     ["Mes joueurs", "Onglet Joueurs : l'effectif en haut, les renforts en bas, avec l'assiduité du mois. Le badge GB repère les gardiens. Touche un joueur pour sa fiche : saison, 10 dernières séances, poste.", "ti-users-group"],
     ["Gérer mon équipe", "Séances › « Entraînements récurrents » ou Joueurs › « Ajouter ou modifier des joueurs » : rythme d'entraînement, effectif, statut Effectif ou Renfort, dates d'entrée et de sortie.", "ti-adjustments"],
@@ -268,14 +272,14 @@ const GUIDES = {
   ds: ["Primes", "ti-coin-euro", "#F5C518", [
     ["Le tableau du mois", "Sportif › Primes : compteurs du mois, puis un bloc Effectif et un bloc Renforts, chacun avec son sous-total. Les montants évoluent en direct tant que le mois est ouvert.", "ti-table"],
     ["Les règles", "50 € par mois au prorata de la présence (entraînements et matchs), 20 € par victoire pour les joueurs de la feuille de match. Les renforts ne touchent que les primes de victoire. Une séance annulée sort du calcul.", "ti-scale"],
-    ["Excuser une absence", "Touche le joueur › « Excuser » sur la séance concernée, avec le motif.", "ti-user-check"],
+    ["Excuser une absence", "Dans la grille, touche la case › « Excusé… » et choisis le motif. Ou touche le joueur dans la synthèse › « Excuser » sur la séance concernée. Les coachs peuvent aussi excuser au moment du pointage.", "ti-user-check"],
+    ["La grille des séances", "Sportif › Primes › « Grille des séances » : une colonne par séance, une ligne par joueur. Vert = présent à l'entraînement, jaune = présent au match, rouge = absent, bleu = excusé. Touche une case : un menu propose Présent, Absent ou Excusé (avec le motif) ; c'est enregistré tout de suite. Touche une date pour ouvrir la séance. Lecture seule une fois le mois validé.", "ti-table", "/guide/grille.jpg"],
+    ["Valider un joueur ajouté", "Un coach peut ajouter un joueur depuis une séance : il arrive en renfort « à valider ». Dans Joueurs, un encadré orange te propose « Passer en Effectif » ou « Garder en renfort ».", "ti-flag", "/guide/valider.jpg"],
     ["Prime exceptionnelle, régularisation", "Bouton dédié sous le tableau : montant et motif obligatoire. Après validation d'un mois, une correction passe en régularisation sur le mois suivant.", "ti-plus-minus"],
     ["Valider le mois", "Quand toutes les séances sont pointées : « Valider le mois ». Les montants sont figés et les séances du mois verrouillées.", "ti-circle-check"],
     ["Export et relevé", "« Exporter (Excel) » pour le tableau du mois, « Relevé annuel » pour le récapitulatif de la saison par joueur.", "ti-file-spreadsheet"],
   ]],
   compta: ["Trésorerie", "ti-cash", "#3B8A4E", [
-    ["La grille des séances", "Sportif › Primes › « Grille des séances » : une colonne par séance, une ligne par joueur. Touche une case pour passer présent → absent → excusé, c'est enregistré tout de suite. Touche une date pour ouvrir la séance. Lecture seule une fois le mois validé.", "ti-table"],
-    ["Valider un joueur ajouté", "Un coach peut ajouter un joueur depuis une séance : il arrive en renfort « à valider ». Dans Joueurs, un encadré orange te propose « Passer en Effectif » ou « Garder en renfort ».", "ti-flag"],
     ["Où sont les paiements", "Sportif › Primes › « Suivi des paiements », ou Admin › Paiements : les lignes des mois validés, filtrables par mois, équipe, statut et nom.", "ti-list-search"],
     ["Mettre en paiement, marquer payé", "Coche les lignes, puis « Mettre en paiement » ou « Marquer payé » avec la date, le mode et une référence.", "ti-cash-banknote"],
     ["Export pour les virements", "« Exporter (Excel) » exporte la liste affichée.", "ti-download"],
@@ -315,6 +319,7 @@ export function HelpCenter({ rights, page, initialTab, onClose, onOpenCaGuide, s
   const profiles = profilesFor(rights);
   const [prof, setProf] = useState(profiles[1] || "all");
   const [q, setQ] = useState("");
+  const [zoom, setZoom] = useState(null);
   const [form, setForm] = useState({ type: "Bug", texte: "", capture: null });
   const [busy, setBusy] = useState(false);
   const [mine, setMine] = useState(null);
@@ -361,12 +366,15 @@ export function HelpCenter({ rights, page, initialTab, onClose, onOpenCaGuide, s
         </div>}
         {!ql && <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "4px 2px" }}><span style={{ width: 5, height: 22, borderRadius: 3, background: GUIDES[prof][2] }} /><span style={{ fontSize: 19, fontWeight: 800, color: TEXT }}>{GUIDES[prof][0]}</span><span style={{ fontSize: 13, color: MUT }}>{GUIDES[prof][3].length} fiches</span></div>}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 340px), 1fr))", gap: 12 }}>
-          {items.map(([k, [h, b, ic]], i) => { const col = GUIDES[k][2]; return <div key={k + i} style={{ ...card, display: "flex", gap: 12, alignItems: "flex-start", borderTop: "4px solid " + col }}>
+          {items.map(([k, [h, b, ic, img]], i) => { const col = GUIDES[k][2]; return <div key={k + i} style={{ ...card, display: "flex", gap: 12, alignItems: "flex-start", borderTop: "4px solid " + col }}>
             <span style={{ width: 42, height: 42, borderRadius: 14, flex: "0 0 auto", display: "flex", alignItems: "center", justifyContent: "center", background: col === BLACK ? BLACK : col + "22", color: col === BLACK ? YELLOW : col === YELLOW ? "#8A6A00" : col }}><i className={"ti " + (ic || "ti-info-circle")} aria-hidden="true" style={{ fontSize: 22 }} /></span>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 15.5, fontWeight: 800, color: TEXT }}>{h}</div>
               {ql && <div style={{ fontSize: 11.5, fontWeight: 800, color: MUT, marginTop: 2, letterSpacing: ".04em" }}>{GUIDES[k][0].toUpperCase()}</div>}
               <div style={{ fontSize: 14, color: "#3A3F47", lineHeight: 1.6, marginTop: 4 }}>{b}</div>
+              {img && <button onClick={() => setZoom([img, h])} aria-label={"Agrandir la capture : " + h} style={{ display: "block", marginTop: 10, padding: 0, border: "1px solid #E6E8EC", borderRadius: 14, overflow: "hidden", background: "#F2F3F6", cursor: "zoom-in", width: "100%" }}>
+                <img src={img} alt={"Capture d'écran : " + h} loading="lazy" style={{ display: "block", width: "100%", maxHeight: 300, objectFit: "cover", objectPosition: "top" }} />
+              </button>}
             </div>
           </div>; })}
         </div>
@@ -397,6 +405,10 @@ export function HelpCenter({ rights, page, initialTab, onClose, onOpenCaGuide, s
         </div>)}
       </div>}
     </div>
+    {zoom && <div role="dialog" aria-modal="true" aria-label={"Capture : " + zoom[1]} onClick={() => setZoom(null)} style={{ position: "fixed", inset: 0, zIndex: 230, background: "rgba(10,10,14,.86)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "calc(16px + env(safe-area-inset-top)) 14px 16px", gap: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", maxWidth: 520 }}><b style={{ color: "#fff", flex: 1, fontSize: 15 }}>{zoom[1]}</b><button aria-label="Fermer" onClick={() => setZoom(null)} style={{ width: 40, height: 40, borderRadius: 20, border: "none", background: "#fff", fontSize: 20, fontWeight: 800, cursor: "pointer" }}>×</button></div>
+      <img src={zoom[0]} alt={"Capture d'écran : " + zoom[1]} style={{ maxWidth: "100%", maxHeight: "82vh", borderRadius: 16, objectFit: "contain", background: "#F2F3F6" }} />
+    </div>}
   </div>, document.body);
 }
 

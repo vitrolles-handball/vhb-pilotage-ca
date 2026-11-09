@@ -78,6 +78,7 @@ export function PlayerCard({ joueurId, teamId, backLabel, onClose, onPoste }) {
   const lastAbs = (recentT.find((s) => s.etat !== "Présent") || {}).date || null;
   const motifs = t ? Object.entries(t.months.flatMap((m) => m.motifs || []).reduce((o, x) => { const k = x || "Non précisé"; o[k] = (o[k] || 0) + 1; return o; }, {})).sort((a, b) => b[1] - a[1]) : [];
   const trend = (() => { if (!t) return null; const ms = t.months.filter((m) => m.seances > 0); if (ms.length < 2) return null; const a = ms[ms.length - 2], b = ms[ms.length - 1]; return { pts: Math.round((b.taux - a.taux) * 100), from: a.month }; })();
+  const ms = d && t && (d.matchStats || []).find((x) => x.teamId === t.teamId);
   const eff = t ? t.effectifs[t.effectifs.length - 1] : null;
   const renfort = eff && eff.statut === "Renfort";
   const mois = d && d.mois ? d.mois.filter((m) => !t || teams.length < 2 || m.equipe === t.nom) : null;
@@ -136,6 +137,32 @@ export function PlayerCard({ joueurId, teamId, backLabel, onClose, onPoste }) {
             <div style={{ fontSize: 12.5, fontWeight: 800, color: "#1B4F9B", marginBottom: 6 }}>Motifs des absences excusées</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{motifs.map(([k, n]) => <span key={k} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#E3EEFB", color: "#1B4F9B", borderRadius: 20, padding: "5px 11px", fontSize: 12.5, fontWeight: 700 }}>{k}<b style={{ background: "#2F6FD6", color: "#fff", borderRadius: 10, padding: "0 7px", fontSize: 11.5 }}>{n}</b></span>)}</div>
           </div>}
+        </div>}
+
+        {ms && ms.matchs > 0 && <div style={card}>
+          <H right={<span style={{ fontSize: 12, color: MUT }}>{ms.matchs} match{ms.matchs > 1 ? "s" : ""} joué{ms.matchs > 1 ? "s" : ""} sur {ms.imported} feuille{ms.imported > 1 ? "s" : ""}</span>}>Stats de match</H>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(118px, 1fr))", gap: 8 }}>
+            {[["Buts", String(ms.b), (Math.round(ms.b / ms.matchs * 10) / 10).toLocaleString("fr-FR") + " / match", null],
+              ms.ar > 0 ? ["Arrêts (GB)", String(ms.ar), (Math.round(ms.ar / ms.matchs * 10) / 10).toLocaleString("fr-FR") + " / match", null] : null,
+              ms.eff != null && ms.b > 0 ? ["Efficacité", Math.round(ms.eff * 100) + " %", "buts ÷ tirs", null] : null,
+              ms.b7 > 0 ? ["7 mètres", String(ms.b7), "buts sur 7 m", null] : null,
+              ms.b > 0 ? ["Rang buteurs", ms.rank + (ms.rank === 1 ? "er" : "e"), "sur " + ms.buteurs + " joueurs", null] : null,
+              ms.best ? ["Meilleur match", String(ms.best.b), "vs " + ms.best.adv, null] : null,
+              ["Exclusions 2'", String(ms.m2), ms.av ? "+ " + ms.av + " avertissement" + (ms.av > 1 ? "s" : "") : "aucun avertissement", ms.m2 >= 3 ? "#D93B30" : null]].filter(Boolean).map(([l, v, sub, tone]) => <div key={l} style={{ background: tone ? "#FDECEC" : "#F7F8FA", borderRadius: 14, padding: "10px 12px" }}>
+              <div style={{ fontSize: 12, color: tone ? "#9E1B1B" : "#3A3F47", fontWeight: 600 }}>{l}</div>
+              <div style={{ fontSize: 21, fontWeight: 800, color: tone || TEXT }}>{v}</div>
+              <div style={{ fontSize: 11.5, color: tone ? "#9E1B1B" : MUT }}>{sub}</div>
+            </div>)}
+          </div>
+          <div style={{ fontSize: 13, fontWeight: 800, margin: "14px 0 8px" }}>{ms.ar > ms.b ? "Arrêts" : "Buts"} par match</div>
+          <div style={{ overflowX: "auto" }}><div role="img" aria-label={"Par match : " + ms.per.map((x) => x.adv + " " + (x.played ? (ms.ar > ms.b ? x.ar : x.b) : "absent")).join(", ")} style={{ display: "grid", gridTemplateColumns: "repeat(" + ms.per.length + ", minmax(44px, 1fr))", gap: 6, alignItems: "end", height: 120, minWidth: ms.per.length * 48 }}>
+            {(() => { const key = ms.ar > ms.b ? "ar" : "b"; const mx = Math.max(4, ...ms.per.map((x) => x[key])); return ms.per.map((x, i) => { const r = x.s[0] > x.s[1] ? "#2E7D46" : x.s[0] === x.s[1] ? "#F2C318" : "#D93B30"; return <div key={i} title={x.adv + " · " + x.s.join("-")} style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", gap: 3, height: "100%" }}>
+              <span style={{ fontSize: 12, fontWeight: 800, color: x.played ? TEXT : "#B8BDC4" }}>{x.played ? x[key] : "–"}</span>
+              <span style={{ width: "70%", maxWidth: 30, height: x.played ? Math.max(4, x[key] / mx * 76) : 4, borderRadius: "6px 6px 2px 2px", background: x.played ? r : "#ECEEF1" }} />
+              <span style={{ fontSize: 10.5, color: MUT, maxWidth: 56, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.adv.split(" ")[0]}</span>
+            </div>; }); })()}
+          </div></div>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", fontSize: 11.5, color: MUT, marginTop: 8 }}>{[["#2E7D46", "Gagné"], ["#F2C318", "Nul"], ["#D93B30", "Perdu"]].map(([c, l]) => <span key={l}><span style={{ display: "inline-block", width: 9, height: 9, borderRadius: 3, background: c, marginRight: 5 }} />{l}</span>)}<span>– : pas sur la feuille</span></div>
         </div>}
 
         <div style={card}>

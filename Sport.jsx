@@ -8,6 +8,7 @@
 // ===========================================================================
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { PrimesView } from "./Primes.jsx";
+import { AnalyseView, FeuilleImport, MatchSheetSummary, MatchSheetDetail, sheetOf } from "./Analyse.jsx";
 import { RosterView, PlayerCard } from "./Fiche.jsx";
 import { TeamManager, SAISON } from "./Admin.jsx";
 import { Sheet } from "./Comms.jsx";
@@ -114,6 +115,7 @@ export default function SportSpace({ me, rights, scope, teams, view, setView }) 
   const mId = manage && (manage.id || manage), mFocus = manage && manage.focus;
   const manageUI = manage && <TeamManager key={mId + (mFocus || "")} teamId={mId} focus={mFocus} limited={scope !== "all"} rights={rights} onClose={() => { setManage(null); ["Équipes", "Staff", "Effectifs", "Rythmes", "Séances", "Joueurs"].forEach((x) => dbForget(x)); reload(); }} />;
   const onManage = canManage(rights) && d.teams.length ? (id, fo) => setManage({ id, focus: fo }) : null;
+  if (view === "analyse" && !open) return <AnalyseView key={"a" + (pick || "")} teams={d.teams} d={d} initialTeam={pick} onOpenSeance={(id) => setOpen({ seanceId: id })} />;
   if (view === "joueurs") return <><RosterView key={"r" + (pick || "")} teams={d.teams} efx={d.efx} players={d.players} initialTeam={pick} onManage={onManage} canValidate={has(rights, "eff")} onValidated={() => { dbForget("Effectifs"); reload(); }} />{manageUI}</>;
   const banner = (d.offline || queued > 0) && <div role="status" style={{ background: "#FFF6D6", color: "#5C4600", borderRadius: 14, padding: "10px 14px", fontSize: 13, fontWeight: 700, display: "flex", gap: 8, alignItems: "center" }}>
     <i className="ti ti-wifi-off" aria-hidden="true" />
@@ -674,6 +676,9 @@ function MatchPage({ s, d, rights, onBack, onPointer, onChanged }) {
   const when = n === 0 ? "Aujourd'hui" : n === 1 ? "Demain" : n === -1 ? "Hier" : n > 1 ? "Dans " + n + " jours" : "Il y a " + -n + " jours";
   const [sheet, setSheet] = useState(null);
   const [card, setCard] = useState(null);
+  const [imp, setImp] = useState(false);
+  const [detail, setDetail] = useState(false);
+  const F = sheetOf(s);
   const [edit, setEdit] = useState(false);
   const [form, setForm] = useState({ date, heure: f(s, "Heure") || "", adv: f(s, "Adversaire") || "", home });
   const [busy, setBusy] = useState(false);
@@ -690,7 +695,7 @@ function MatchPage({ s, d, rights, onBack, onPointer, onChanged }) {
       .then((j) => { const pids = new Set((j.records || []).flatMap((r) => f(r, "Joueur") || [])); setSheet(d.players.filter((p) => pids.has(p.id)).sort((a, b) => norm(f(a, "Nom")).localeCompare(norm(f(b, "Nom"))))); }, () => setSheet([]));
   }, [s.id]);
   const vhb = f(s, "Score VHB"), sa = f(s, "Score adverse"), res = f(s, "Résultat");
-  const resTone = res === "Victoire" ? ["#E2F3E6", "#1F5C30"] : res === "Défaite" ? ["#FDECEC", "#9E1B1B"] : ["#EEF0F3", "#3A3F47"];
+  const resTone = res === "Victoire" ? ["#2E7D46", "#fff"] : res === "Défaite" ? ["#D93B30", "#fff"] : res === "Nul" ? ["#F2C318", "#16181D"] : ["#EEF0F3", "#3A3F47"];
   const save = async () => {
     if (!form.date || !form.adv.trim()) { alert("Indique la date et l'adversaire."); return; }
     setBusy(true);
@@ -701,6 +706,15 @@ function MatchPage({ s, d, rights, onBack, onPointer, onChanged }) {
     setBusy(false);
   };
   const lbl = { fontSize: 12, fontWeight: 800, letterSpacing: ".06em", color: MUT };
+  if (imp) return <FeuilleImport s={s} d={d} roster={roster} call={callPointage} onCancel={() => setImp(false)} onDone={async (msg) => { setImp(false); dbForget("Effectifs"); dbForget("Joueurs"); await onChanged(); if (msg) setTimeout(() => alert(msg), 50); }} />;
+  if (detail && F) return <div className="fade" style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 900, paddingBottom: 90 }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+      <button className="btn btn-ghost" onClick={() => setDetail(false)} aria-label="Retour à la fiche match" style={{ padding: "8px 10px" }}><i className="ti ti-chevron-left" aria-hidden="true" /></button>
+      <div style={{ fontSize: 18, fontWeight: 800, flex: 1 }}>Analyse · VHB {F.s[0]}–{F.s[1]} {F.adv}</div>
+    </div>
+    <MatchSheetDetail s={s} F={F} d={d} onOpenPlayer={setCard} />
+    {card && <PlayerCard joueurId={card} teamId={teamOf(s)} backLabel="Analyse du match" onClose={() => setCard(null)} />}
+  </div>;
   return (
     <div className="fade" style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 720, paddingBottom: 90 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -758,6 +772,8 @@ function MatchPage({ s, d, rights, onBack, onPointer, onChanged }) {
         {res === "Victoire" && sheet && sheet.length > 0 && <div style={{ fontSize: 12.5, color: "#1F5C30", fontWeight: 700 }}>Victoire : prime de victoire pour les joueurs de la feuille.</div>}
       </div>}
 
+      {F && !cancelled && <MatchSheetSummary F={F} d={d} onOpen={() => setDetail(true)} />}
+      {canPoint && !cancelled && date <= today && <button className="btn btn-ghost" style={{ alignSelf: "flex-start", borderStyle: "dashed", borderColor: "#F0C49A" }} onClick={() => setImp(true)}><i className="ti ti-file-upload" aria-hidden="true" />{F ? "Réimporter la feuille de match (PDF)" : "Importer la feuille de match (PDF)"}</button>}
       {canPoint && !pointed && !cancelled && (!cx ? <button className="btn btn-ghost" style={{ alignSelf: "flex-start" }} onClick={() => setCx(true)}>Match annulé ou reporté ?</button>
         : <div className="card" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
           <div style={{ flex: "1 1 200px" }}><label className="lbl" htmlFor="mx-m">Motif</label>
