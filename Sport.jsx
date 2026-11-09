@@ -611,7 +611,7 @@ function PointageView({ s, d, me, rights, onBack, onDone, onRoster }) {
               <span style={{ width: 38, height: 38, borderRadius: 19, flex: "0 0 auto", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 800, background: on ? "#FCE9DE" : "#E2E5E9", color: on ? "#8A2807" : MUT }}>{initials(p)}</span>
               <span style={{ flex: 1, minWidth: 0 }}><span style={{ display: "block", fontSize: 15, fontWeight: 700, color: TEXT }}>{pName(p)}</span>{f(e, "Statut") === "Renfort" && <span style={{ fontSize: 11.5, fontWeight: 700, color: "#6B4A00" }}>Renfort{f(e, "À valider") ? " · à valider" : ""}</span>}</span>
               {isMatch ? <span aria-hidden="true" style={{ width: 26, height: 26, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", background: on ? RED : "#fff", border: "2px solid " + (on ? RED : "#B8BDC4") }}>{on && <i className="ti ti-check" style={{ color: "#fff" }} />}</span>
-                : <span style={{ fontSize: 13, fontWeight: 800, padding: "7px 12px", borderRadius: 20, background: on ? "#E7F4EA" : "#fff", color: on ? "#1F5C30" : MUT, border: "1px solid " + (on ? "#E7F4EA" : "#D9DCE1") }}>{on ? "Présent" : "Absent"}</span>}
+                : <span style={{ fontSize: 13, fontWeight: 800, padding: "7px 12px", borderRadius: 20, background: on ? "#E7F4EA" : "#FDECEC", color: on ? "#1F5C30" : "#9E1B1B", border: "1px solid " + (on ? "#E7F4EA" : "#F5C2C0") }}>{on ? "Présent" : "Absent"}</span>}
             </button>); })}
           {!roster.length && <div className="card" style={{ color: MUT, fontSize: 13.5 }}>Aucun joueur dans l'effectif de l'équipe à cette date. L'effectif se gère dans Admin › Équipes.</div>}
         </div>}

@@ -29,7 +29,7 @@ async function api(payload) {
   return j;
 }
 const Chip = ({ children, bg, fg }) => <span style={{ fontSize: 11.5, fontWeight: 800, padding: "4px 9px", borderRadius: 10, background: bg || "#EEF0F3", color: fg || "#3A3F47", whiteSpace: "nowrap" }}>{children}</span>;
-const ETAT = { "Présent": ["#E7F4EA", "#1F5C30"], "Excusé": ["#FFF6D6", "#6B4A00"], "Absent": ["#FDECEC", "#9E1B1B"] };
+const ETAT = { "Présent": ["#E7F4EA", "#1F5C30"], "Excusé": ["#FDEBD3", "#8A4B00"], "Absent": ["#FDECEC", "#9E1B1B"] };
 
 // ---------------------------------------------------------------------------- Fiche joueur (page entière)
 // Le bouton « retour » du téléphone ferme la page du dessus (au lieu de quitter l'appli).
@@ -133,11 +133,11 @@ export function PlayerCard({ joueurId, teamId, backLabel, onClose, onPoste }) {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(10, minmax(0, 46px))", gap: 7 }}>
             {Array.from({ length: 10 }).map((_, i) => { const s = cur10[i]; if (!s) return <span key={i} style={{ aspectRatio: "1", borderRadius: 9, border: "2px dashed #E2E5E9" }} />;
               const match = s.type === "Match", pres = s.etat === "Présent";
-              const bg = pres ? (match ? "#F2C318" : "#2E7D46") : s.etat === "Excusé" ? "#F4E6B8" : "#E2E5E9";
-              return <span key={s.id} title={fmtDate(s.date) + " · " + (match ? "Match" + (s.adversaire ? " vs " + s.adversaire : "") + (s.score ? " · " + s.score : "") : s.type) + " · " + s.etat} aria-label={fmtDate(s.date) + " " + s.type + " " + s.etat} style={{ aspectRatio: "1", borderRadius: 9, background: bg, border: pres ? "none" : "1px solid #D4D8DE" }} />; })}
+              const bg = pres ? (match ? "#F2C318" : "#2E7D46") : s.etat === "Excusé" ? "#E8800C" : "#D93B30";
+              return <span key={s.id} title={fmtDate(s.date) + " · " + (match ? "Match" + (s.adversaire ? " vs " + s.adversaire : "") + (s.score ? " · " + s.score : "") : s.type) + " · " + s.etat} aria-label={fmtDate(s.date) + " " + s.type + " " + s.etat} style={{ aspectRatio: "1", borderRadius: 9, background: bg, border: "none" }} />; })}
           </div>
           <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 12, fontSize: 12.5, color: "#3A3F47" }}>
-            {[["#2E7D46", "Entraînement"], ["#F2C318", "Match joué"], ["#E2E5E9", "Absent"]].concat(cur10.some((s) => s.etat === "Excusé") ? [["#F4E6B8", "Excusé"]] : []).map(([c, l]) => <span key={l} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 12, height: 12, borderRadius: 4, background: c, border: c === "#E2E5E9" ? "1px solid #C9CDD3" : "none" }} />{l}</span>)}
+            {[["#2E7D46", "Entraînement"], ["#F2C318", "Match joué"], ["#D93B30", "Absent"], ["#E8800C", "Excusé"]].map(([c, l]) => <span key={l} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 12, height: 12, borderRadius: 4, background: c, border: c === "#E2E5E9" ? "1px solid #C9CDD3" : "none" }} />{l}</span>)}
           </div>
           {!cur10.length && <div style={{ fontSize: 13, color: MUT, marginTop: 8 }}>Aucune séance pointée pour l'instant.</div>}
         </div>

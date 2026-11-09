@@ -146,23 +146,56 @@ const PAY_TONE = { "À payer": ["#FDECEC", "#9E1B1B"], "Mis en paiement": ["#FFF
 // =====================================================================================
 
 // ---------------------------------------------------------------------------- Grille des séances (vue détaillée)
-// Joueurs en lignes, séances du mois en colonnes. Toucher une case : Présent → Absent → Excusé → Présent.
+// Joueurs en lignes, séances du mois en colonnes. Toucher une case ouvre un petit menu : Présent / Absent / Excusé (motif demandé).
+// Couleurs (partout dans l'appli) : vert = présent à l'entraînement, jaune = présent au match, rouge = absent, orange = excusé.
+export const ABS_RED = "#D93B30", EXC_OR = "#E8800C";
+export const cellStyle = (st, match) => st === "P" ? { background: match ? "#F2C318" : "#2E7D46", color: match ? "#111" : "#fff" } : st === "E" ? { background: EXC_OR, color: "#fff" } : { background: ABS_RED, color: "#fff" };
+const MOTIFS = ["Blessure", "Malade", "Travail / études", "Sélection", "Raison familiale"];
+function CellMenu({ m, onPick, onClose }) {
+  const [step, setStep] = useState("choix"); const [motif, setMotif] = useState("");
+  useEffect(() => { const h = (e) => { if (e.key === "Escape") onClose(); }; window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h); }, [onClose]);
+  const W = 270, vw = window.innerWidth, vh = window.innerHeight;
+  const left = Math.max(8, Math.min(vw - W - 8, m.rect.left + m.rect.width / 2 - W / 2));
+  const below = m.rect.bottom + 6, H = step === "choix" ? 200 : 290;
+  const top = below + H > vh - 8 ? Math.max(8, m.rect.top - 6 - H) : below;
+  const match = m.s.type === "Match";
+  const opts = [["P", match ? "Sur la feuille (présent)" : "Présent", "✓"], ["A", match ? "Pas sur la feuille (absent)" : "Absent", "✕"], ["E", "Excusé…", "E"]];
+  return <>
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 60 }} />
+    <div role="dialog" aria-label={"Présence de " + m.r.nom} style={{ position: "fixed", left, top, width: W, zIndex: 61, background: "#fff", borderRadius: 14, boxShadow: "0 12px 32px rgba(0,0,0,.22)", padding: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
+        <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 800, fontSize: 13.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.r.nom}</div><div style={{ fontSize: 12, color: MUT }}>{fmtDate(m.s.date)} · {match ? "Match" : (m.s.type || "Séance")}</div></div>
+        <button aria-label="Fermer" onClick={onClose} style={{ border: "none", background: "#F1F2F5", borderRadius: 8, width: 28, height: 28, cursor: "pointer", fontSize: 15, fontWeight: 800, color: "#3A3F47" }}>×</button>
+      </div>
+      {step === "choix" ? opts.map(([k, l, ic]) => <button key={k} onClick={() => k === "E" ? setStep("motif") : onPick(k, "")} aria-pressed={m.cur === k}
+        style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 8px", borderRadius: 10, border: "1px solid " + (m.cur === k ? "#111" : BORDER), background: m.cur === k ? "#F4F5F8" : "#fff", cursor: "pointer", fontFamily: "inherit", fontSize: 13.5, fontWeight: 700, textAlign: "left", color: TEXT }}>
+        <span style={{ width: 24, height: 24, borderRadius: 7, display: "inline-flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 12.5, ...cellStyle(k, match) }}>{ic}</span><span style={{ flex: 1, minWidth: 0 }}>{l}</span>{m.cur === k && <span style={{ fontSize: 11, color: MUT, whiteSpace: "nowrap" }}>actuel</span>}
+      </button>) : <>
+        <div style={{ fontSize: 12.5, fontWeight: 800, color: EXC_OR }}>Pourquoi est-il excusé ?</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>{MOTIFS.map((x) => <button key={x} onClick={() => setMotif(x)} style={{ padding: "5px 9px", borderRadius: 20, border: "1px solid " + (motif === x ? EXC_OR : BORDER), background: motif === x ? "#FDEBD3" : "#fff", color: motif === x ? "#8A4B00" : TEXT, fontFamily: "inherit", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{x}</button>)}</div>
+        <input className="inp" autoFocus aria-label="Motif" placeholder="Ou écris le motif…" value={motif} onChange={(e) => setMotif(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && motif.trim()) onPick("E", motif.trim()); }} />
+        <div style={{ display: "flex", gap: 6 }}>
+          <button className="btn btn-ghost" onClick={() => setStep("choix")} style={{ minHeight: 36, fontSize: 13 }}>Retour</button>
+          <button className="btn" disabled={!motif.trim()} onClick={() => onPick("E", motif.trim())} style={{ minHeight: 36, fontSize: 13, flex: 1, justifyContent: "center", background: EXC_OR, color: "#fff", border: "none" }}>Excuser</button>
+        </div>
+      </>}
+    </div>
+  </>;
+}
 const ST_FULL = { P: "Présent", A: "Absent", E: "Excusé" };
 function SeancesGrid({ rows, seances, cellsOf, editable, onCell, onOpenSeance, groups }) {
   const [busy, setBusy] = useState(null);
   const [local, setLocal] = useState({});
   const cols = [...seances].sort((a, b) => (String(a.date) + (a.heure || "")).localeCompare(String(b.date) + (b.heure || "")));
   const kind = (s) => s.statut === "Annulée" ? ["Annul.", "#B4B2A9", "#fff"] : s.type === "Match" ? ["Match", "#F2C318", BLACK] : s.type === "Stage" ? ["Stage", "#1B5E9B", "#fff"] : /suppl/i.test(s.type || "") ? ["Suppl.", BLACK, "#fff"] : ["Entr.", RED, "#fff"];
-  const click = async (r, s, cur) => {
+  const [menu, setMenu] = useState(null);
+  const click = (r, s, cur, ev) => {
     if (!editable || busy) return;
-    const next = cur === "P" ? "A" : cur === "A" ? "E" : "P";
-    let motif = "";
-    if (next === "E") { motif = prompt("Absence excusée de " + r.nom + " le " + fmtDate(s.date) + " : motif (blessure, examen, sélection…). Annule pour la laisser en absence.") || ""; if (!motif.trim()) { if (cur === "P") return doSet(r, s, "A"); return; } }
-    return doSet(r, s, next, motif);
+    setMenu({ r, s, cur, rect: ev.currentTarget.getBoundingClientRect() });
   };
   const doSet = async (r, s, next, motif) => {
-    const key = r.joueur + "|" + s.id; setBusy(key); setLocal((o) => ({ ...o, [key]: next }));
-    try { await onCell(r, s, next, motif); } catch (e) { alert(e.message); setLocal((o) => { const x = { ...o }; delete x[key]; return x; }); }
+    const key = r.joueur + "|" + s.id; const cur = local[key] || cellsOf(r, s); setBusy(key); setLocal((o) => ({ ...o, [key]: next }));
+    try { await onCell(r, s, next, motif, cur); } catch (e) { alert(e.message); setLocal((o) => { const x = { ...o }; delete x[key]; return x; }); }
     setBusy(null);
   };
   const W = 34;
@@ -172,14 +205,14 @@ function SeancesGrid({ rows, seances, cellsOf, editable, onCell, onOpenSeance, g
     if (s.statut !== "Pointée") return <td key={s.id} title="Séance pas encore pointée" style={{ textAlign: "center", color: "#B8BDC4" }}>·</td>;
     if (!raw) return <td key={s.id} title="Pas dans l'effectif à cette date" style={{ textAlign: "center", color: "#C9CCD2" }}>–</td>;
     const key = r.joueur + "|" + s.id, st = local[key] || raw, match = s.type === "Match";
-    const sty = st === "P" ? { background: match ? "#F2C318" : "#2E7D46", color: match ? BLACK : "#fff", border: "none" } : st === "E" ? { background: "#FFF3C4", color: "#6B4A00", border: "1px solid #F0D98A" } : { background: "#fff", color: "#B8BDC4", border: "1px solid #D9DCE1" };
+    const sty = { ...cellStyle(st, match), border: "none" };
     return <td key={s.id} style={{ padding: "4px 2px", textAlign: "center" }}>
-      <button disabled={!editable || busy === key} onClick={() => click(r, s, st)} aria-label={r.nom + " · " + fmtDate(s.date) + " · " + ST_FULL[st]} title={ST_FULL[st] + (editable ? " · toucher pour changer" : "")}
-        style={{ width: 26, height: 26, borderRadius: 7, fontFamily: "inherit", fontSize: 12.5, fontWeight: 800, cursor: editable ? "pointer" : "default", display: "inline-flex", alignItems: "center", justifyContent: "center", opacity: busy === key ? .5 : 1, ...sty }}>{st === "P" ? "✓" : st === "E" ? "E" : ""}</button>
+      <button disabled={!editable || busy === key} onClick={(ev) => click(r, s, st, ev)} aria-label={r.nom + " · " + fmtDate(s.date) + " · " + ST_FULL[st]} title={ST_FULL[st] + (editable ? " · toucher pour changer" : "")} aria-haspopup={editable ? "dialog" : undefined}
+        style={{ width: 26, height: 26, borderRadius: 7, fontFamily: "inherit", fontSize: 12.5, fontWeight: 800, cursor: editable ? "pointer" : "default", display: "inline-flex", alignItems: "center", justifyContent: "center", opacity: busy === key ? .5 : 1, ...sty }}>{st === "P" ? "✓" : st === "E" ? "E" : "✕"}</button>
     </td>;
   };
   const stick = { position: "sticky", left: 0, zIndex: 1, background: "#fff" };
-  return <div className="card" style={{ padding: 0, overflowX: "auto" }}>
+  return <>{menu && <CellMenu key={menu.r.joueur + menu.s.id} m={menu} onClose={() => setMenu(null)} onPick={(next, motif) => { const m = menu; setMenu(null); if (next !== m.cur) doSet(m.r, m.s, next, motif); }} />}<div className="card" style={{ padding: 0, overflowX: "auto" }}>
     <table style={{ borderCollapse: "separate", borderSpacing: 0, fontSize: 13, minWidth: "100%" }}>
       <thead><tr>
         <th style={{ ...stick, zIndex: 2, textAlign: "left", padding: "10px", fontSize: 11.5, color: MUT, letterSpacing: ".04em", borderBottom: "1px solid " + BORDER, minWidth: 150 }}>JOUEUR</th>
@@ -203,7 +236,7 @@ function SeancesGrid({ rows, seances, cellsOf, editable, onCell, onOpenSeance, g
         </tr>)}
       </React.Fragment>)}</tbody>
     </table>
-  </div>;
+  </div></>;
 }
 
 export function PrimesView({ rights, teams, users, initialTeam, onOpenSeance, visible }) {
@@ -336,12 +369,13 @@ export function PrimesView({ rights, teams, users, initialTeam, onOpenSeance, vi
         <SeancesGrid groups={groups} rows={rows} editable={canCorr && !validated} onOpenSeance={onOpenSeance}
           seances={(validated ? (data.detail && data.detail.seances) : data.seances) || []}
           cellsOf={(r, sc) => validated ? (((data.detail && data.detail.cells) || {})[r.joueur] || {})[sc.id] : (((r.detail || []).find((x) => x.s === sc.id) || {}).st || "")[0]}
-          onCell={async (r, sc, next, motif) => {
+          onCell={async (r, sc, next, motif, cur) => {
+            if (next === "E" && cur === "P") await primesApi({ action: "presence", seanceId: sc.id, joueurId: r.joueur, present: false });
             if (next === "E") await primesApi({ action: "excuse", seanceId: sc.id, joueurId: r.joueur, excused: true, motif });
             else await primesApi({ action: "presence", seanceId: sc.id, joueurId: r.joueur, present: next === "P" });
             try { setData(await primesApi({ action: "month", teamId, month })); } catch (e) {}
           }} />
-        <div style={{ fontSize: 12.5, color: MUT }}>{validated ? "Mois validé : la grille est en lecture seule. Une correction passe par une régularisation." : canCorr ? "Touche une case : présent → absent → excusé. Chaque changement est enregistré tout de suite (et tracé dans le journal). Touche une date pour ouvrir la séance." : "Lecture seule : il faut le droit « Corriger les primes » pour modifier."}{validated && !(data.detail && data.detail.cells) ? " (Détail par séance non disponible pour ce mois, validé avant l'arrivée de la grille.)" : ""}</div>
+        <div style={{ fontSize: 12.5, color: MUT }}>{validated ? "Mois validé : la grille est en lecture seule. Une correction passe par une régularisation." : canCorr ? "Touche une case pour choisir présent, absent ou excusé (avec le motif). Chaque changement est enregistré tout de suite et tracé dans le journal. Touche une date pour ouvrir la séance." : "Lecture seule : il faut le droit « Corriger les primes » pour modifier."}{validated && !(data.detail && data.detail.cells) ? " (Détail par séance non disponible pour ce mois, validé avant l'arrivée de la grille.)" : ""}</div>
       </>}
       {data && !narrow && !gridView && <div className="card" style={{ padding: 0, overflowX: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5, minWidth: 760 }}>
@@ -411,7 +445,7 @@ function PlayerDetail({ row, data, validated, canCorr, onClose, onChanged, onExt
     if (!confirm("Retirer cette ligne (" + eur(x.montant) + " · " + x.motif + ") ?")) return;
     try { await primesApi({ action: "deleteExtra", lineId: x.id }); await onChanged(); } catch (e) { alert(e.message); }
   };
-  const TONE = { "Présent": ["#E7F4EA", "#1F5C30"], "Excusé": ["#FFF6D6", "#6B4A00"], "Absent": ["#FDECEC", "#9E1B1B"] };
+  const TONE = { "Présent": ["#E7F4EA", "#1F5C30"], "Excusé": ["#FDEBD3", "#8A4B00"], "Absent": ["#FDECEC", "#9E1B1B"] };
   return <Sheet title={row.nom} onClose={onClose} wide>
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
       <Chip>{row.statut}</Chip><Chip>{row.presences}/{row.seances} · {row.seances ? pct(row.taux) : "—"}</Chip><Chip bg="#FFF6D6" fg="#6B4A00">Total {eur(row.total)}</Chip>
